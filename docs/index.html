@@ -511,6 +511,30 @@
             </li>
           </ul>
         </div>
+
+        <div class="grid-2" style="margin-top: 18px;">
+          <div>
+            <pre class="codeblock"><code>{
+  "statusLine": {
+    "type": "command",
+    "command": "~/.gemini/antigravity-cli/statusline.py",
+    "enabled": true,
+    "padding": 0,
+    "stack_with_default": true
+  }
+}</code></pre>
+          </div>
+          <div class="card">
+            <span class="badge b-cyan">settings.json</span>
+            <h3>statusLine Wiring</h3>
+            <p>
+              <code>./install.sh</code> links <code>~/.gemini/antigravity-cli/statusline.py</code> to <code>bin/ooda-hud</code>
+              and merges this block into <code>~/.gemini/antigravity-cli/settings.json</code>. Every other key is kept,
+              and a statusLine you already had is saved for uninstall to restore. Restart agy to see the canopy.
+              To skip this step, run with <code>OODA_NO_STATUSLINE=1</code>.
+            </p>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -729,21 +753,53 @@
     <section id="quickstart">
       <div class="wrap">
         <div class="sec-head">
-          <h2>Quickstart &amp; House Laws</h2>
+          <h2>Install, Uninstall &amp; House Laws</h2>
           <span class="sec-tag">make all</span>
         </div>
         <div class="grid-2">
           <div>
             <pre class="codeblock"><code>git clone https://github.com/UberMetroid/agy-skills.git
 cd agy-skills
-./install.sh          # symlinks plugin, router/ooda CLI &amp; HUD
-
+./install.sh          # links plugin, router/ooda CLI, HUD + statusLine
+                      # (./install.sh --help for options)
+# restart agy so the plugin + statusLine load
 agy plugin list       # confirm "ooda" is enabled
 router --status       # fleet tiers, resets &amp; active locks
 router --usage        # per-lane 5h cycle telemetry
 router --recon "Map auth flow and callers"
 router --review .     # cross-model diff gate
-make all              # full House-Law + unit + dogfood suite</code></pre>
+make all              # full House-Law + unit + dogfood suite
+
+git pull &amp;&amp; ./install.sh   # update
+./install.sh --uninstall   # or ./uninstall.sh
+./install.sh --uninstall --purge   # also drop quota state</code></pre>
+          </div>
+          <div class="card">
+            <span class="badge b-green">Install</span>
+            <h3>What install.sh Wires</h3>
+            <p>
+              Symlinks <code>~/.gemini/config/plugins/ooda</code>, <code>~/.local/bin/ooda</code>,
+              <code>~/.local/bin/router</code>, and <code>~/.gemini/antigravity-cli/statusline.py</code> into
+              <code>plugins/ooda</code>, then adds the <code>statusLine</code> block to
+              <code>~/.gemini/antigravity-cli/settings.json</code> (opt out with <code>OODA_NO_STATUSLINE=1</code>).
+              It is idempotent. A malformed <code>settings.json</code> or <code>skills.json</code> stops it before
+              anything changes, and displaced files are archived rather than deleted. At the end, a health report
+              warns if <code>~/.local/bin</code> is not on <code>PATH</code> or <code>agy</code> is missing,
+              and lists which lane CLIs (<code>agy devin muse grok vibe mcode</code>) were found or missing.
+            </p>
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top: 18px;">
+          <div class="card">
+            <span class="badge b-amber">Uninstall</span>
+            <h3>Clean, Scoped Removal</h3>
+            <p>
+              <code>./install.sh --uninstall</code> removes only the symlinks that resolve into this repo, and
+              lists foreign files it left in place. It drops the ooda <code>statusLine</code>, restoring your previous
+              one if it was saved. The shared <code>~/.agents/skills</code> entry stays in <code>skills.json</code>, and
+              quota state and <code>backups/</code> stay unless you add <code>--purge</code>. Running it twice is safe.
+            </p>
           </div>
           <div class="card">
             <h3>State Paths &amp; House-Law Gates</h3>

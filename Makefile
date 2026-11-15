@@ -1,7 +1,7 @@
 PYTHON ?= python3
 AGY ?= agy
 
-.PHONY: all portable line-cap density vocab shape plugin-check test dogfood
+.PHONY: all portable line-cap density vocab shape plugin-check test dogfood install uninstall
 
 all: portable line-cap density vocab shape plugin-check test dogfood
 
@@ -37,3 +37,10 @@ dogfood:
 	out=$$(ROUTER_DEPTH=1 ./plugins/ooda/bin/ooda --recon "probe" 2>&1 || echo "rc=$$?"); \
 	printf '%s\n' "$$out" | grep -q "ROUTER_DEPTH"; \
 	echo "dogfood: ok (cli status/usage + hud + hook + recursion guard)"
+
+# Not part of `all`: these mutate $HOME (symlinks, settings.json statusLine).
+install:
+	./install.sh
+
+uninstall:
+	./install.sh --uninstall

@@ -60,14 +60,77 @@ off-family backup lane (for example `grok`); `[P0-3]` findings always fail close
 **Bubble-canopy HUD.** `bin/ooda-hud` is the Antigravity `statusLine`. It shows
 the current OODA step (`○ ooda`, `◐ orient/decide`, `⠋ act ×2`), the worker
 models, active custom skills, and `fleet X/8 (next …)` wake countdowns.
+`./install.sh` links it to `~/.gemini/antigravity-cli/statusline.py` and adds
+the `statusLine` block (shown under [Install](#install)) to
+`~/.gemini/antigravity-cli/settings.json`, so agy runs it after a restart.
 
-## Quickstart
+## Install
 
 ```bash
-./install.sh            # links plugin + CLI + HUD under $HOME, migrates quota state
+git clone https://github.com/UberMetroid/agy-skills.git && cd agy-skills
+./install.sh            # or: make install   (./install.sh --help lists options)
+# restart agy, then:
 agy plugin list         # confirm "ooda" is registered
 router --status         # fleet regimes, cooldowns, next wake (ooda shim also in ~/.local/bin)
 router --usage          # per-lane cycle usage
+```
+
+`install.sh` is idempotent. It does the following:
+
+- **Links** `~/.gemini/config/plugins/ooda` → `plugins/ooda`,
+  `~/.local/bin/ooda` and `~/.local/bin/router` → `plugins/ooda/bin/ooda`, and
+  `~/.gemini/antigravity-cli/statusline.py` → `plugins/ooda/bin/ooda-hud`.
+- **Seeds** `${XDG_STATE_HOME:-~/.local/state}/ooda/quota.json` (it migrates
+  legacy router/boyd state when it finds any) and adds `~/.agents/skills` to
+  `~/.gemini/config/skills.json`.
+- **Archives** displaced files and legacy installs under
+  `${XDG_STATE_HOME:-~/.local/state}/ooda/backups/`. Nothing is deleted.
+- **Wires the statusLine** in `~/.gemini/antigravity-cli/settings.json`. All
+  other keys are kept. If you already had a different `statusLine`, it is
+  saved to `…/ooda/statusline.prev.json`. On re-runs, your
+  `enabled`/`padding`/`stack_with_default` edits are left alone:
+
+  ```json
+  {
+    "statusLine": {
+      "type": "command",
+      "command": "~/.gemini/antigravity-cli/statusline.py",
+      "enabled": true,
+      "padding": 0,
+      "stack_with_default": true
+    }
+  }
+  ```
+
+  Set `OODA_NO_STATUSLINE=1 ./install.sh` to skip this step. The HUD symlink
+  is still created.
+- **Checks both JSON files first.** If `settings.json` or `skills.json` is
+  malformed, install exits non-zero and changes nothing.
+- **Prints a health report.** It warns if `~/.local/bin` is not on `PATH` (and
+  prints the `export` line to add), says whether `agy` is on `PATH`, reports
+  which lane CLIs are found or missing (`agy devin muse grok vibe mcode`; this
+  is informational and never fails the install), and reminds you to restart agy.
+
+## Uninstall
+
+```bash
+./install.sh --uninstall          # or ./uninstall.sh, or make uninstall
+./install.sh --uninstall --purge  # also delete ${XDG_STATE_HOME:-~/.local/state}/ooda
+```
+
+Uninstall removes the four links above, but only when they are symlinks that
+resolve into this repo's `plugins/ooda`. Anything else (for example your own
+`~/.local/bin/router`) is left in place and listed as such. It removes our
+`statusLine` block and restores the saved previous block if there is one. It
+keeps the `~/.agents/skills` entry in `skills.json` because that directory is
+shared. Quota state and `backups/` are kept unless you pass `--purge`; restore
+legacy items from `backups/` by hand. Running it twice is safe: the second run
+reports nothing to remove.
+
+## Update
+
+```bash
+git pull && ./install.sh   # links point into the checkout, so a pull updates the code; re-run to pick up new wiring
 ```
 
 Runtime state lives in `${XDG_STATE_HOME:-~/.local/state}/ooda/quota.json`
