@@ -5,6 +5,8 @@
 token-routed, cross-model **agent fleet**. Stdlib-only Python 3.8+, zero
 third-party dependencies.
 
+Live site: **<https://ubermetroid.github.io/agy-skills/>**
+
 ## Credits: Col. John Boyd (USAF)
 
 The design borrows two ideas from fighter pilot and strategist **Col. John Boyd**:

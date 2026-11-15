@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>agy-skills — OODA Multi-Agent Router &amp; HUD for Antigravity</title>
+  <meta name="description" content="Token-routed, cross-model OODA agent fleet, Energy-Maneuverability scheduler, and Bubble-Canopy HUD for Antigravity (agy). Stdlib Python 3.8+, zero dependencies.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #070a0f;
+      --surface: #0d131b;
+      --surface-alt: #111924;
+      --border: #1d2938;
+      --border-hi: #2b3e54;
+      --text: #e6edf5;
+      --muted: #8ea0b5;
+      --dim: #5d7087;
+      --green: #2ec27e;
+      --cyan: #6ad7e1;
+      --amber: #fbb86c;
+      --red: #ff5555;
+      --serif: "DM Serif Display", Georgia, serif;
+      --sans: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --radius: 12px;
+      --maxw: 1120px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(900px 420px at 14% -8%, rgba(106, 215, 225, 0.08), transparent 60%),
+        radial-gradient(760px 400px at 88% 4%, rgba(46, 194, 126, 0.08), transparent 60%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--cyan); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, pre { font-family: var(--mono); }
+
+    .wrap {
+      max-width: var(--maxw);
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Top cockpit omni-bar */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(12px);
+      background: rgba(7, 10, 15, 0.84);
+      border-bottom: 1px solid var(--border);
+    }
+    .topbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 60px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--mono);
+      font-size: 0.88rem;
+      letter-spacing: 0.06em;
+      color: var(--text);
+      font-weight: 600;
+    }
+    .brand .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 10px rgba(46, 194, 126, 0.75);
+    }
+    .nav {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+    .nav a {
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    .nav a:hover { color: var(--text); text-decoration: none; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      font-weight: 500;
+      border: 1px solid var(--border-hi);
+      background: var(--surface-alt);
+      color: var(--text);
+      transition: border-color 140ms ease, transform 140ms ease;
+    }
+    .btn:hover { border-color: var(--cyan); text-decoration: none; transform: translateY(-1px); }
+    .btn-primary {
+      background: rgba(46, 194, 126, 0.14);
+      border-color: rgba(46, 194, 126, 0.55);
+      color: var(--green);
+    }
+    .btn-primary:hover { border-color: var(--green); }
+
+    /* Hero */
+    .hero {
+      padding: 68px 0 44px;
+      border-bottom: 1px solid var(--border);
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 12px;
+      border: 1px solid var(--border-hi);
+      border-radius: 999px;
+      background: var(--surface);
+      font-family: var(--mono);
+      font-size: 0.76rem;
+      color: var(--cyan);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-size: clamp(2.5rem, 5vw, 3.9rem);
+      line-height: 1.08;
+      font-weight: 400;
+      margin: 18px 0 14px;
+      letter-spacing: -0.01em;
+    }
+    h1 span { color: var(--green); }
+    .lead {
+      max-width: 740px;
+      font-size: 1.12rem;
+      color: var(--muted);
+      margin: 0 0 28px;
+    }
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 28px;
+    }
+    .telemetry-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+      gap: 12px;
+    }
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+    }
+    .stat-k {
+      font-family: var(--mono);
+      font-size: 0.74rem;
+      color: var(--dim);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .stat-v {
+      font-family: var(--mono);
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-top: 4px;
+    }
+    .stat-v.green { color: var(--green); }
+    .stat-v.cyan { color: var(--cyan); }
+    .stat-v.amber { color: var(--amber); }
+
+    /* Sections */
+    section {
+      padding: 52px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+    h2 {
+      font-family: var(--serif);
+      font-size: clamp(1.65rem, 3vw, 2.2rem);
+      font-weight: 400;
+      margin: 0;
+      line-height: 1.2;
+    }
+    .sec-tag {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--cyan);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    p.sec-sub {
+      color: var(--muted);
+      margin: 0 0 24px;
+      max-width: 780px;
+    }
+
+    /* HUD Terminal Card */
+    .terminal {
+      background: #05080c;
+      border: 1px solid var(--border-hi);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+    }
+    .term-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .term-dots { display: inline-flex; gap: 7px; }
+    .term-dots i {
+      display: block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--border-hi);
+    }
+    .term-dots i:first-child { background: var(--red); opacity: 0.85; }
+    .term-dots i:nth-child(2) { background: var(--amber); opacity: 0.85; }
+    .term-dots i:last-child { background: var(--green); opacity: 0.85; }
+    .hud-list {
+      margin: 0;
+      padding: 14px 18px;
+      list-style: none;
+      display: grid;
+      gap: 10px;
+      font-family: var(--mono);
+      font-size: 0.86rem;
+    }
+    .hud-row {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 14px;
+      align-items: center;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(17, 25, 36, 0.55);
+      border: 1px solid rgba(29, 41, 56, 0.8);
+    }
+    .hud-stage {
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--dim);
+    }
+    .hud-line { overflow-x: auto; white-space: nowrap; }
+    .c-green { color: var(--green); }
+    .c-cyan { color: var(--cyan); }
+    .c-amber { color: var(--amber); }
+    .c-red { color: var(--red); }
+    .c-muted { color: var(--muted); }
+
+    /* Grids & Cards */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+    .grid-5 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(195px, 1fr));
+      gap: 12px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 1.02rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .card p {
+      margin: 0;
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+    .badge {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border-hi);
+      margin-bottom: 8px;
+      letter-spacing: 0.04em;
+    }
+    .b-green { color: var(--green); border-color: rgba(46, 194, 126, 0.45); background: rgba(46, 194, 126, 0.08); }
+    .b-cyan { color: var(--cyan); border-color: rgba(106, 215, 225, 0.45); background: rgba(106, 215, 225, 0.08); }
+    .b-amber { color: var(--amber); border-color: rgba(251, 184, 108, 0.45); background: rgba(251, 184, 108, 0.08); }
+    .b-red { color: var(--red); border-color: rgba(255, 85, 85, 0.45); background: rgba(255, 85, 85, 0.08); }
+
+    /* Table */
+    .table-wrap {
+      overflow-x: auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      min-width: 680px;
+    }
+    th, td {
+      text-align: left;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--dim);
+      background: var(--surface-alt);
+    }
+    tr:last-child td { border-bottom: none; }
+    td code {
+      font-size: 0.84rem;
+      color: var(--cyan);
+      background: rgba(106, 215, 225, 0.07);
+      padding: 2px 6px;
+      border-radius: 5px;
+    }
+
+    /* Code Blocks */
+    pre.codeblock {
+      margin: 0;
+      padding: 18px 20px;
+      background: #05080c;
+      border: 1px solid var(--border-hi);
+      border-radius: var(--radius);
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.55;
+      color: var(--text);
+    }
+    .pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .pill {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 12px;
+    }
+
+    footer {
+      padding: 36px 0 48px;
+      color: var(--dim);
+      font-size: 0.88rem;
+    }
+    .foot-inner {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: center;
+    }
+
+    @media (max-width: 640px) {
+      .hud-row { grid-template-columns: 1fr; gap: 4px; }
+      .nav { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="#top"><span class="dot" aria-hidden="true"></span>UBERMETROID // AGY-SKILLS</a>
+      <nav class="nav" aria-label="Primary navigation">
+        <a href="#hud">HUD</a>
+        <a href="#theory">OODA + E-M</a>
+        <a href="#fleet">8-Lane Fleet</a>
+        <a href="#review">Cross-Model Review</a>
+        <a href="#quickstart">Quickstart</a>
+      </nav>
+      <a class="btn btn-primary" href="https://github.com/UberMetroid/agy-skills">GitHub Repo</a>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="wrap">
+        <span class="eyebrow">Antigravity Plugin &bull; Stdlib Python 3.8+ &bull; Zero Dependencies</span>
+        <h1>Turn one session into a<br><span>token-routed agent fleet.</span></h1>
+        <p class="lead">
+          <strong>UberMetroid/agy-skills</strong> ships <code>plugins/ooda</code> for Antigravity (<code>agy</code>):
+          a Boydian OODA orchestrator, Energy-Maneuverability quota router, cross-model diff reviewer,
+          and live Bubble-Canopy HUD built in strict House-Law stdlib Python.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#quickstart">Install &amp; Quickstart</a>
+          <a class="btn" href="https://github.com/UberMetroid/agy-skills">Browse Source</a>
+          <a class="btn" href="#fleet">Inspect 8-Lane Fleet</a>
+        </div>
+        <div class="telemetry-strip">
+          <div class="stat">
+            <div class="stat-k">Agent Fleet</div>
+            <div class="stat-v green">8 Lanes &bull; 5 Families</div>
+          </div>
+          <div class="stat">
+            <div class="stat-k">Parallel Bursts</div>
+            <div class="stat-v cyan">4&times; Sweeps + Worktrees</div>
+          </div>
+          <div class="stat">
+            <div class="stat-k">Scheduler</div>
+            <div class="stat-v amber">E-M 5h Cycle Drain</div>
+          </div>
+          <div class="stat">
+            <div class="stat-k">Dependencies</div>
+            <div class="stat-v">0 Third-Party Packages</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="hud">
+      <div class="wrap">
+        <div class="sec-head">
+          <h2>Bubble-Canopy HUD</h2>
+          <span class="sec-tag">bin/ooda-hud &bull; statusLine</span>
+        </div>
+        <p class="sec-sub">
+          Like an F-16 bubble canopy, <code>bin/ooda-hud</code> renders live OODA phase transitions,
+          active worker models, injected skills, parallel concurrency, and next 5h wake countdowns right in Antigravity's status bar.
+        </p>
+        <div class="terminal" role="region" aria-label="Bubble-Canopy HUD status states">
+          <div class="term-bar">
+            <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span>statusLine telemetry &bull; live states</span>
+          </div>
+          <ul class="hud-list">
+            <li class="hud-row">
+              <span class="hud-stage">Standby</span>
+              <span class="hud-line"><span class="c-muted">&cir; ooda</span> │ <span class="c-green">fleet 8/8</span></span>
+            </li>
+            <li class="hud-row">
+              <span class="hud-stage">Cooldown Wait</span>
+              <span class="hud-line"><span class="c-muted">&cir; ooda</span> │ <span class="c-amber">fleet 7/8 (next 22h01m)</span></span>
+            </li>
+            <li class="hud-row">
+              <span class="hud-stage">Observe / Recon</span>
+              <span class="hud-line"><span class="c-cyan">&#x280b; observe</span> &middot; swe-2-flash-max │ <span class="c-green">fleet 8/8</span></span>
+            </li>
+            <li class="hud-row">
+              <span class="hud-stage">Orient / Decide</span>
+              <span class="hud-line"><span class="c-amber">&#x25d0; orient/decide</span> │ skill ooda │ <span class="c-amber">fleet 7/8 (next 22h01m)</span></span>
+            </li>
+            <li class="hud-row">
+              <span class="hud-stage">Parallel Act</span>
+              <span class="hud-line"><span class="c-green">&#x280b; act &times;2</span> &middot; claude-opus-5-5-high, grok-4.7 │ fleet 7/8</span>
+            </li>
+            <li class="hud-row">
+              <span class="hud-stage">Cross-Model Verify</span>
+              <span class="hud-line"><span class="c-cyan">&#x280b; verify</span> &middot; MiniMax-M3.1-Flash │ fleet 7/8</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="theory">
+      <div class="wrap">
+        <div class="sec-head">
+          <h2>Boydian OODA + Energy-Maneuverability</h2>
+          <span class="sec-tag">Credits: Col. John Boyd (USAF)</span>
+        </div>
+        <p class="sec-sub">
+          Named after Col. John Boyd's fighter-tactics doctrine: tighten observation loops without sacrificing orientation integrity,
+          and manage every model quota pool via specific excess power <code>Ps = V(T &minus; D) / W</code>.
+        </p>
+
+        <div class="grid-3" style="margin-bottom: 18px;">
+          <div class="card">
+            <span class="badge b-cyan">Fast Path</span>
+            <h3>Implicit Guidance &amp; Control</h3>
+            <p>
+              Routine, well-understood tasks skip heavy deliberation once oriented and dispatch straight from
+              Observe into Act, keeping the top-level orchestrator thin (&lt;10% token burn).
+            </p>
+          </div>
+          <div class="card">
+            <span class="badge b-amber">Synthesis</span>
+            <h3>Destruction &amp; Creation</h3>
+            <p>
+              When an independent off-family reviewer rejects a patch, the router discards the stale mental frame
+              and re-plans or retries on a different model family. Hard cap of 3 Act loops.
+            </p>
+          </div>
+          <div class="card">
+            <span class="badge b-green">Isolation</span>
+            <h3>Parallel Worktree Swarms</h3>
+            <p>
+              Multi-module manifests spin up one isolated git worktree per task and acquire atomic <code>flock</code>
+              slot leases on 4-wide lanes before running build/test gates.
+            </p>
+          </div>
+        </div>
+
+        <div class="grid-5">
+          <div class="card">
+            <span class="badge b-green">CORNER</span>
+            <h3>Drain Expiring</h3>
+            <p>Prioritizes renewable 5h cycles closest to reset so expiring tokens are never wasted.</p>
+          </div>
+          <div class="card">
+            <span class="badge b-cyan">CRUISE</span>
+            <h3>Balanced Capped</h3>
+            <p>Rotates across healthy capped lanes (<code>agy-opus</code>, <code>muse</code>, <code>grok</code>, <code>mistral</code>).</p>
+          </div>
+          <div class="card">
+            <span class="badge b-amber">CONSERVE</span>
+            <h3>Last Capped Lane</h3>
+            <p>When only one capped lane remains active, free SWE-2 and <code>mcode</code> lanes absorb the load first.</p>
+          </div>
+          <div class="card">
+            <span class="badge b-amber">RESERVE</span>
+            <h3>Credit Shield</h3>
+            <p>Holds paid <code>devin-fusion</code> credits in reserve behind every renewable and free lane.</p>
+          </div>
+          <div class="card">
+            <span class="badge b-red">REGEN</span>
+            <h3>Cooldown &amp; Wake</h3>
+            <p>HTTP 429 or server reset timestamps park a lane cleanly and auto-wake it when its timer expires.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="fleet">
+      <div class="wrap">
+        <div class="sec-head">
+          <h2>The 8-Lane Fleet &amp; Stage Clocks</h2>
+          <span class="sec-tag">router --status</span>
+        </div>
+        <p class="sec-sub">
+          Gemini quota is intentionally reserved for the top-level Antigravity orchestrator. Worker execution dispatches across
+          eight specialized CLI lanes with distinct concurrency limits and reset clocks.
+        </p>
+
+        <div class="table-wrap" style="margin-bottom: 18px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Lane</th>
+                <th>CLI</th>
+                <th>Engine / Model</th>
+                <th>Tier &amp; Cycle</th>
+                <th>Parallelism &amp; Role</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>agy-opus</code></td>
+                <td><code>agy</code></td>
+                <td><code>claude-opus-5-5-high</code></td>
+                <td>capped &bull; 5h renewable</td>
+                <td>Default heavy coding &amp; deep architecture lead</td>
+              </tr>
+              <tr>
+                <td><code>muse</code></td>
+                <td><code>muse</code></td>
+                <td><code>muse-ember-1.0</code></td>
+                <td>capped &bull; 5h renewable</td>
+                <td>2nd deep/heavy slot &amp; parallel stripe member</td>
+              </tr>
+              <tr>
+                <td><code>grok</code></td>
+                <td><code>grok</code></td>
+                <td><code>grok-4.7</code></td>
+                <td>capped &bull; 5h renewable</td>
+                <td>3rd deep/heavy slot &amp; primary backup reviewer</td>
+              </tr>
+              <tr>
+                <td><code>mistral</code></td>
+                <td><code>vibe</code></td>
+                <td><code>glm-5-3</code></td>
+                <td>capped &bull; 5h renewable</td>
+                <td>4th heavy/parallel stripe &amp; off-family reviewer</td>
+              </tr>
+              <tr>
+                <td><code>mcode</code></td>
+                <td><code>mcode</code></td>
+                <td><code>MiniMax-M3.1-Flash</code></td>
+                <td>high-cap &bull; 5h renewable</td>
+                <td>Primary diff reviewer &bull; <strong>max 4 parallel</strong> (<code>flock</code>)</td>
+              </tr>
+              <tr>
+                <td><code>devin-fast</code></td>
+                <td><code>devin</code></td>
+                <td><code>swe-2-flash-max</code></td>
+                <td>free / unlimited</td>
+                <td>Read-only recon (Observe) &bull; <strong>max 4 parallel</strong></td>
+              </tr>
+              <tr>
+                <td><code>devin-pro</code></td>
+                <td><code>devin</code></td>
+                <td><code>swe-2-max</code></td>
+                <td>free / unlimited</td>
+                <td>Conserve-mode coder &amp; off-family backup reviewer</td>
+              </tr>
+              <tr>
+                <td><code>devin-fusion</code></td>
+                <td><code>devin</code></td>
+                <td><code>fusion(opus-5.5-hi+swe2)</code></td>
+                <td>paid credits (reserve)</td>
+                <td>Protected reserve when renewable/free lanes deplete</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>Stage Routing Priority</h3>
+            <p>
+              <strong>Observe (recon):</strong> <code>devin-fast &rarr; mcode &rarr; devin-pro</code><br>
+              <strong>Act (default):</strong> Soonest-expiring capped lane &rarr; remaining capped &rarr; free lanes<br>
+              <strong>Parallel stripe:</strong> <code>agy-opus &rarr; muse &rarr; grok &rarr; mistral &rarr; devin-fast &rarr; devin-pro &rarr; mcode &rarr; devin-fusion</code><br>
+              <strong>Fallback chain:</strong> <code>agy-opus &rarr; muse &rarr; grok &rarr; mistral &rarr; devin-fusion &rarr; devin-fast &rarr; devin-pro &rarr; mcode</code>
+            </p>
+          </div>
+          <div class="card">
+            <h3>Recursion Guard</h3>
+            <p>
+              Every headless worker launches with <code>ROUTER_DEPTH=1</code> (or higher). Installed rules in
+              <code>plugins/ooda/rules/AGENTS.md</code> forbid spawned workers from invoking <code>router</code>,
+              <code>ooda</code>, or <code>dispatch.py</code> recursively.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="review">
+      <div class="wrap">
+        <div class="sec-head">
+          <h2>Cross-Model Diff Verification</h2>
+          <span class="sec-tag">router --review .</span>
+        </div>
+        <p class="sec-sub">
+          No model grades its own patch. <code>router --review</code> filters out the authoring family automatically, appends
+          untracked files as synthetic hunks so new scripts never slip past git diff, and fails closed on any <code>[P0-3]</code> finding.
+        </p>
+        <div class="grid-3">
+          <div class="card">
+            <span class="badge b-green">&le; 8 KiB Working Tree</span>
+            <h3>Native Repo Review</h3>
+            <p>
+              Invokes <code>mcode exec review</code> with <code>--permission smart --max-steps 15</code> so the reviewer
+              can inspect surrounding files cleanly.
+            </p>
+          </div>
+          <div class="card">
+            <span class="badge b-cyan">&gt; 8 KiB or Committed</span>
+            <h3>Lightweight Patch Mode</h3>
+            <p>
+              Streams a bounded single-pass patch prompt with <code>--mode lightweight --permission off --max-steps 4</code>
+              for fast, deterministic audits.
+            </p>
+          </div>
+          <div class="card">
+            <span class="badge b-amber">Fail-Closed Backup</span>
+            <h3>Off-Family Fallback</h3>
+            <p>
+              On cooldown, non-zero exit, or an <code>UNKNOWN</code> verdict, verification rotates across
+              <code>mcode &rarr; devin-fast &rarr; devin-pro &rarr; grok &rarr; mistral &rarr; muse &rarr; agy-opus</code>.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="quickstart">
+      <div class="wrap">
+        <div class="sec-head">
+          <h2>Quickstart &amp; House Laws</h2>
+          <span class="sec-tag">make all</span>
+        </div>
+        <div class="grid-2">
+          <div>
+            <pre class="codeblock"><code>git clone https://github.com/UberMetroid/agy-skills.git
+cd agy-skills
+./install.sh          # symlinks plugin, router/ooda CLI &amp; HUD
+
+agy plugin list       # confirm "ooda" is enabled
+router --status       # fleet tiers, resets &amp; active locks
+router --usage        # per-lane 5h cycle telemetry
+router --recon "Map auth flow and callers"
+router --review .     # cross-model diff gate
+make all              # full House-Law + unit + dogfood suite</code></pre>
+          </div>
+          <div class="card">
+            <h3>State Paths &amp; House-Law Gates</h3>
+            <p>
+              Quota state persists under <code>${XDG_STATE_HOME:-~/.local/state}/ooda/quota.json</code>
+              (override with <code>AGENT_QUOTA_FILE</code>). Live HUD telemetry and <code>flock</code>
+              slot markers live in <code>/tmp/router-hud</code> (override with <code>ROUTER_HUD_DIR</code>).
+            </p>
+            <div class="pills">
+              <span class="pill">portable (no home paths/secrets)</span>
+              <span class="pill">line-cap (16&ndash;256 lines)</span>
+              <span class="pill">density (&le;8 defs/file, &le;64 lines/fn)</span>
+              <span class="pill">shape (&le;8 .py/dir)</span>
+              <span class="pill">vocab</span>
+              <span class="pill">plugin-check</span>
+              <span class="pill">unittest</span>
+              <span class="pill">dogfood</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap foot-inner">
+      <span>Built by <a href="https://github.com/UberMetroid">UberMetroid</a> &bull; Inspired by Col. John Boyd (USAF)</span>
+      <span>
+        <a href="https://github.com/UberMetroid/agy-skills">UberMetroid/agy-skills</a>
+        &middot;
+        <a href="https://ubermetroid.github.io/">ubermetroid.github.io</a>
+      </span>
+    </div>
+  </footer>
+
+</body>
+</html>
