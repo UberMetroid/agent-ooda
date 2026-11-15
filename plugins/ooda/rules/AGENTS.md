@@ -3,7 +3,7 @@
 ## 1. `ROUTER_DEPTH` Recursion Guard (Check First)
 - Check whether `ROUTER_DEPTH` in your process environment is `1` or greater.
 - When `ROUTER_DEPTH >= 1`, you are running as a headless worker dispatched by `router` / `ooda`. Execute the assigned task directly with native file and command tools (`read_file`, `edit_file`, `write_file`, `run_command`).
-- **NEVER** invoke `router`, `ooda`, or `dispatch.py` when `ROUTER_DEPTH >= 1`.
+- **NEVER** invoke `router` or `ooda` when `ROUTER_DEPTH >= 1` (enforced with `exit 2` by the binary).
 
 ## 2. Thin Orchestrator & Dynamic `router` Execution (`ROUTER_DEPTH` unset or `0`)
 - Keep the top-level Antigravity session as a thin orchestrator (`<10%` of total token burn): own planning, architecture decisions, live agent selection, build/test gate verification, and user reporting while offloading bulk work to `router` (`~/.local/bin/router`, provided by the `ooda` plugin).

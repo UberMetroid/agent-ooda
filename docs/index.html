@@ -3,8 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>agent-ooda — OODA Multi-Agent Router &amp; HUD</title>
-  <meta name="description" content="Token-routed, cross-model OODA agent fleet, Energy-Maneuverability scheduler, and Bubble-Canopy HUD for Antigravity (agy). Zero-dependency Go 1.22+ (CGO_ENABLED=0).">
+  <title>agent-ooda — Static Go OODA Multi-Agent Engine, Router &amp; Live tok/s HUD</title>
+  <meta name="description" content="Zero-dependency static Go 1.22+ (CGO_ENABLED=0) multi-call OODA agent engine, Energy-Maneuverability 8-lane router, cross-model diff verifier, and live tok/s Bubble-Canopy HUD for Antigravity (agy) and future hosts.">
+  <meta property="og:title" content="agent-ooda — Static Go OODA Multi-Agent Engine, Router &amp; Live tok/s HUD">
+  <meta property="og:description" content="Static Go multi-call OODA router, Energy-Maneuverability scheduler, cross-model diff verifier, and live ~tok/s HUD with zero-Go SHA-256 web install.">
+  <meta property="og:url" content="https://ubermetroid.github.io/agent-ooda/">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128' fill='none'%3E%3Crect width='128' height='128' rx='24' fill='%230d1117'/%3E%3Ccircle cx='64' cy='64' r='42' stroke='%2330363d' stroke-width='4' stroke-dasharray='10 8'/%3E%3Cpath d='M64 22 A42 42 0 0 1 106 64' stroke='%2339d0d8' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M106 64 A42 42 0 0 1 64 106' stroke='%23f0b429' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M64 106 A42 42 0 0 1 22 64' stroke='%233fb950' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M22 64 A42 42 0 0 1 64 22' stroke='%23d2a8ff' stroke-width='6' stroke-linecap='round'/%3E%3Cpolygon points='64,34 86,84 64,73 42,84' fill='%23e6edf3'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -18,9 +23,10 @@
       --text: #e6edf5;
       --muted: #8ea0b5;
       --dim: #5d7087;
-      --green: #2ec27e;
-      --cyan: #6ad7e1;
-      --amber: #fbb86c;
+      --green: #3fb950;
+      --cyan: #39d0d8;
+      --amber: #f0b429;
+      --violet: #d2a8ff;
       --red: #ff5555;
       --serif: "DM Serif Display", Georgia, serif;
       --sans: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -34,8 +40,9 @@
     body {
       margin: 0;
       background:
-        radial-gradient(900px 420px at 14% -8%, rgba(106, 215, 225, 0.08), transparent 60%),
-        radial-gradient(760px 400px at 88% 4%, rgba(46, 194, 126, 0.08), transparent 60%),
+        radial-gradient(900px 420px at 14% -8%, rgba(57, 208, 216, 0.08), transparent 60%),
+        radial-gradient(760px 400px at 88% 4%, rgba(63, 185, 80, 0.08), transparent 60%),
+        radial-gradient(640px 380px at 52% 45%, rgba(210, 168, 255, 0.04), transparent 65%),
         var(--bg);
       color: var(--text);
       font-family: var(--sans);
@@ -54,13 +61,12 @@
       padding: 0 24px;
     }
 
-    /* Top cockpit omni-bar */
     .topbar {
       position: sticky;
       top: 0;
       z-index: 20;
       backdrop-filter: blur(12px);
-      background: rgba(7, 10, 15, 0.84);
+      background: rgba(7, 10, 15, 0.86);
       border-bottom: 1px solid var(--border);
     }
     .topbar-inner {
@@ -75,27 +81,23 @@
       align-items: center;
       gap: 10px;
       font-family: var(--mono);
-      font-size: 0.88rem;
+      font-size: 0.86rem;
       letter-spacing: 0.06em;
       color: var(--text);
       font-weight: 600;
+      white-space: nowrap;
     }
-    .brand .dot {
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      background: var(--green);
-      box-shadow: 0 0 10px rgba(46, 194, 126, 0.75);
-    }
+    .brand:hover { text-decoration: none; }
+    .brand svg { width: 22px; height: 22px; flex-shrink: 0; }
     .nav {
       display: flex;
       align-items: center;
-      gap: 18px;
+      gap: 16px;
       flex-wrap: wrap;
     }
     .nav a {
       color: var(--muted);
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       font-weight: 500;
     }
     .nav a:hover { color: var(--text); text-decoration: none; }
@@ -115,13 +117,12 @@
     }
     .btn:hover { border-color: var(--cyan); text-decoration: none; transform: translateY(-1px); }
     .btn-primary {
-      background: rgba(46, 194, 126, 0.14);
-      border-color: rgba(46, 194, 126, 0.55);
+      background: rgba(63, 185, 80, 0.14);
+      border-color: rgba(63, 185, 80, 0.55);
       color: var(--green);
     }
     .btn-primary:hover { border-color: var(--green); }
 
-    /* Hero */
     .hero {
       padding: 68px 0 44px;
       border-bottom: 1px solid var(--border);
@@ -150,8 +151,8 @@
     }
     h1 span { color: var(--green); }
     .lead {
-      max-width: 740px;
-      font-size: 1.12rem;
+      max-width: 760px;
+      font-size: 1.1rem;
       color: var(--muted);
       margin: 0 0 28px;
     }
@@ -171,7 +172,7 @@
       padding: 10px 14px;
       margin-bottom: 24px;
       background: #05080c;
-      border: 1px solid rgba(46, 194, 126, 0.45);
+      border: 1px solid rgba(63, 185, 80, 0.45);
       border-radius: var(--radius);
       font-family: var(--mono);
       font-size: 0.84rem;
@@ -184,7 +185,7 @@
     .copy-btn { cursor: pointer; }
     .telemetry-strip {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 12px;
     }
     .stat {
@@ -202,7 +203,7 @@
     }
     .stat-v {
       font-family: var(--mono);
-      font-size: 1.05rem;
+      font-size: 1.02rem;
       font-weight: 600;
       color: var(--text);
       margin-top: 4px;
@@ -210,8 +211,8 @@
     .stat-v.green { color: var(--green); }
     .stat-v.cyan { color: var(--cyan); }
     .stat-v.amber { color: var(--amber); }
+    .stat-v.violet { color: var(--violet); }
 
-    /* Sections */
     section {
       padding: 52px 0;
       border-bottom: 1px solid var(--border);
@@ -241,10 +242,9 @@
     p.sec-sub {
       color: var(--muted);
       margin: 0 0 24px;
-      max-width: 780px;
+      max-width: 790px;
     }
 
-    /* HUD Terminal Card */
     .terminal {
       background: #05080c;
       border: 1px solid var(--border-hi);
@@ -285,7 +285,7 @@
     }
     .hud-row {
       display: grid;
-      grid-template-columns: 150px 1fr;
+      grid-template-columns: 165px 1fr;
       gap: 14px;
       align-items: center;
       padding: 8px 10px;
@@ -303,10 +303,10 @@
     .c-green { color: var(--green); }
     .c-cyan { color: var(--cyan); }
     .c-amber { color: var(--amber); }
+    .c-violet { color: var(--violet); }
     .c-red { color: var(--red); }
     .c-muted { color: var(--muted); }
 
-    /* Grids & Cards */
     .grid-2 {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -350,12 +350,12 @@
       margin-bottom: 8px;
       letter-spacing: 0.04em;
     }
-    .b-green { color: var(--green); border-color: rgba(46, 194, 126, 0.45); background: rgba(46, 194, 126, 0.08); }
-    .b-cyan { color: var(--cyan); border-color: rgba(106, 215, 225, 0.45); background: rgba(106, 215, 225, 0.08); }
-    .b-amber { color: var(--amber); border-color: rgba(251, 184, 108, 0.45); background: rgba(251, 184, 108, 0.08); }
+    .b-green { color: var(--green); border-color: rgba(63, 185, 80, 0.45); background: rgba(63, 185, 80, 0.08); }
+    .b-cyan { color: var(--cyan); border-color: rgba(57, 208, 216, 0.45); background: rgba(57, 208, 216, 0.08); }
+    .b-amber { color: var(--amber); border-color: rgba(240, 180, 41, 0.45); background: rgba(240, 180, 41, 0.08); }
+    .b-violet { color: var(--violet); border-color: rgba(210, 168, 255, 0.45); background: rgba(210, 168, 255, 0.08); }
     .b-red { color: var(--red); border-color: rgba(255, 85, 85, 0.45); background: rgba(255, 85, 85, 0.08); }
 
-    /* Table */
     .table-wrap {
       overflow-x: auto;
       background: var(--surface);
@@ -385,12 +385,11 @@
     td code {
       font-size: 0.84rem;
       color: var(--cyan);
-      background: rgba(106, 215, 225, 0.07);
+      background: rgba(57, 208, 216, 0.07);
       padding: 2px 6px;
       border-radius: 5px;
     }
 
-    /* Code Blocks */
     pre.codeblock {
       margin: 0;
       padding: 18px 20px;
@@ -441,13 +440,25 @@
 
   <header class="topbar">
     <div class="wrap topbar-inner">
-      <a class="brand" href="#top"><span class="dot" aria-hidden="true"></span>UBERMETROID // AGENT-OODA</a>
+      <a class="brand" href="#top">
+        <svg viewBox="0 0 128 128" fill="none" aria-hidden="true">
+          <rect width="128" height="128" rx="24" fill="#0d1117"/>
+          <circle cx="64" cy="64" r="42" stroke="#30363d" stroke-width="5" stroke-dasharray="10 8"/>
+          <path d="M64 22 A42 42 0 0 1 106 64" stroke="#39d0d8" stroke-width="7" stroke-linecap="round"/>
+          <path d="M106 64 A42 42 0 0 1 64 106" stroke="#f0b429" stroke-width="7" stroke-linecap="round"/>
+          <path d="M64 106 A42 42 0 0 1 22 64" stroke="#3fb950" stroke-width="7" stroke-linecap="round"/>
+          <path d="M22 64 A42 42 0 0 1 64 22" stroke="#d2a8ff" stroke-width="7" stroke-linecap="round"/>
+          <polygon points="64,34 86,84 64,73 42,84" fill="#e6edf3"/>
+        </svg>
+        AGENT-OODA // UBERMETROID
+      </a>
       <nav class="nav" aria-label="Primary navigation">
         <a href="#hud">HUD</a>
+        <a href="#architecture">Architecture</a>
         <a href="#theory">OODA + E-M</a>
         <a href="#fleet">8-Lane Fleet</a>
-        <a href="#review">Cross-Model Review</a>
-        <a href="#quickstart">Quickstart</a>
+        <a href="#review">Verify</a>
+        <a href="#quickstart">Install</a>
       </nav>
       <a class="btn btn-primary" href="https://github.com/UberMetroid/agent-ooda">GitHub Repo</a>
     </div>
@@ -456,13 +467,14 @@
   <main id="top">
     <section class="hero">
       <div class="wrap">
-        <span class="eyebrow">OODA Agent Plugin Suite &bull; Static Go 1.22+ &bull; Zero Dependencies</span>
+        <span class="eyebrow">agent-ooda v1.0 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Multi-Host Agent Suite</span>
         <h1>Turn one session into a<br><span>token-routed agent fleet.</span></h1>
         <p class="lead">
-          <strong>UberMetroid/agent-ooda</strong> ships a shared zero-dependency Go router &amp; plugin suite
-          (<code>plugins/ooda</code> for Antigravity <code>agy</code>, extensible to <code>mcode</code>):
-          Boydian OODA dispatch, Energy-Maneuverability scheduling, cross-model diff review,
-          and a Bubble-Canopy HUD with live <code>~tok/s</code> streaming telemetry.
+          <strong>UberMetroid/agent-ooda</strong> ships one zero-dependency static Go OODA engine
+          (<code>ooda</code>, <code>router</code>, <code>ooda-hud</code>, <code>ooda-hook</code>) paired with
+          host plugin adapters (<code>plugins/ooda</code> for Antigravity <code>agy</code> today, structured to extend
+          directly to <code>mcode</code> next): Energy-Maneuverability scheduling, cross-model verification, and a live
+          <code>~tok/s</code> Bubble-Canopy HUD with one-line SHA-256 web install.
         </p>
         <div class="install-bar" role="region" aria-label="One-line web installer">
           <code id="install-cmd">curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash</code>
@@ -470,8 +482,8 @@
         </div>
         <div class="hero-actions">
           <a class="btn btn-primary" href="#quickstart">Install &amp; Quickstart</a>
-          <a class="btn" href="https://github.com/UberMetroid/agent-ooda">Browse Source</a>
-          <a class="btn" href="#fleet">Inspect 8-Lane Fleet</a>
+          <a class="btn" href="https://github.com/UberMetroid/agent-ooda/releases/latest">Release Binaries (v1.0.0)</a>
+          <a class="btn" href="#architecture">Go Architecture</a>
         </div>
         <div class="telemetry-strip">
           <div class="stat">
@@ -479,16 +491,16 @@
             <div class="stat-v green">8 Lanes &bull; 5 Families</div>
           </div>
           <div class="stat">
-            <div class="stat-k">Parallel Bursts</div>
-            <div class="stat-v cyan">4&times; Sweeps + Worktrees</div>
+            <div class="stat-k">Static Binary</div>
+            <div class="stat-v cyan">Go 1.22+ &bull; CGO_ENABLED=0</div>
           </div>
           <div class="stat">
-            <div class="stat-k">Scheduler</div>
-            <div class="stat-v amber">E-M 5h Cycle Drain</div>
+            <div class="stat-k">Live Canopy HUD</div>
+            <div class="stat-v violet">~tok/s &bull; Tool &bull; Wake</div>
           </div>
           <div class="stat">
             <div class="stat-k">Dependencies</div>
-            <div class="stat-v">0 Third-Party Packages</div>
+            <div class="stat-v amber">0 Third-Party Packages</div>
           </div>
         </div>
       </div>
@@ -501,8 +513,9 @@
           <span class="sec-tag">bin/ooda-hud &bull; statusLine</span>
         </div>
         <p class="sec-sub">
-          Like an F-16 bubble canopy, <code>bin/ooda-hud</code> renders live OODA phase transitions,
-          active worker models, injected skills, parallel concurrency, and next 5h wake countdowns right in Antigravity's status bar.
+          Like an F-16 bubble canopy, <code>bin/ooda-hud</code> renders live OODA phase transitions, sliding-window
+          <code>~tok/s</code> or exact <code>tok/s</code> stream speed, active <code>tool Xs</code> waits, injected
+          skills, parallel bursts, and next 5h wake countdowns right inside Antigravity&apos;s status bar.
         </p>
         <div class="terminal" role="region" aria-label="Bubble-Canopy HUD status states">
           <div class="term-bar">
@@ -515,29 +528,47 @@
               <span class="hud-line"><span class="c-muted">&cir; ooda</span> │ <span class="c-green">fleet 8/8</span></span>
             </li>
             <li class="hud-row">
-              <span class="hud-stage">Cooldown Wait</span>
-              <span class="hud-line"><span class="c-muted">&cir; ooda</span> │ <span class="c-amber">fleet 7/8 (next 22h01m)</span></span>
-            </li>
-            <li class="hud-row">
-              <span class="hud-stage">Observe / Recon</span>
-              <span class="hud-line"><span class="c-cyan">&#x280b; observe</span> &middot; MiniMax-M3.1-Flash &middot; <span class="c-green">~42 tok/s</span> │ <span class="c-green">fleet 8/8</span></span>
-            </li>
-            <li class="hud-row">
               <span class="hud-stage">Orient / Decide</span>
-              <span class="hud-line"><span class="c-amber">&#x25d0; orient/decide</span> │ skill ooda │ <span class="c-amber">fleet 7/8 (next 22h01m)</span></span>
+              <span class="hud-line"><span class="c-amber">&#x25d0; orient/decide</span> │ <span class="c-muted">skill devin</span> │ <span class="c-amber">fleet 7/8</span> <span class="c-muted">(next 2h59m)</span></span>
+            </li>
+            <li class="hud-row">
+              <span class="hud-stage">Observe (Stream)</span>
+              <span class="hud-line"><span class="c-cyan">&#x280b; observe</span> <span class="c-muted">&middot;</span> <span class="c-cyan">swe-2-flash-max</span> <span class="c-muted">&middot; ~64 tok/s</span> │ <span class="c-green">fleet 8/8</span></span>
+            </li>
+            <li class="hud-row">
+              <span class="hud-stage">Act (Tool Call)</span>
+              <span class="hud-line"><span class="c-green">&#x280b; act</span> <span class="c-muted">&middot;</span> <span class="c-green">claude-opus-5-5-high</span> <span class="c-muted">&middot; tool 4s</span> │ <span class="c-muted">skill devin</span> │ <span class="c-amber">fleet 7/8</span></span>
             </li>
             <li class="hud-row">
               <span class="hud-stage">Parallel Act</span>
-              <span class="hud-line"><span class="c-green">&#x280b; act &times;2</span> &middot; agy-opus, grok │ fleet 7/8</span>
+              <span class="hud-line"><span class="c-green">&#x280b; act &times;2</span> <span class="c-muted">&middot;</span> <span class="c-green">claude-opus-5-5-high, grok-4.7</span> <span class="c-muted">&middot; ~112 tok/s</span> │ <span class="c-amber">fleet 7/8</span></span>
             </li>
             <li class="hud-row">
               <span class="hud-stage">Cross-Model Verify</span>
-              <span class="hud-line"><span class="c-cyan">&#x280b; verify</span> &middot; mcode │ fleet 7/8</span>
+              <span class="hud-line"><span class="c-violet">&#x280b; verify</span> <span class="c-muted">&middot;</span> <span class="c-violet">MiniMax-M3.1-Flash</span> <span class="c-muted">&middot; ~48 tok/s</span> │ <span class="c-amber">fleet 7/8</span></span>
             </li>
           </ul>
         </div>
 
-        <div class="grid-2" style="margin-top: 18px;">
+        <div class="grid-3" style="margin-top: 18px;">
+          <div class="card">
+            <span class="badge b-green">Live Meter</span>
+            <h3>Zero-Trust <code>tok/s</code> Telemetry</h3>
+            <p>
+              <code>stream_pump.go</code> reads unbuffered NDJSON chunks over <code>io.Pipe()</code> to separate
+              <code>wait</code> TTFB, active token throughput (exact <code>tok/s</code> or <code>~tok/s</code> delta),
+              and silent <code>tool Xs</code> stalls without misleading lifetime averages.
+            </p>
+          </div>
+          <div class="card">
+            <span class="badge b-cyan">settings.json</span>
+            <h3>statusLine Wiring</h3>
+            <p>
+              <code>./install.sh</code> symlinks <code>~/.gemini/antigravity-cli/statusline.py</code> to
+              <code>bin/ooda-hud</code> and merges <code>statusLine</code> into <code>settings.json</code> cleanly
+              (skip via <code>OODA_NO_STATUSLINE=1</code>; previous statusLine is backed up).
+            </p>
+          </div>
           <div>
             <pre class="codeblock"><code>{
   "statusLine": {
@@ -549,14 +580,46 @@
   }
 }</code></pre>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="architecture">
+      <div class="wrap">
+        <div class="sec-head">
+          <h2>Static Go Core &amp; Multi-Host Suite</h2>
+          <span class="sec-tag">cmd/ooda &bull; internal/* &bull; plugins/*</span>
+        </div>
+        <p class="sec-sub">
+          <code>agent-ooda</code> separates host-agnostic Go packages from thin plugin adapters so multiple CLI hosts
+          can share one battle-tested binary, quota store, lease mechanism, and verifier without code duplication.
+        </p>
+        <div class="grid-3">
           <div class="card">
-            <span class="badge b-cyan">settings.json</span>
-            <h3>statusLine Wiring</h3>
+            <span class="badge b-cyan">Multi-Call Binary</span>
+            <h3>One Static <code>ooda</code> Executable</h3>
             <p>
-              <code>./install.sh</code> links <code>~/.gemini/antigravity-cli/statusline.py</code> to <code>bin/ooda-hud</code>
-              and merges this block into <code>~/.gemini/antigravity-cli/settings.json</code>. Every other key is kept,
-              and a statusLine you already had is saved for uninstall to restore. Restart agy to see the canopy.
-              To skip this step, run with <code>OODA_NO_STATUSLINE=1</code>.
+              Built with <code>CGO_ENABLED=0</code> and zero third-party packages. Inspects <code>argv[0]</code> to run
+              as <code>ooda</code>/<code>router</code> (dispatcher &amp; CLI), <code>ooda-hud</code> (status bar), or
+              <code>ooda-hook</code> (session skill recorder) with instant startup.
+            </p>
+          </div>
+          <div class="card">
+            <span class="badge b-violet">Shared Engine</span>
+            <h3>Multi-Host Plugin Repository</h3>
+            <p>
+              Core OODA packages live under <code>internal/{fleet,envelope,dispatch,verify,worktree,hud,cli,install}</code>
+              while host manifests/rules live under <code>plugins/ooda</code> (Antigravity <code>agy</code> today,
+              ready to host an <code>mcode</code> plugin next).
+            </p>
+          </div>
+          <div class="card">
+            <span class="badge b-green">Fail-Closed Supply</span>
+            <h3>Zero-Go Verified Releases</h3>
+            <p>
+              GitHub Releases publish cross-compiled static binaries (<code>linux</code>/<code>darwin</code>,
+              <code>amd64</code>/<code>arm64</code>) alongside <code>SHA256SUMS</code>. Hosts without Go verify the
+              checksum fail-closed before installing.
             </p>
           </div>
         </div>
@@ -570,8 +633,9 @@
           <span class="sec-tag">Credits: Col. John Boyd (USAF)</span>
         </div>
         <p class="sec-sub">
-          Named after Col. John Boyd's fighter-tactics doctrine: tighten observation loops without sacrificing orientation integrity,
-          and manage every model quota pool via specific excess power <code>Ps = V(T &minus; D) / W</code>.
+          Named after Col. John Boyd&apos;s fighter-tactics doctrine: tighten observation loops without sacrificing
+          orientation integrity, and allocate every model quota pool via specific excess power
+          <code>Ps = V(T &minus; D) / W</code>.
         </p>
 
         <div class="grid-3" style="margin-bottom: 18px;">
@@ -588,15 +652,15 @@
             <h3>Destruction &amp; Creation</h3>
             <p>
               When an independent off-family reviewer rejects a patch, the router discards the stale mental frame
-              and re-plans or retries on a different model family. Hard cap of 3 Act loops.
+              and pivots onto a different model family. Hard cap of 3 Act loops.
             </p>
           </div>
           <div class="card">
             <span class="badge b-green">Isolation</span>
             <h3>Parallel Worktree Swarms</h3>
             <p>
-              Multi-module manifests spin up one isolated git worktree per task and acquire atomic <code>flock</code>
-              slot leases on 4-wide lanes before running build/test gates.
+              Multi-module manifests spin up one isolated <code>git worktree</code> per task on branch
+              <code>ooda/&lt;id&gt;</code> and acquire atomic <code>flock</code> slot leases on 4-wide pools.
             </p>
           </div>
         </div>
@@ -618,7 +682,7 @@
             <p>When only one capped lane remains active, free SWE-2 and <code>mcode</code> lanes absorb the load first.</p>
           </div>
           <div class="card">
-            <span class="badge b-amber">RESERVE</span>
+            <span class="badge b-violet">RESERVE</span>
             <h3>Credit Shield</h3>
             <p>Holds paid <code>devin-fusion</code> credits in reserve behind every renewable and free lane.</p>
           </div>
@@ -634,12 +698,13 @@
     <section id="fleet">
       <div class="wrap">
         <div class="sec-head">
-          <h2>The 8-Lane Fleet &amp; Stage Clocks</h2>
-          <span class="sec-tag">router --status</span>
+          <h2>The 8-Lane Fleet &amp; Binary Guardrails</h2>
+          <span class="sec-tag">router --status &bull; --discover</span>
         </div>
         <p class="sec-sub">
-          Gemini quota is intentionally reserved for the top-level Antigravity orchestrator. Worker execution dispatches across
-          eight specialized CLI lanes with distinct concurrency limits and reset clocks.
+          <code>router --status</code> and <code>router --discover</code> probe installed CLIs dynamically for active
+          models, effort controls, and injectable skills. Gemini quota is protected exclusively for the top-level
+          Antigravity orchestrator while worker execution dispatches across eight specialized lanes.
         </p>
 
         <div class="table-wrap" style="margin-bottom: 18px;">
@@ -648,7 +713,7 @@
               <tr>
                 <th>Lane</th>
                 <th>CLI</th>
-                <th>Model &amp; Effort</th>
+                <th>Model &amp; Effort Discovery</th>
                 <th>Tier &amp; Cycle</th>
                 <th>Parallelism &amp; Role</th>
               </tr>
@@ -657,56 +722,56 @@
               <tr>
                 <td><code>agy-opus</code></td>
                 <td><code>agy</code></td>
-                <td><code>CLI/user default (or --model/--effort)</code></td>
+                <td><code>--effort</code> + non-Gemini Claude model</td>
                 <td>capped &bull; 5h renewable</td>
-                <td>Default capped coding lane &bull; 5h renewable pool</td>
+                <td>Default capped coding lane &bull; Gemini-blocked safeguard</td>
               </tr>
               <tr>
                 <td><code>muse</code></td>
                 <td><code>muse</code></td>
-                <td><code>CLI/user default (or --model/--effort)</code></td>
+                <td><code>--reasoning-effort</code> + user CLI default</td>
                 <td>capped &bull; 5h renewable</td>
                 <td>2nd capped slot &amp; parallel stripe member</td>
               </tr>
               <tr>
                 <td><code>grok</code></td>
                 <td><code>grok</code></td>
-                <td><code>CLI/user default (or --model/--effort)</code></td>
+                <td><code>--reasoning-effort</code> + user CLI default</td>
                 <td>capped &bull; 5h renewable</td>
                 <td>3rd capped slot &amp; off-family backup reviewer</td>
               </tr>
               <tr>
                 <td><code>mistral</code></td>
                 <td><code>vibe</code></td>
-                <td><code>CLI/user default (or --model)</code></td>
+                <td><code>via-model</code> tier + user CLI default</td>
                 <td>capped &bull; 5h renewable</td>
                 <td>4th capped stripe &amp; off-family reviewer</td>
               </tr>
               <tr>
                 <td><code>mcode</code></td>
                 <td><code>mcode</code></td>
-                <td><code>CLI/user default (or --model/--effort)</code></td>
+                <td><code>--effort</code> + MiniMax user default</td>
                 <td>high-cap &bull; 5h renewable</td>
                 <td>Primary diff reviewer &bull; <strong>max 4 parallel</strong> (<code>flock</code>)</td>
               </tr>
               <tr>
                 <td><code>devin-fast</code></td>
                 <td><code>devin</code></td>
-                <td><code>CLI/user default (or --model)</code></td>
+                <td><code>swe-2-flash</code> pool (<code>via-model</code>)</td>
                 <td>unlimited</td>
                 <td>Read-only recon (Observe) &bull; <strong>max 4 parallel</strong></td>
               </tr>
               <tr>
                 <td><code>devin-pro</code></td>
                 <td><code>devin</code></td>
-                <td><code>CLI/user default (or --model)</code></td>
+                <td><code>swe-2</code> pool (<code>via-model</code>)</td>
                 <td>unlimited</td>
                 <td>Conserve-mode coder &amp; off-family backup reviewer</td>
               </tr>
               <tr>
                 <td><code>devin-fusion</code></td>
                 <td><code>devin</code></td>
-                <td><code>CLI/user default (or --model)</code></td>
+                <td><code>fusion</code> pool (<code>via-model</code>)</td>
                 <td>paid credits (reserve)</td>
                 <td>Protected reserve when renewable/free lanes deplete</td>
               </tr>
@@ -725,11 +790,11 @@
             </p>
           </div>
           <div class="card">
-            <h3>Recursion Guard</h3>
+            <h3>Hard Binary Guardrails</h3>
             <p>
-              Every headless worker launches with <code>ROUTER_DEPTH=1</code> (or higher). Installed rules in
-              <code>plugins/ooda/rules/AGENTS.md</code> forbid spawned workers from invoking <code>router</code>,
-              <code>ooda</code>, or <code>dispatch.py</code> recursively.
+              Workers run with <code>ROUTER_DEPTH=1</code> (or higher). The Go CLI blocks recursive dispatch,
+              <code>--cleanup</code>, and quota mutations with exit <code>2</code> whenever <code>ROUTER_DEPTH&gt;=1</code>,
+              and hard-rejects <code>gemini*</code> or <code>orchestrator*</code> models on any worker or review lane.
             </p>
           </div>
         </div>
@@ -743,8 +808,10 @@
           <span class="sec-tag">router --review .</span>
         </div>
         <p class="sec-sub">
-          No model grades its own patch. <code>router --review</code> filters out the authoring family automatically, appends
-          untracked files as synthetic hunks so new scripts never slip past git diff, and fails closed on any <code>[P0-3]</code> finding.
+          No model family grades its own patch. <code>router --review</code> excludes the authoring family automatically,
+          tracks pre-task <code>HeadRef</code> state so worker commits never evade scope or review checks, renders
+          untracked files as synthetic hunks, and fails closed on any <code>[P0-3]</code>, <code>UNKNOWN</code>, or
+          <code>SKIPPED</code> result.
         </p>
         <div class="grid-3">
           <div class="card">
@@ -752,7 +819,7 @@
             <h3>Native Repo Review</h3>
             <p>
               Invokes <code>mcode exec review</code> with <code>--permission smart --max-steps 15</code> so the reviewer
-              can inspect surrounding files cleanly.
+              inspects surrounding context directly in the workspace.
             </p>
           </div>
           <div class="card">
@@ -760,15 +827,15 @@
             <h3>Bounded Patch Audit</h3>
             <p>
               Streams a bounded patch audit prompt with <code>--permission smart --prompt-mode coding --max-steps 25</code>
-              for fast, thorough verification.
+              against <code>baseRef..working-tree</code> or unborn <code>HEAD</code>.
             </p>
           </div>
           <div class="card">
-            <span class="badge b-amber">Fail-Closed Backup</span>
+            <span class="badge b-violet">Fail-Closed Backup</span>
             <h3>Off-Family Fallback</h3>
             <p>
-              On cooldown, non-zero exit, or an <code>UNKNOWN</code> verdict, verification rotates across
-              <code>mcode &rarr; devin-fast &rarr; devin-pro &rarr; grok &rarr; mistral &rarr; muse &rarr; agy-opus</code>.
+              On cooldown, timeout (<code>240s</code> default), or <code>UNKNOWN</code> verdict, verification rotates
+              across <code>mcode &rarr; devin-fast &rarr; devin-pro &rarr; grok &rarr; mistral &rarr; muse &rarr; agy-opus</code>.
             </p>
           </div>
         </div>
@@ -792,14 +859,14 @@ cd agent-ooda &amp;&amp; ./install.sh
 
 # restart agy so the plugin + statusLine load
 agy plugin list       # confirm "ooda" is enabled
-router --status       # fleet tiers, resets &amp; active locks
+router --status       # fleet tiers, resets, capabilities &amp; skills
 router --discover     # refresh live CLI model probes
 router --usage        # per-lane 5h cycle telemetry
 router --recon "Map auth flow and callers"
 router --review .     # cross-model diff gate
-make all              # full House-Law + unit + dogfood suite
+make all              # full House-Law + race test + dogfood suite
 
-# Update or uninstall (works locally or via web installer)
+# Update or uninstall cleanly (guards uncommitted/unpushed work)
 curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --uninstall --purge</code></pre>
           </div>
           <div class="card">
@@ -807,13 +874,12 @@ curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --un
             <h3>What the Installer Wires</h3>
             <p>
               The web installer clones or fast-forwards <code>UberMetroid/agent-ooda</code> into
-              <code>~/.local/share/agent-ooda</code> and invokes <code>./install.sh</code>. On hosts without Go,
-              <code>install.sh</code> downloads the matching static GitHub Release binary and verifies its SHA-256
-              checksum against <code>SHA256SUMS</code> before installing. It then links
+              <code>${XDG_DATA_HOME:-~/.local/share}/agent-ooda</code> and invokes <code>./install.sh</code>. On hosts
+              without Go 1.22+, <code>install.sh</code> downloads the matching static GitHub Release binary and verifies
+              its SHA-256 checksum against <code>SHA256SUMS</code> before installing. It links
               <code>~/.gemini/config/plugins/ooda</code>, <code>~/.local/bin/ooda</code>,
               <code>~/.local/bin/router</code>, and <code>~/.gemini/antigravity-cli/statusline.py</code>, and wires
-              <code>~/.gemini/antigravity-cli/settings.json</code> idempotently (malformed JSON fails closed before any
-              change; displaced files are archived).
+              <code>~/.gemini/antigravity-cli/settings.json</code> idempotently.
             </p>
           </div>
         </div>
@@ -821,12 +887,11 @@ curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --un
         <div class="grid-2" style="margin-top: 18px;">
           <div class="card">
             <span class="badge b-amber">Uninstall</span>
-            <h3>Clean, Scoped Removal</h3>
+            <h3>Clean, Guarded Removal</h3>
             <p>
-              <code>./install.sh --uninstall</code> removes only the symlinks that resolve into this repo, and
-              lists foreign files it left in place. It drops the ooda <code>statusLine</code>, restoring your previous
-              one if it was saved. The shared <code>~/.agents/skills</code> entry stays in <code>skills.json</code>, and
-              quota state and <code>backups/</code> stay unless you add <code>--purge</code>. Running it twice is safe.
+              <code>./install.sh --uninstall</code> removes only symlinks resolving into this repo and restores any
+              archived previous <code>statusLine</code>. Quota state and <code>backups/</code> stay intact unless you pass
+              <code>--purge</code>, and the web installer refuses to purge a dirty or unpushed git checkout.
             </p>
           </div>
           <div class="card">
@@ -857,6 +922,8 @@ curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --un
       <span>Built by <a href="https://github.com/UberMetroid">UberMetroid</a> &bull; Inspired by Col. John Boyd (USAF)</span>
       <span>
         <a href="https://github.com/UberMetroid/agent-ooda">UberMetroid/agent-ooda</a>
+        &middot;
+        <a href="https://github.com/UberMetroid/agent-ooda/releases/latest">Releases</a>
         &middot;
         <a href="https://ubermetroid.github.io/">ubermetroid.github.io</a>
       </span>
