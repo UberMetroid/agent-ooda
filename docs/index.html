@@ -29,8 +29,8 @@
       --violet: #d2a8ff;
       --red: #ff5555;
       --serif: "DM Serif Display", Georgia, serif;
-      --sans: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --sans: "Outfit", system-ui, "Adwaita Sans", Cantarell, "Noto Sans", sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, "Adwaita Mono", "DejaVu Sans Mono", monospace;
       --radius: 12px;
       --maxw: 1120px;
     }
@@ -263,17 +263,12 @@
       font-size: 0.78rem;
       color: var(--muted);
     }
-    .term-dots { display: inline-flex; gap: 7px; }
-    .term-dots i {
-      display: block;
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: var(--border-hi);
+    .term-ws {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--cyan);
+      letter-spacing: 0.06em;
     }
-    .term-dots i:first-child { background: var(--red); opacity: 0.85; }
-    .term-dots i:nth-child(2) { background: var(--amber); opacity: 0.85; }
-    .term-dots i:last-child { background: var(--green); opacity: 0.85; }
     .hud-list {
       margin: 0;
       padding: 14px 18px;
@@ -519,7 +514,7 @@
         </p>
         <div class="terminal" role="region" aria-label="Bubble-Canopy HUD status states">
           <div class="term-bar">
-            <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="term-ws">[TTY1 &middot; OMARCHY]</span>
             <span>statusLine telemetry &bull; live states</span>
           </div>
           <ul class="hud-list">
