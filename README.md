@@ -35,7 +35,7 @@ The design borrows two ideas from fighter pilot and strategist **Col. John Boyd*
 | `grok` | xAI Grok CLI (`grok`) | capped, 5h renewable |
 | `mistral` | Mistral Vibe CLI (`vibe`) | capped, 5h renewable |
 
-Model IDs and reasoning efforts are **not hardcoded**: each CLI uses its own user-configured default unless `agy` (or a `--model`/`--effort`/`--set-cycle` override) sets them on the fly, and `--lane a,b` overrides priority dynamically.
+Model IDs and reasoning efforts are **not hardcoded**: `router --status` and `router --discover` introspect non-secret local CLI configs, cached CLI model lists (`agy`, `devin`, `grok`), effort control mechanics (`flag` vs `via-model`), and installed `--skill` descriptions dynamically. Unless overridden via `--model`/`--effort`/`--set-cycle`, single-pool CLIs keep their own user default while shared `devin` pools map to their configured `fusion` / `swe-2` / `swe-2-flash` families and a hard guardrail blocks `gemini*`/`orchestrator*` models from worker lanes. `--lane a,b` overrides priority dynamically.
 
 **How the clocks are spent.** Each capped lane runs on a 5h renewable cycle.
 Quota errors (HTTP 429, server reset timestamps) put a lane into cooldown, and
@@ -73,7 +73,8 @@ git clone https://github.com/UberMetroid/agy-skills.git && cd agy-skills
 ./install.sh            # or: make install   (./install.sh --help lists options)
 # restart agy, then:
 agy plugin list         # confirm "ooda" is registered
-router --status         # fleet regimes, cooldowns, next wake (ooda shim also in ~/.local/bin)
+router --status         # fleet regimes, live models, effort modes, skills, next wake
+router --discover       # refresh live CLI model probes (agy/devin/grok) & cache
 router --usage          # per-lane cycle usage
 ```
 

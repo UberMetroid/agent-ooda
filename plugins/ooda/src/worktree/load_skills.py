@@ -1,9 +1,10 @@
 """Resolve and load SKILL.md guidance blocks across workspace, plugin, and user roots."""
 
 from pathlib import Path
+import re
 import sys
 
-from fleet import ID_RE, plugin_root_path, try_repo_root
+from fleet import CORE_HIDDEN_SKILLS, ID_RE, plugin_root_path, try_repo_root
 
 _SKILL_ALIASES = {"agent-router": "router"}
 
@@ -41,6 +42,57 @@ def _available_skills(roots):
             if p.is_dir() and (p / "SKILL.md").is_file():
                 names.add(p.name)
     return sorted(names)
+
+
+def _parse_skill_meta(skill_file):
+    """Extract (name, 1-line description) from SKILL.md YAML frontmatter."""
+    fallback = skill_file.parent.name
+    try:
+        lines = skill_file.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return fallback, ""
+    if not lines or lines[0].strip() != "---":
+        return fallback, ""
+    end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
+    fm = lines[1:end] if end is not None else []
+    name, desc_parts, in_desc = fallback, [], False
+    for line in fm:
+        if in_desc and (not line.strip() or line.startswith((" ", "\t"))):
+            if line.strip():
+                desc_parts.append(line.strip())
+            continue
+        in_desc = False
+        m_name = re.match(r"^\s*name\s*:\s*(.+)$", line)
+        if m_name:
+            name = m_name.group(1).strip().strip("\"'") or fallback
+            continue
+        m_desc = re.match(r"^\s*description\s*:\s*(.*)$", line)
+        if m_desc:
+            val = m_desc.group(1).strip()
+            if val in (">-", ">", "|-", "|"):
+                in_desc = True
+            elif val:
+                desc_parts.append(val.strip("\"'"))
+    desc = " ".join(desc_parts)
+    return name, (desc[:105] + "..." if len(desc) > 108 else desc)
+
+
+def discover_skills(cwd=None):
+    """Return discovered skills sorted with domain skills before built-in core skills."""
+    roots = _skill_roots(cwd)
+    seen, found = set(), []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for p in sorted(root.iterdir()):
+            skill_md = p / "SKILL.md"
+            if not p.is_dir() or not skill_md.is_file() or p.name in seen:
+                continue
+            seen.add(p.name)
+            name, desc = _parse_skill_meta(skill_md)
+            found.append({"name": name, "description": desc, "core": name in CORE_HIDDEN_SKILLS})
+    found.sort(key=lambda item: (item["core"], item["name"]))
+    return found
 
 
 def load_skill_blocks(skill_names, cwd=None):

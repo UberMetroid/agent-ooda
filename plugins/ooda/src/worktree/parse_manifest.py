@@ -6,7 +6,7 @@ import posixpath
 from pathlib import Path
 import sys
 
-from fleet import ID_RE, normalize_lane, parse_lanes, parse_timeout
+from fleet import ID_RE, normalize_lane, normalize_model_for_provider, parse_lanes, parse_timeout
 
 _IGNORED_CACHE_DIRS = (".pytest_cache", ".ruff_cache", ".mypy_cache")
 _TASK_SHAPE_ERROR = (
@@ -73,6 +73,8 @@ def _validate_task(t, seen_ids, file_owners):
     seen_ids.add(tid)
     if t.get("lane") is not None:
         parse_lanes(t["lane"], allow_auto=True)
+    if t.get("model") is not None:
+        normalize_model_for_provider("auto", t["model"])
     if t.get("timeout") is not None:
         parse_timeout(t["timeout"])
     for key in ("skills", "exclude_lanes", "files"):

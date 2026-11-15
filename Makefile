@@ -28,8 +28,9 @@ test:
 
 dogfood:
 	@set -e; tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
-	export AGENT_QUOTA_FILE="$$tmp/quota.json" ROUTER_HUD_DIR="$$tmp/hud" ROUTER_DEPTH=0; \
+	export AGENT_QUOTA_FILE="$$tmp/quota.json" OODA_DISCOVERY_FILE="$$tmp/discovery.json" OODA_NO_AUTO_PROBE=1 ROUTER_HUD_DIR="$$tmp/hud" ROUTER_DEPTH=0; \
 	./plugins/ooda/bin/ooda --status >/dev/null; \
+	./plugins/ooda/bin/ooda --discover >/dev/null; \
 	./plugins/ooda/bin/ooda --usage >/dev/null; \
 	printf '{"terminal_width":120}\n' | NO_COLOR=1 ./plugins/ooda/bin/ooda-hud | grep -q "ooda"; \
 	printf '{"conversationId":"dogfood","hookEventName":"SessionStart"}\n' | ./plugins/ooda/bin/ooda-hook >/dev/null; \

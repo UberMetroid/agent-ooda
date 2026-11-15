@@ -77,6 +77,8 @@ def build_parser():
                     help="run standalone read-only cross-model code review on PATH (default CWD) and exit")
     ap.add_argument("--status", action="store_true",
                     help="show agent quota state, local CLI readiness, reset timers, and routing order")
+    ap.add_argument("--discover", action="store_true",
+                    help="probe and cache live CLI models, local configs, effort modes, and injectable skills")
     ap.add_argument("--usage", action="store_true",
                     help="show per-lane cycle token/cost telemetry, reset countdowns, and live muse usage")
     _add_quota_flags(ap)

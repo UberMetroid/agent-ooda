@@ -56,6 +56,20 @@ All lanes default to `model: null` and `effort: null` so each CLI uses its own u
 | `grok` | `grok` | CLI/user default (`--model` / `--effort` optional) | `capped` | `5h` |
 | `mistral` | `vibe` | CLI/user default (`--model` optional) | `capped` | `5h` |
 
+## Live Capability & Skill Discovery (`--status` / `--discover`) + Gemini Guardrail
+
+`router --status` and `router --discover` introspect non-secret local CLI configs, cached CLI model probes (`discovery.json` beside `quota.json`, `6h` TTL), and installed `SKILL.md` frontmatter so `agy` makes informed routing decisions without guessing:
+
+- **Per-CLI active models & effort mechanics:**
+  - `agy-opus` (`agy`): reads `~/.gemini/antigravity-cli/settings.json` + `agy models`; effort controlled via `--effort` (`low..max`) and model tier suffix.
+  - `devin-fusion` / `devin-pro` / `devin-fast` (`devin`): resolves `agent.preferred_family_models` (`fusion`, `swe-2`, `swe-2-flash`) from `~/.config/devin/config.json` + `devin models`; **no `--effort` flag** (`via-model` suffix like `-high`/`-max`).
+  - `muse` (`muse`): reads `~/.config/muse/settings.json` (`model`, `model_reasoning_efforts`); effort via `--reasoning-effort` (`none..ultra`).
+  - `mcode` (`mcode`): reads `~/.minimax/config.yaml` (`defaultModel`, `defaultModelThinking.effort`, MiniMax models); effort via `--effort` (`low..max`).
+  - `grok` (`grok`): reads `~/.grok/config.toml` + `models_cache.json` + `grok models`; effort via `--reasoning-effort` (`medium|high|xhigh`).
+  - `mistral` (`vibe`): reads `~/.vibe/config.toml` (`active_model`, `models` alias/thinking entries such as `glm-5-3[high]` or `mistral-medium-3.5[off]`); **no `--effort` flag** (`via-model` alias in `config.toml`).
+- **Live `--skill` catalog:** Scans workspace `.agents/skills`, plugin `skills`, and `~/.agents/skills` for `SKILL.md` names and 1-line descriptions.
+- **Hard Gemini-pool guardrail:** Any `gemini*` or `orchestrator*` model on a worker lane (`--model`, `AGENT_MODEL`, `--set-cycle`, manifest `tasks.json`, or direct worker build) is rejected with `exit 2`. When `agy` defaults to Gemini/Orchestrator in `settings.json`, `router` resolves a safe non-Gemini Claude model from `agy models` (refusing unguarded invocation if none is found).
+
 ## E-M Fly-By-Wire Routing, Parallel Caps & Mismatch Pivoting
 
 1. **Drain Expiring Capped Cycles First (`CORNER` / $P_s \ge 0$):**
@@ -119,7 +133,8 @@ All lanes default to `model: null` and `effort: null` so each CLI uses its own u
 
 | Action | Command |
 |---|---|
-| Show fleet status, efforts & reset timers | `router --status` |
+| Show fleet status, live models, efforts & skills | `router --status` |
+| Refresh & cache live CLI model/config/skill probes | `router --discover` |
 | Show per-lane cycle usage & live `muse` probe | `router --usage` |
 | OODA Observe: read-only codebase recon | `router --recon "<question>"` |
 | OODA Act: single-shot coding task in CWD | `router --task "<prompt>" --files a.py,b.py` |

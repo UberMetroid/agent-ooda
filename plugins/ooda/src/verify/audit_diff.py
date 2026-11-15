@@ -10,7 +10,7 @@ import re
 import sys
 import time
 
-from envelope import model_family, select_provider
+from envelope import effective_lane_spec, model_family, select_provider
 from fleet import (
     REVIEW_MODEL,
     REVIEW_TIMEOUT,
@@ -20,12 +20,10 @@ from fleet import (
     is_quota_error,
     load_quota,
     mark_provider_cooldown,
-    normalize_model_for_provider,
     now_iso,
     parse_lanes,
     record_usage,
     release_parallel_lease,
-    resolve_effort,
 )
 
 NATIVE_REVIEW_MAX_BYTES = 8192
@@ -144,11 +142,12 @@ def _acquire_review_lease(provider_name, info, quota, tried, avoid, timeout, log
 
 def _invoke_reviewer(ctx, provider_name, info, cli_path, lease):
     """Run one review attempt with banner + HUD hooks; always releases the lease."""
-    raw_model = ctx.get("model_override") or info.get("model")
-    if provider_name == "mcode" and not raw_model and REVIEW_MODEL != "cli-default":
-        raw_model = REVIEW_MODEL
-    model = normalize_model_for_provider(provider_name, raw_model)
-    effort = resolve_effort(provider_name, info, ctx.get("effort_override"), "review")
+    raw_m = ctx.get("model_override") or (
+        REVIEW_MODEL if provider_name == "mcode" and REVIEW_MODEL != "cli-default" else None
+    )
+    argv_m, model, argv_e, effort = effective_lane_spec(
+        provider_name, info, raw_m, ctx.get("effort_override"), "review",
+    )
     slot, target_dir, timeout = ctx["slot"], ctx["target_dir"], ctx["timeout"]
     task_id = f"review-{slot.name}"
     log_stream = ctx["log_stream"]
@@ -165,7 +164,7 @@ def _invoke_reviewer(ctx, provider_name, info, cli_path, lease):
         native = provider_name == "mcode" and bool(ctx.get("native_eligible"))
         rmode = "native" if native else True
         call_prompt = ctx["scope_note"] if native else ctx["prompt"]
-        out = ctx["runner"](provider_name, info, cli_path, model, effort, call_prompt, [],
+        out = ctx["runner"](provider_name, info, cli_path, argv_m, argv_e, call_prompt, [],
                             target_dir, slot, task_id, timeout, read_only=True, review_mode=rmode)
         res = out[0] if isinstance(out, tuple) else out
         rev_exit = res.get("exit_code")

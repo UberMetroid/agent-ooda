@@ -11,7 +11,7 @@ from fleet import (
 from worktree import load_manifest, parse_csv_arg
 
 from .build_args import build_parser
-from .report_fleet import do_status, do_usage
+from .report_fleet import do_discover, do_status, do_usage
 from .run_actions import do_cleanup, do_recon, do_single_task, do_standalone_review
 
 
@@ -92,6 +92,8 @@ def main(argv=None):
     args = ap.parse_args(argv)
     if args.status:
         return do_status()
+    if args.discover:
+        return do_discover()
     if args.usage:
         return do_usage()
     rc = _handle_quota_flags(args)
@@ -116,7 +118,7 @@ def main(argv=None):
         repo_root()
         ap.error(
             "manifest path is required (or pass --recon, --task, --review, "
-            "--status, --usage, --set-cycle, --enable, --disable, --cleanup)"
+            "--status, --discover, --usage, --set-cycle, --enable, --disable, --cleanup)"
         )
     return _dispatch_manifest(args)
 

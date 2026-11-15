@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import time
 
+from envelope import probe_agy_settings
 from fleet import (
     GROK_EFFORT_MAP,
     MCODE_EFFORT_MAP,
@@ -156,6 +157,15 @@ def execute_once(provider_name, info, cli_path, model, effort, prompt, files,
     cmd, env, meta = build_worker_command(provider_name, cli_path, model, effort, prompt, files,
                                           worktree, slot, task_id, read_only=read_only,
                                           review_mode=review_mode)
+    if provider_name == "agy-opus" and "--model" not in cmd:
+        agy_cfg = probe_agy_settings()
+        if agy_cfg.get("gemini_blocked"):
+            msg = (
+                f"error: Gemini guardrail blocked agy-opus — settings.json model "
+                f"{agy_cfg.get('settings_model')!r} is Gemini/Orchestrator and no non-Gemini "
+                "worker model was resolved. Pass --model claude-opus-5-5-high or run `router --discover`."
+            )
+            return {"exit_code": 2, "output": msg, "timed_out": False, "export_info": None}, 0.0
     export_dir = meta.get("vibe_export_dir")
     start = time.time()
     try:

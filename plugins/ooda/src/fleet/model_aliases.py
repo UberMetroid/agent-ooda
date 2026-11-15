@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import os
+import re
 import sys
 
 from .lane_catalog import (
@@ -12,6 +13,8 @@ from .lane_catalog import (
     RESET_TS_RE,
 )
 from .locate_cli import format_local_iso, parse_iso_utc
+
+GEMINI_MODEL_RE = re.compile(r"(?:gemini|orchestrator)", re.IGNORECASE)
 
 QUOTA_ERROR_PATTERNS = (
     "429", "rate limit", "rate_limit", "quota exceeded", "insufficient_quota",
@@ -127,13 +130,19 @@ def normalize_lane(raw_lane, allow_auto=True):
 
 
 def normalize_model_for_provider(provider_name, model):
-    """Normalize shorthand model aliases; return None when deferring to CLI default."""
+    """Normalize shorthand model aliases; block Gemini/Orchestrator on worker lanes."""
     if not model:
         return None
     raw = str(model).strip()
     key = raw.lower()
     if key in ("", "auto", "default", "cli-default"):
         return None
+    if GEMINI_MODEL_RE.search(raw):
+        sys.stderr.write(
+            f"error: Gemini/Orchestrator model {raw!r} is forbidden on worker lanes "
+            "(reserved for top-level orchestrator)\n"
+        )
+        sys.exit(2)
     table = {
         "agy-opus": AGY_MODEL_ALIASES,
         "mcode": MCODE_MODEL_ALIASES,

@@ -7,7 +7,7 @@ from .parse_manifest import (
     parse_csv_arg,
     parse_files_arg,
 )
-from .load_skills import load_skill_blocks
+from .load_skills import discover_skills, load_skill_blocks
 from .isolate_tree import (
     changed_files_in,
     diff_stat,
@@ -24,6 +24,7 @@ __all__ = [
     "normalize_rel_path",
     "parse_csv_arg",
     "parse_files_arg",
+    "discover_skills",
     "load_skill_blocks",
     "changed_files_in",
     "diff_stat",

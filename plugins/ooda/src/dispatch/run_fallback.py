@@ -1,9 +1,8 @@
 """Routed task execution with flock leases, quota/auth fallback, and family-pivot retries."""
 
-import os
 import sys
 
-from envelope import model_family, select_provider
+from envelope import effective_lane_spec, model_family, select_provider
 from fleet import (
     DEEP_COMPLEXITIES,
     FAST_COMPLEXITIES,
@@ -13,13 +12,11 @@ from fleet import (
     is_quota_error,
     load_quota,
     mark_provider_cooldown,
-    normalize_model_for_provider,
     now_iso,
     parse_lanes,
     parse_timeout,
     record_usage,
     release_parallel_lease,
-    resolve_effort,
 )
 from worktree import load_skill_blocks
 
@@ -114,10 +111,10 @@ def _acquire_task_lease(st, provider_name, info, quota_data):
 def _run_provider_attempt(st, provider_name, info, cli_path, lease):
     """Run one leased attempt with banner + HUD markers; record usage; return (res, model, effort)."""
     task, log = st["task"], st["log_stream"]
-    env_model = os.environ.get("AGENT_MODEL") or os.environ.get("OODA_MODEL") or None
-    raw_model = st["model_override"] or task.get("model") or env_model or info.get("model")
-    model = normalize_model_for_provider(provider_name, raw_model)
-    effort = resolve_effort(provider_name, info, st["effort_override"] or task.get("effort"), st["complexity"])
+    argv_model, model, argv_effort, effort = effective_lane_spec(
+        provider_name, info, st["model_override"] or task.get("model"),
+        st["effort_override"] or task.get("effort"), st["complexity"],
+    )
     extra = visible_extra_skills(st["skills"])
     parallel_run = bool(st["is_parallel"] or st["stripe_index"] is not None)
     mode_tag = "observe" if st["read_only"] else ("act:parallel" if parallel_run else "act")
@@ -134,8 +131,8 @@ def _run_provider_attempt(st, provider_name, info, cli_path, lease):
         log.flush()
         marker = hud_worker_start(mode_tag, task["id"], provider_name, info["cli"], model, effort,
                                   extra, st["worktree"])
-        res, dur = execute_once(provider_name, info, cli_path, model, effort, st["prompt"], st["files"],
-                                st["worktree"], st["slot"], task["id"], st["timeout"],
+        res, dur = execute_once(provider_name, info, cli_path, argv_model, argv_effort, st["prompt"],
+                                st["files"], st["worktree"], st["slot"], task["id"], st["timeout"],
                                 read_only=st["read_only"])
         res_exit = res["exit_code"]
     finally:

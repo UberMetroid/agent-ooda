@@ -3,20 +3,22 @@
 from datetime import datetime, timezone
 
 from dispatch import short_model
-from envelope import compute_em_envelope, select_provider
+from envelope import compute_em_envelope, discover_fleet_capabilities, discovery_cache_path, select_provider
 from fleet import (
     DEFAULT_POOL, DEVIN_FAST_MAX_PARALLEL, REVIEW_MODEL, STRIPE_POOL,
     count_active_leases, format_countdown, load_quota, probe_muse_usage,
     quota_file_path, resolve_cli,
 )
+from worktree import discover_skills
 
 
-def _status_row(name, info, now_utc):
+def _status_row(name, info, now_utc, cap=None):
     """Format one provider row for the --status readiness table."""
+    cap = cap or {}
     cli = info.get("cli", "")
     bin_note = resolve_cli(cli) or "MISSING"
-    effort = info.get("effort") or "default"
-    model_disp = short_model(info.get("model") or "default")
+    effort = str(info.get("effort") or cap.get("effective_effort") or "default")[:9]
+    model_disp = short_model(info.get("model") or cap.get("effective_model") or "default")[:28]
     reset_cd = format_countdown(info.get("cooldown_until") or info.get("next_reset_at"), now_utc=now_utc)
     if info.get("status") != "active":
         why = info.get("reason") or "cooldown"
@@ -30,20 +32,56 @@ def _status_row(name, info, now_utc):
         detail = f"{bin_note} | cycle resets in {reset_cd}"
     else:
         detail = bin_note
+    if cap.get("agy_unsafe"):
+        detail += " | [GEMINI GUARD: run --discover]"
     max_p = info.get("max_parallel")
     if max_p and int(max_p) > 0:
         busy = count_active_leases(name, max_p)
         detail += f" | [max {int(max_p)} parallel, {busy}/{int(max_p)} busy]"
     return (
         f"{name:<13} {info.get('status', '?'):<9} {info.get('tier', '?'):<10} "
-        f"{effort:<7} {cli:<13} {model_disp:<25} {detail}"
+        f"{effort:<9} {cli:<9} {model_disp:<28} {detail}"
     )
+
+
+def _print_discovery_footer(caps, skills, verbose=False):
+    """Print discovered per-CLI effort modes, available models, and --skill catalog."""
+    print("")
+    print("Discovered CLI Capabilities (effort control & available models):")
+    groups = (
+        ("agy", "agy-opus"),
+        ("devin", "devin-pro"),
+        ("muse", "muse"),
+        ("mcode", "mcode"),
+        ("grok", "grok"),
+        ("vibe", "mistral"),
+    )
+    cap_limit = 20 if verbose else 6
+    more_lbl = "in discovery.json" if verbose else "more; run --discover"
+    for cli_lbl, lane in groups:
+        cap = caps.get(lane) or {}
+        mods = cap.get("models") or []
+        shown = ", ".join(mods[:cap_limit]) if mods else "(run router --discover)"
+        extra = f" (+{len(mods) - cap_limit} {more_lbl})" if len(mods) > cap_limit else ""
+        guard = f" [{cap['gemini_guard']}]" if cap.get("gemini_guard") else ""
+        print(f"  {cli_lbl:<7} {cap.get('effort_mode', 'default'):<37} models: {shown}{extra}{guard}")
+    print("")
+    print("Injectable Worker Skills (--skill <name>):")
+    if not skills:
+        print("  (none discovered)")
+        return
+    for s in skills:
+        tag = " [built-in]" if s.get("core") else ""
+        desc = s.get("description") or "(no description)"
+        print(f"  {s['name']:<10} : {desc}{tag}")
 
 
 def do_status():
     """Print provider readiness, effort standards, reset timers, and active routing table."""
     quota_data = load_quota()
     providers = quota_data.get("providers") or {}
+    caps = discover_fleet_capabilities(quota_data)
+    skills = discover_skills()
     chain = quota_data.get("default_fallback_chain") or DEFAULT_POOL
     stripe_pool = quota_data.get("parallel_stripe_pool") or STRIPE_POOL
     drain_capped = quota_data.get("drain_capped_first", True)
@@ -57,12 +95,12 @@ def do_status():
     print(f"Fallback chain     : {' -> '.join(chain)}")
     print("")
     print(
-        f"{'LANE':<13} {'STATUS':<9} {'TIER':<10} {'EFFORT':<7} {'CLI':<13} "
-        f"{'MODEL':<25} {'RESET / BINARY'}"
+        f"{'LANE':<13} {'STATUS':<9} {'TIER':<10} {'EFFORT':<9} {'CLI':<9} "
+        f"{'MODEL':<28} {'RESET / BINARY'}"
     )
-    print("-" * 116)
+    print("-" * 119)
     for name, info in providers.items():
-        print(_status_row(name, info, now_utc))
+        print(_status_row(name, info, now_utc, caps.get(name)))
     print("")
     default_pick = select_provider("auto", None, quota_data)[0] or "NONE"
     fast_pick = select_provider("auto", "fast", quota_data)[0] or "NONE"
@@ -73,6 +111,26 @@ def do_status():
     print(f"Effective deep/arch lane     : {deep_pick}")
     rev_lbl = REVIEW_MODEL if REVIEW_MODEL != "cli-default" else "cli default unless overridden"
     print(f"Auto-review mcode ({rev_lbl}): {review_bin}")
+    _print_discovery_footer(caps, skills, verbose=False)
+    return 0
+
+
+def do_discover():
+    """Force-refresh CLI model probes, write discovery cache, and print full capabilities."""
+    quota_data = load_quota()
+    providers = quota_data.get("providers") or {}
+    caps = discover_fleet_capabilities(quota_data, force_refresh=True)
+    skills = discover_skills()
+    now_utc = datetime.now(timezone.utc)
+    print(f"Discovery cache    : {discovery_cache_path()} (refreshed)")
+    print(
+        f"{'LANE':<13} {'STATUS':<9} {'TIER':<10} {'EFFORT':<9} {'CLI':<9} "
+        f"{'MODEL':<28} {'RESET / BINARY'}"
+    )
+    print("-" * 119)
+    for name, info in providers.items():
+        print(_status_row(name, info, now_utc, caps.get(name)))
+    _print_discovery_footer(caps, skills, verbose=True)
     return 0
 
 

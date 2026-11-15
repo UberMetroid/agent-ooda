@@ -60,9 +60,13 @@ Lock in the minimal concrete plan before touching any code:
 - **Files in scope** and **off-limits files**
 - **Execution mode:** Sequential vs. Parallel Worktrees
 - **E-M Complexity Tags & Dynamic Routing:** Pick lanes dynamically from
-  `router --status` / `router --usage`, overriding `--lane` (or a priority list
-  like `mcode,devin-fast`), `--model`, `--effort`, and `--timeout` on the fly
-  (when omitted, each CLI uses its own user default). Optionally tag each slice
+  `router --status` (or `router --discover` to refresh CLI catalogs) and
+  `router --usage`, matching each CLI's real active model, effort control
+  mechanism (`--effort`/`--reasoning-effort` vs `via-model` alias on `devin` and
+  `vibe`), and discovered `--skill` catalog. Override `--lane` (or a priority
+  list like `mcode,devin-fast`), `--model`, `--effort`, and `--timeout` on the fly
+  (when omitted, single-pool CLIs use their own user default while `devin-*`
+  uses its configured family pool and `agy-opus` enforces non-Gemini worker models). Optionally tag each slice
   `fast` (`5m` timeout, prefers `devin-fast` / `mcode` / `devin-pro`, capped at
   **4 parallel workers** per lease pool), standard (`8m` timeout), `heavy`
   (`10m`), or `deep` (`15m`). Read-only `OBSERVE` defaults to `3m` (`--recon`).
