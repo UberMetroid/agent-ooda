@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""Antigravity lifecycle hook entrypoint tracking active session skills."""
+
+from pathlib import Path
+import sys
+
+
+def _bootstrap_src():
+    """Ensure plugins/ooda/src sits ahead of sys.path regardless of symlink CWD."""
+    if sys.version_info < (3, 8):
+        sys.stderr.write("error: ooda-hook requires Python 3.8+\n")
+        sys.exit(2)
+    src_dir = str(Path(__file__).resolve().parent.parent / "src")
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
+
+
+if __name__ == "__main__":
+    _bootstrap_src()
+    from hud.record_hook import main
+
+    main()

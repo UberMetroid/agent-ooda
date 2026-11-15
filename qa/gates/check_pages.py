@@ -28,9 +28,9 @@ def iter_repo_files(root):
 
 
 def iter_python_files(root):
-    """Return sorted Paths for all .py modules and plugins/boyd/bin entrypoints."""
+    """Return sorted Paths for all .py modules and plugins/ooda/bin entrypoints."""
     root = Path(root).resolve()
-    bin_dir = root / "plugins" / "boyd" / "bin"
+    bin_dir = root / "plugins" / "ooda" / "bin"
     matched = []
     for path in iter_repo_files(root):
         if path.suffix == ".py" or path.parent == bin_dir:

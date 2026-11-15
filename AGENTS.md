@@ -11,13 +11,13 @@ Every `[GATE]` rule below is machine-enforced by `Makefile` targets and
 - `[GATE]` **Stdlib only (`make portable`):** Python modules import strictly
   from the Python standard library (`Python 3.8+`) and local repo packages
   (`fleet`, `envelope`, `worktree`, `dispatch`, `verify`, `hud`, `cli`, `qa`).
-- `[POLICY]` Zero PyPI / `pip` / third-party packages anywhere in `plugins/boyd`
+- `[POLICY]` Zero PyPI / `pip` / third-party packages anywhere in `plugins/ooda`
   or `qa/`.
 
 ## 2. The Page Rule (Code Layout & Sizing)
 
 - `[GATE]` **16–256 Lines (`make line-cap`):** Every committed `.py` file and
-  `plugins/boyd/bin/*` script must be **16 to 256 lines** inclusive (comments and
+  `plugins/ooda/bin/*` script must be **16 to 256 lines** inclusive (comments and
   blank lines counted).
 - `[GATE]` **Shim Exemption (Floor Only):** `__init__.py` files whose AST body
   consists solely of imports and an optional `__all__` assignment skip the
@@ -38,14 +38,14 @@ Every `[GATE]` rule below is machine-enforced by `Makefile` targets and
   `bash -c` invocations inside Python source.
 - `[POLICY]` **Decoupled Mutable State:** Runtime state (`quota.json`, active
   worker HUD markers, `flock` leases, `mismatch.json`) lives under
-  `~/.local/state/boyd/` or `/tmp/router-hud`, never mutated inside git.
+  `~/.local/state/ooda/` or `/tmp/router-hud`, never mutated inside git.
 - `[POLICY]` **Atomic Writes & Bounded Execution:** Persistent JSON state uses
   temp-file + `os.replace`. Subprocesses are `argv`-only with explicit timeouts.
 
 ## 4. Antigravity Plugin Contract & Verification Ladder
 
 - `[GATE]` **Plugin Validation (`make plugin-check`):**
-  `agy plugin validate plugins/boyd --strict --json` must exit `0` with zero
+  `agy plugin validate plugins/ooda --strict --json` must exit `0` with zero
   findings.
 - `[GATE]` **Automated Tests & Dogfood (`make test`, `make dogfood`):**
   Full `unittest` suite and isolated CLI/HUD/hook dogfood smoke checks must

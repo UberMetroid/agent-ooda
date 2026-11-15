@@ -1,0 +1,14 @@
+{
+  "name": "ooda",
+  "displayName": "OODA — Multi-Agent Router & HUD",
+  "version": "1.0.0",
+  "description": "Observe-Orient-Decide-Act engineering discipline, Energy-Maneuverability multi-agent CLI router, cross-model diff verification, and minimal statusLine HUD for Antigravity.",
+  "author": "UberMetroid",
+  "homepage": "https://github.com/UberMetroid/agy-skills",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/UberMetroid/agy-skills"
+  },
+  "license": "Apache-2.0",
+  "logo": "assets/logo.svg"
+}

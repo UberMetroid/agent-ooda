@@ -1,0 +1,23 @@
+{
+  "ooda-hud-skill-tracker": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "python3 ./bin/ooda-hook",
+        "timeout": 5
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "read_file|view_file|run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ./bin/ooda-hook",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
