@@ -7,6 +7,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_DIR="$REPO_ROOT/plugins/ooda"
+OODA_BIN="$PLUGIN_DIR/bin/ooda"
 STATE_BASE="${XDG_STATE_HOME:-$HOME/.local/state}"
 STATE_DIR="$STATE_BASE/ooda"
 QUOTA_FILE="$STATE_DIR/quota.json"
@@ -14,19 +15,20 @@ DEFAULT_QUOTA="$PLUGIN_DIR/config/quota.default.json"
 QUOTA_SOURCE="existing"
 AGY_DIR="$HOME/.gemini/antigravity-cli"
 SETTINGS_JSON="$AGY_DIR/settings.json"
-WIRE="$PLUGIN_DIR/src/cli/wire_settings.py"
 
 usage() {
   cat <<'EOF'
 usage: ./install.sh [--uninstall [--purge]] [--help]
 
-  (no options)         install / update: link plugin, CLI shims, statusLine HUD; wire settings.json
+  (no options)         build (if go present) & install: link plugin, CLI shims, statusLine HUD; wire settings.json
   --uninstall          remove ooda symlinks that point into this repo and unwire statusLine
   --uninstall --purge  also delete ${XDG_STATE_HOME:-~/.local/state}/ooda (quota state + backups)
   -h, --help           show this help
 
 environment:
   OODA_NO_STATUSLINE=1  do not add the statusLine block to ~/.gemini/antigravity-cli/settings.json
+  OODA_NO_BUILD=1       use existing plugins/ooda/bin/ooda without rebuilding/downloading
+  OODA_RELEASE_BASE     override base URL for prebuilt binaries + SHA256SUMS
   XDG_STATE_HOME        base for runtime state (default ~/.local/state)
 EOF
 }
@@ -39,58 +41,108 @@ case "${1:-}" in
   *) echo "error: unknown option: $1 (see --help)" >&2; exit 2 ;;
 esac
 [ "$MODE" = "uninstall" ] || [ "$#" -eq 0 ] || { echo "error: unexpected argument: $1" >&2; exit 2; }
-
-command -v python3 >/dev/null 2>&1 || { echo "error: python3 (3.8+) is required" >&2; exit 1; }
-python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' \
-  || { echo "error: python3 >= 3.8 is required" >&2; exit 1; }
 [ -d "$PLUGIN_DIR" ] || { echo "error: plugin not found at $PLUGIN_DIR" >&2; exit 1; }
 
-# Guard STATE_DIR before install or uninstall touches anything: --purge runs `rm -rf "$STATE_DIR"`,
-# so a relative or overlapping XDG_STATE_HOME (e.g. `plugins`) must never resolve into the repo.
-python3 - "$STATE_BASE" "$STATE_DIR" "$HOME" "$REPO_ROOT" <<'PY' || exit 1
-import os
-import sys
-
-base, state, home, repo = sys.argv[1:5]
-if not os.path.isabs(base):
-    sys.stderr.write(f"error: state base {base!r} (XDG_STATE_HOME) must be an absolute path\n")
-    sys.exit(1)
-real_state, real_repo = os.path.realpath(state), os.path.realpath(repo)
-bad = {"/", os.path.realpath(home), real_repo}
-if (real_state in bad or real_state.startswith(real_repo + os.sep)
-        or real_repo.startswith(real_state + os.sep)):
-    sys.stderr.write(f"error: unsafe state dir {state} (resolves to {real_state}); it must not be /, "
-                     f"$HOME, or overlap the repo {real_repo}. Fix XDG_STATE_HOME.\n")
-    sys.exit(1)
-PY
-
 if [ "$MODE" = "uninstall" ]; then
+  # Guard STATE_DIR before uninstall or purge touches anything, even when $OODA_BIN is absent.
+  if [ -x "$OODA_BIN" ]; then
+    "$OODA_BIN" __setup check-state "$STATE_BASE" "$STATE_DIR" "$HOME" "$REPO_ROOT" || exit 1
+  else
+    case "$STATE_BASE" in /*) ;; *) echo "error: state base must be absolute: $STATE_BASE" >&2; exit 1 ;; esac
+    case "$STATE_DIR" in /*) ;; *) echo "error: state dir must be absolute: $STATE_DIR" >&2; exit 1 ;; esac
+    case "$STATE_DIR" in
+      "$HOME"|"$HOME/"|"$REPO_ROOT"|"$REPO_ROOT"/*)
+        echo "error: refusing unsafe state dir: $STATE_DIR" >&2; exit 1 ;;
+    esac
+  fi
   # shellcheck source=uninstall.sh
   . "$REPO_ROOT/uninstall.sh"
   ooda_uninstall "$@"
   exit $?
 fi
 
-# valid_quota FILE -> exit 0 when FILE parses as a JSON object containing "providers".
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    echo "error: sha256sum or shasum required to verify downloaded binary" >&2
+    return 1
+  fi
+}
+
+download_prebuilt_binary() {
+  local base os arch asset
+  base="${OODA_RELEASE_BASE:-https://github.com/UberMetroid/agent-ooda/releases/latest/download}"
+  base="${base%/}"
+  case "$(uname -s)" in
+    Linux) os="linux" ;;
+    Darwin) os="darwin" ;;
+    *) echo "error: unsupported OS '$(uname -s)' for prebuilt ooda (install Go 1.22+)" >&2; return 1 ;;
+  esac
+  case "$(uname -m)" in
+    x86_64|amd64) arch="amd64" ;;
+    aarch64|arm64) arch="arm64" ;;
+    *) echo "error: unsupported arch '$(uname -m)' for prebuilt ooda (install Go 1.22+)" >&2; return 1 ;;
+  esac
+  command -v curl >/dev/null 2>&1 || {
+    echo "error: curl required to download prebuilt ooda binary (or install Go 1.22+)" >&2
+    return 1
+  }
+  asset="ooda-${os}-${arch}"
+  (
+    local stage expected actual cur_hash
+    stage="$(mktemp -d)"
+    trap 'rm -rf -- "$stage"' EXIT
+    curl -fsSL "$base/SHA256SUMS" -o "$stage/SHA256SUMS" || {
+      echo "error: failed to download $base/SHA256SUMS" >&2
+      return 1
+    }
+    expected="$(awk -v f="$asset" '($2 == f || $2 == "*"f) {print $1; exit}' "$stage/SHA256SUMS")"
+    [ -n "$expected" ] || { echo "error: checksum for $asset missing in SHA256SUMS" >&2; return 1; }
+    if [ -x "$OODA_BIN" ]; then
+      cur_hash="$(sha256_file "$OODA_BIN")"
+      if [ "$cur_hash" = "$expected" ]; then
+        return 0
+      fi
+    fi
+    echo "downloading prebuilt $asset from $base/$asset ..."
+    curl -fsSL "$base/$asset" -o "$stage/$asset" || {
+      echo "error: failed to download $base/$asset" >&2
+      return 1
+    }
+    actual="$(sha256_file "$stage/$asset")"
+    if [ "$expected" != "$actual" ]; then
+      echo "error: SHA-256 mismatch for $asset (expected $expected, got $actual)" >&2
+      return 1
+    fi
+    install -m 0755 "$stage/$asset" "$OODA_BIN"
+  )
+}
+
+mkdir -p "$PLUGIN_DIR/bin"
+if [ "${OODA_NO_BUILD:-0}" != "1" ]; then
+  if command -v go >/dev/null 2>&1 && [ -w "$PLUGIN_DIR/bin" ]; then
+    (cd "$REPO_ROOT" && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$OODA_BIN" ./cmd/ooda)
+  else
+    download_prebuilt_binary
+  fi
+fi
+[ -x "$OODA_BIN" ] || { echo "error: executable not found at $OODA_BIN" >&2; exit 1; }
+ln -sfn ooda "$PLUGIN_DIR/bin/ooda-hud"
+ln -sfn ooda "$PLUGIN_DIR/bin/ooda-hook"
+
+"$OODA_BIN" __setup check-state "$STATE_BASE" "$STATE_DIR" "$HOME" "$REPO_ROOT" || exit 1
+
 valid_quota() {
   [ -f "$1" ] || return 1
-  python3 - "$1" <<'PY'
-import json
-import sys
-
-try:
-    with open(sys.argv[1], encoding="utf-8") as fh:
-        data = json.load(fh)
-except (OSError, ValueError):
-    sys.exit(1)
-sys.exit(0 if isinstance(data, dict) and isinstance(data.get("providers"), dict) and len(data["providers"]) > 0 else 1)
-PY
+  "$OODA_BIN" __setup valid-quota "$1"
 }
 
 BACKUP_ROOT="$STATE_DIR/backups"
 BACKUP_DIR=""
 
-# archive_path LABEL PATH -> move displaced file/dir/foreign-symlink into $BACKUP_DIR/LABEL.
 archive_path() {
   if [ -z "$BACKUP_DIR" ]; then
     BACKUP_DIR="$BACKUP_ROOT/$(date -u +%Y%m%dT%H%M%SZ)-$$"
@@ -100,7 +152,6 @@ archive_path() {
   mv "$2" "$BACKUP_DIR/$1"
 }
 
-# link TARGET LINK_PATH LABEL -> idempotent symlink; archives any displaced path first.
 link() {
   if [ -L "$2" ] && [ "$(readlink "$2")" = "$1" ]; then
     return 0
@@ -111,72 +162,12 @@ link() {
   ln -sfn "$1" "$2"
 }
 
-# retire_legacy LABEL PATH -> archive legacy plugin/skill/shim into $BACKUP_DIR/LABEL if present.
 retire_legacy() {
   if [ -e "$2" ] || [ -L "$2" ]; then
     archive_path "$1" "$2"
   fi
 }
 
-# skills_json check|update FILE -> validate (exit 1, never write, when malformed); update also
-# drops legacy router/ooda skill entries and ensures ~/.agents/skills, written atomically.
-skills_json() {
-  python3 - "$1" "$2" <<'PY'
-import json
-import os
-import sys
-
-mode, path = sys.argv[1], sys.argv[2]
-norm = lambda p: os.path.normpath(os.path.expanduser(str(p)))
-data = {}
-if os.path.lexists(path) and not os.path.isfile(path):
-    sys.stderr.write(f"error: {path} is not a regular file; refusing to overwrite\n")
-    sys.exit(1)
-if os.path.isfile(path) and os.path.getsize(path) > 0:
-    try:
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (OSError, ValueError) as exc:
-        sys.stderr.write(f"error: malformed JSON in {path}; refusing to overwrite: {exc}\n")
-        sys.exit(1)
-raw = data.get("entries") if isinstance(data, dict) else None
-if not isinstance(data, dict) or not (raw is None or isinstance(raw, list)):
-    sys.stderr.write(f"error: {path} must be a JSON object with a list 'entries'; refusing to overwrite\n")
-    sys.exit(1)
-if not all(isinstance(e, dict) for e in raw or []):
-    sys.stderr.write(f"error: {path} 'entries' must contain only JSON objects; refusing to overwrite\n")
-    sys.exit(1)
-if mode == "check":
-    # Preflight writability: the file itself (if present) and the deepest existing ancestor dir.
-    probe = os.path.dirname(os.path.abspath(path))
-    while not os.path.isdir(probe) and os.path.dirname(probe) != probe:
-        probe = os.path.dirname(probe)
-    if os.path.exists(path) and not os.access(path, os.W_OK):
-        sys.stderr.write(f"error: {path} is not writable\n")
-        sys.exit(1)
-    if not os.access(probe, os.W_OK | os.X_OK):
-        sys.stderr.write(f"error: directory {probe} is not writable; cannot update {path}\n")
-        sys.exit(1)
-    sys.exit(0)
-legacy = {norm("~/.agents/skills/router"), norm("~/.agents/skills/ooda")}
-entries = [e for e in raw or [] if norm(e.get("path", "")) not in legacy]
-if not any(norm(e.get("path", "")) == norm("~/.agents/skills") for e in entries):
-    entries.append({"path": "~/.agents/skills"})
-data["entries"] = entries
-tmp = f"{path}.tmp.{os.getpid()}"
-try:
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2)
-        fh.write("\n")
-    os.replace(tmp, path)
-except BaseException:
-    if os.path.lexists(tmp):
-        os.unlink(tmp)
-    raise
-PY
-}
-
-# health_report -> informational PATH / agy / lane CLI checks; never fails the install.
 health_report() {
   local cli lanes=""
   echo "health:"
@@ -198,30 +189,10 @@ health_report() {
 }
 
 # Preflight directory layout + skills.json + settings.json before mutating any state, plugins, shims, or legacy installs.
-python3 - "$STATE_DIR" "$HOME/.gemini/config/plugins" "$HOME/.local/bin" "$AGY_DIR" "$HOME/.agents/skills" <<'PY' || exit 1
-import os
-import sys
-
-for target in sys.argv[1:]:
-    cur = os.path.abspath(target)
-    while True:
-        if os.path.lexists(cur):
-            if not os.path.isdir(cur):
-                sys.stderr.write(f"error: {cur} exists and is not a directory; refusing to install\n")
-                sys.exit(1)
-            if not os.access(cur, os.W_OK | os.X_OK):
-                sys.stderr.write(f"error: directory {cur} is not writable; cannot create {target}\n")
-                sys.exit(1)
-            break
-        parent = os.path.dirname(cur)
-        if parent == cur:
-            break
-        cur = parent
-PY
-# skills.json is always checked (validity + writability of it or its deepest existing ancestor).
-skills_json check "$HOME/.gemini/config/skills.json"
+"$OODA_BIN" __setup check-dirs "$STATE_DIR" "$HOME/.gemini/config/plugins" "$HOME/.local/bin" "$AGY_DIR" "$HOME/.agents/skills" || exit 1
+"$OODA_BIN" __setup skills-check "$HOME/.gemini/config/skills.json"
 if [ "${OODA_NO_STATUSLINE:-0}" != "1" ]; then
-  python3 "$WIRE" check "$SETTINGS_JSON" "$STATE_DIR"
+  "$OODA_BIN" __wire check "$SETTINGS_JSON" "$STATE_DIR"
 fi
 
 # 1. Mutable state lives outside git, private to the user.
@@ -246,10 +217,9 @@ fi
 chmod 600 "$QUOTA_FILE"
 
 # 3. Update skills.json atomically before removing any legacy installs, plugins, or skills.
-#    Always register ~/.agents/skills, creating ~/.gemini/config on a fresh install.
 SKILLS_JSON="$HOME/.gemini/config/skills.json"
 mkdir -p "$HOME/.gemini/config"
-skills_json update "$SKILLS_JSON"
+"$OODA_BIN" __setup skills-update "$SKILLS_JSON"
 
 # 4. Antigravity plugin registration (archive obsolete router-core / boyd plugins).
 mkdir -p "$HOME/.gemini/config/plugins"
@@ -259,8 +229,8 @@ retire_legacy "plugin-boyd" "$HOME/.gemini/config/plugins/boyd"
 
 # 5. CLI shims: `ooda` and its `router` alias.
 mkdir -p "$HOME/.local/bin"
-link "$PLUGIN_DIR/bin/ooda" "$HOME/.local/bin/ooda" "bin-ooda"
-link "$PLUGIN_DIR/bin/ooda" "$HOME/.local/bin/router" "bin-router"
+link "$OODA_BIN" "$HOME/.local/bin/ooda" "bin-ooda"
+link "$OODA_BIN" "$HOME/.local/bin/router" "bin-router"
 retire_legacy "bin-boyd" "$HOME/.local/bin/boyd"
 
 # 6. Bubble-canopy statusLine HUD: symlink, then point settings.json statusLine at it.
@@ -271,7 +241,7 @@ WIRE_OUT=""
 if [ "${OODA_NO_STATUSLINE:-0}" = "1" ]; then
   SETTINGS_NOTE="(skipped: OODA_NO_STATUSLINE=1; $SETTINGS_JSON untouched)"
 else
-  WIRE_OUT="$(python3 "$WIRE" wire "$SETTINGS_JSON" "$STATE_DIR")"
+  WIRE_OUT="$("$OODA_BIN" __wire wire "$SETTINGS_JSON" "$STATE_DIR")"
 fi
 
 # 7. Archive duplicate legacy skill copies (the plugin now ships ooda + router skills).
@@ -281,7 +251,7 @@ mkdir -p "$HOME/.agents/skills"
 
 ACTIVE_OODA="$(command -v ooda 2>/dev/null || true)"
 PATH_NOTE=""
-if [ -n "$ACTIVE_OODA" ] && [ "$ACTIVE_OODA" != "$HOME/.local/bin/ooda" ] && [ "$ACTIVE_OODA" != "$PLUGIN_DIR/bin/ooda" ]; then
+if [ -n "$ACTIVE_OODA" ] && [ "$ACTIVE_OODA" != "$HOME/.local/bin/ooda" ] && [ "$ACTIVE_OODA" != "$OODA_BIN" ]; then
   PATH_NOTE="  note        : 'ooda' on PATH resolves to $ACTIVE_OODA; use 'router' (or ~/.local/bin/ooda)"
 fi
 

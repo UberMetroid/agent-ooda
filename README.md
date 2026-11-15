@@ -1,11 +1,11 @@
-# agy-skills
+# agent-ooda
 
-`UberMetroid/agy-skills` ships **`ooda`**, an Antigravity (`agy`) plugin at
-[`plugins/ooda`](plugins/ooda) that turns one orchestrator session into a
-token-routed, cross-model **agent fleet**. Stdlib-only Python 3.8+, zero
-third-party dependencies.
+`UberMetroid/agent-ooda` ships the **`ooda`** static Go multi-call engine
+and [`plugins/ooda`](plugins/ooda) Antigravity (`agy`) plugin (a single shared
+repo built to extend to `mcode` next). Zero-dependency Go 1.22+
+(`CGO_ENABLED=0`), zero third-party packages.
 
-Live site: **<https://ubermetroid.github.io/agy-skills/>**
+Live site: **<https://ubermetroid.github.io/agent-ooda/>**
 
 ## Credits: Col. John Boyd (USAF)
 
@@ -51,16 +51,18 @@ different order for each stage:
 - **Verify:** an independent diff review runs on a *different* model family.
 
 **Cross-model verification.** `mcode` reviews every diff first, including
-untracked files rendered as synthetic hunks. Targeted working-tree diffs
-(`<= 8 KiB`) invoke native `mcode exec review` (`--permission smart
---max-steps 15`), while larger (`> 8 KiB`) or committed diffs run a single-pass
-inline patch review (`--mode lightweight --permission off --max-steps 4`).
+untracked files rendered as synthetic hunks. Targeted working-tree diffs (`<= 8 KiB`) invoke native `mcode exec review`
+(`--permission smart --max-steps 15`), while larger (`> 8 KiB`) or committed
+diffs run an inline stream-json audit (`--permission smart --prompt-mode coding
+--max-steps 25`).
 The author's own family is never used for review. On cooldown, non-zero exit,
 or an `UNKNOWN` verdict, review falls back automatically to the next
 off-family backup lane (for example `grok`); `[P0-3]` findings always fail closed.
 
-**Bubble-canopy HUD.** `bin/ooda-hud` is the Antigravity `statusLine`. It shows
-the current OODA step (`○ ooda`, `◐ orient/decide`, `⠋ act ×2`), the worker
+**Bubble-canopy HUD.** `bin/ooda-hud` (a symlink to the multi-call `bin/ooda`
+binary) is the Antigravity `statusLine`. It shows the current OODA step
+(`○ ooda`, `◐ orient/decide`, `⠋ act ×2`), live NDJSON streaming telemetry
+(`~tok/s` estimated or exact `tok/s`, `tool Xs`, elapsed `Xs`), the worker
 models, active custom skills, and `fleet X/8 (next …)` wake countdowns.
 `./install.sh` links it to `~/.gemini/antigravity-cli/statusline.py` and adds
 the `statusLine` block (shown under [Install](#install)) to
@@ -68,8 +70,23 @@ the `statusLine` block (shown under [Install](#install)) to
 
 ## Install
 
+### One-line web installer (no Go required)
+
 ```bash
-git clone https://github.com/UberMetroid/agy-skills.git && cd agy-skills
+curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash
+```
+
+This clones/updates `agent-ooda` into `${XDG_DATA_HOME:-~/.local/share}/agent-ooda`
+(override with `AGENT_OODA_HOME`) and runs `./install.sh`. If Go 1.22+ is on
+`PATH`, it builds `plugins/ooda/bin/ooda` locally (`CGO_ENABLED=0`); otherwise it
+downloads the matching static GitHub Release binary (`linux`/`darwin`,
+`amd64`/`arm64`) and verifies its SHA-256 checksum against `SHA256SUMS` before
+installing.
+
+### From a local checkout
+
+```bash
+git clone https://github.com/UberMetroid/agent-ooda.git && cd agent-ooda
 ./install.sh            # or: make install   (./install.sh --help lists options)
 # restart agy, then:
 agy plugin list         # confirm "ooda" is registered
@@ -119,6 +136,8 @@ router --usage          # per-lane cycle usage
 ```bash
 ./install.sh --uninstall          # or ./uninstall.sh, or make uninstall
 ./install.sh --uninstall --purge  # also delete ${XDG_STATE_HOME:-~/.local/state}/ooda
+# or via web installer:
+curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --uninstall --purge
 ```
 
 Uninstall removes the four links above, but only when they are symlinks that
@@ -146,6 +165,7 @@ Runtime state lives in `${XDG_STATE_HOME:-~/.local/state}/ooda/quota.json`
 make all   # portable, line-cap, density, vocab, shape, plugin-check, test, dogfood
 ```
 
-See [`AGENTS.md`](AGENTS.md) for the rules: stdlib only, 16–256 lines per file,
-at most 8 `.py` files per directory, at most 8 defs per file, at most 64 lines
-per function, and no hard-coded home paths, secrets, or `shell=True`.
+See [`AGENTS.md`](AGENTS.md) for the rules: stdlib-only Go (`0` external
+`require`s), 16–256 lines & `<= 128` cols per file, at most 8 entries per
+directory, at most 8 funcs per file, at most 64 code lines per function, nesting
+`<= 4`, identifiers `<= 32` chars, and no hard-coded home paths, secrets, or `sh -c`.

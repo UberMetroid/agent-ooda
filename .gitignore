@@ -1,3 +1,4 @@
+/plugins/ooda/bin/ooda
 __pycache__/
 *.py[cod]
 *$py.class

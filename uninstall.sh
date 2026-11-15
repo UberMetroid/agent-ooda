@@ -6,24 +6,20 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   exec "$(cd "$(dirname "$0")" && pwd)/install.sh" --uninstall "$@"
 fi
 
-# owned_link PATH -> exit 0 when PATH is a symlink whose real target lies inside $PLUGIN_DIR.
 owned_link() {
+  if [ -x "$OODA_BIN" ]; then
+    "$OODA_BIN" __setup owned-link "$1" "$PLUGIN_DIR"
+    return $?
+  fi
   [ -L "$1" ] || return 1
-  python3 - "$1" "$PLUGIN_DIR" <<'PY'
-import os
-import sys
-
-link = os.path.abspath(sys.argv[1])
-target = os.path.realpath(os.path.join(os.path.dirname(link), os.readlink(link)))
-root = os.path.realpath(sys.argv[2])
-sys.exit(0 if target == root or target.startswith(root + os.sep) else 1)
-PY
+  local target
+  target="$(readlink "$1" || true)"
+  case "$target" in
+    "$PLUGIN_DIR"|"$PLUGIN_DIR"/*) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
-# ooda_uninstall [--purge] -> preflight-first, in this order: (1) preflight settings.json,
-# statusline.prev.json, and write+search access to every repo-owned symlink's parent dir; (2) unwire
-# statusLine; (3) only then `rm -f` owned symlinks (settings.json never points at a missing HUD);
-# (4) optionally purge state. Any preflight failure aborts before anything is mutated.
 ooda_uninstall() {
   local purge=0 arg path removed=0 unwire=0 hud="$AGY_DIR/statusline.py" wire_out
   local links=("$HOME/.gemini/config/plugins/ooda" "$HOME/.local/bin/ooda" "$HOME/.local/bin/router" "$hud")
@@ -33,15 +29,16 @@ ooda_uninstall() {
       *) echo "error: unknown uninstall option: $arg (see --help)" >&2; return 2 ;;
     esac
   done
-  # Decide ownership first: only unwire when statusline.py is ours or already absent.
   if { [ ! -e "$hud" ] && [ ! -L "$hud" ]; } || owned_link "$hud"; then
     unwire=1
   fi
-  # Preflight settings.json + statusline.prev.json so corruption aborts before anything is removed.
   if [ "$unwire" -eq 1 ]; then
-    python3 "$WIRE" check "$SETTINGS_JSON" "$STATE_DIR" || return 1
+    if [ ! -f "$SETTINGS_JSON" ]; then
+      unwire=0
+    elif [ -x "$OODA_BIN" ]; then
+      "$OODA_BIN" __wire check "$SETTINGS_JSON" "$STATE_DIR" || return 1
+    fi
   fi
-  # Preflight: every owned symlink we will unlink must sit in a writable/searchable directory.
   for path in "${links[@]}"; do
     if owned_link "$path" && { [ ! -w "$(dirname "$path")" ] || [ ! -x "$(dirname "$path")" ]; }; then
       echo "error: $(dirname "$path") is not writable (or searchable); cannot remove $path (nothing changed)" >&2
@@ -50,17 +47,18 @@ ooda_uninstall() {
   done
 
   echo "ooda uninstall"
-  if [ "$unwire" -eq 1 ]; then
-    wire_out="$(python3 "$WIRE" unwire "$SETTINGS_JSON" "$STATE_DIR")" || {
+  if [ "$unwire" -eq 1 ] && [ -x "$OODA_BIN" ]; then
+    wire_out="$("$OODA_BIN" __wire unwire "$SETTINGS_JSON" "$STATE_DIR")" || {
       echo "error: failed to unwire statusLine in $SETTINGS_JSON; no symlinks removed" >&2
       return 1
     }
     printf '%s\n' "$wire_out" | sed 's/^/  settings    : /'
+  elif [ "$unwire" -eq 1 ]; then
+    echo "  settings    : left $SETTINGS_JSON untouched (ooda binary absent to rewrite JSON)"
   else
     echo "  settings    : statusLine left as-is (statusline.py is not ours)"
   fi
 
-  # Unwire succeeded (or was skipped); now unlink the repo-owned symlinks.
   for path in "${links[@]}"; do
     if owned_link "$path"; then
       rm -f "$path"

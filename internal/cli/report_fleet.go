@@ -1,0 +1,255 @@
+package cli
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/UberMetroid/agent-ooda/internal/dispatch"
+	"github.com/UberMetroid/agent-ooda/internal/envelope"
+	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agent-ooda/internal/worktree"
+)
+
+func clipStr(s string, maxLen int) string {
+	r := []rune(s)
+	if len(r) <= maxLen {
+		return s
+	}
+	return string(r[:maxLen])
+}
+
+func nonEmptyOr(s, fallback string) string {
+	if s != "" {
+		return s
+	}
+	return fallback
+}
+
+func formatCommas(n int) string {
+	s, out := fmt.Sprintf("%d", n), ""
+	neg := strings.HasPrefix(s, "-")
+	if neg {
+		s = s[1:]
+	}
+	for len(s) > 3 {
+		out, s = ","+s[len(s)-3:]+out, s[:len(s)-3]
+	}
+	if neg {
+		return "-" + s + out
+	}
+	return s + out
+}
+
+func statusRow(name string, info *fleet.ProviderConfig, nowUTC time.Time, lc envelope.LaneCap) string {
+	binNote := nonEmptyOr(fleet.ResolveCLI(info.CLI), "MISSING")
+	eff, mod := lc.EffectiveEffort, lc.EffectiveModel
+	if info.Effort != nil && *info.Effort != "" {
+		eff = *info.Effort
+	}
+	if info.Model != nil && *info.Model != "" {
+		mod = *info.Model
+	}
+	eff, mod = nonEmptyOr(eff, "default"), nonEmptyOr(mod, "default")
+	resetTS := info.NextResetAt
+	if info.CooldownUntil != nil && *info.CooldownUntil != "" {
+		resetTS = info.CooldownUntil
+	}
+	resetCD, detail := fleet.FormatCountdown(resetTS, nowUTC), binNote
+	if info.Status != "active" {
+		why := derefOr(info.Reason, "cooldown")
+		if info.CooldownUntil != nil && resetCD != "" {
+			detail = fmt.Sprintf("%s | resets in %s | %s", binNote, resetCD, why)
+		} else if info.ManualDisable {
+			detail = fmt.Sprintf("%s | [manual] %s", binNote, why)
+		} else {
+			detail = fmt.Sprintf("%s | %s", binNote, why)
+		}
+	} else if resetCD != "" {
+		detail = fmt.Sprintf("%s | cycle resets in %s", binNote, resetCD)
+	}
+	if lc.AgyUnsafe {
+		detail += " | [GEMINI GUARD: run --discover]"
+	}
+	if info.MaxParallel != nil && *info.MaxParallel > 0 {
+		mp := *info.MaxParallel
+		detail += fmt.Sprintf(" | [max %d parallel, %d/%d busy]", mp, fleet.CountActiveLeases(name, mp), mp)
+	}
+	return fmt.Sprintf("%-13s %-9s %-10s %-9s %-9s %-28s %s",
+		name, info.Status, info.Tier, clipStr(eff, 9), info.CLI, clipStr(dispatch.ShortModel(mod), 28), detail)
+}
+
+func printDiscoveryFooter(
+	w io.Writer, caps map[string]envelope.LaneCap, skills []worktree.SkillMeta, verbose bool,
+) {
+	fmt.Fprintln(w, "\nDiscovered CLI Capabilities (effort control & available models):")
+	groups := [][2]string{
+		{"agy", "agy-opus"}, {"devin", "devin-pro"}, {"muse", "muse"},
+		{"mcode", "mcode"}, {"grok", "grok"}, {"vibe", "mistral"},
+	}
+	limit, moreLbl := 6, "more; run --discover"
+	if verbose {
+		limit, moreLbl = 20, "in discovery.json"
+	}
+	for _, g := range groups {
+		lc := caps[g[1]]
+		shown, extra, guard := "(run router --discover)", "", ""
+		if len(lc.Models) > 0 {
+			shown = strings.Join(lc.Models[:min(len(lc.Models), limit)], ", ")
+		}
+		if len(lc.Models) > limit {
+			extra = fmt.Sprintf(" (+%d %s)", len(lc.Models)-limit, moreLbl)
+		}
+		if lc.GeminiGuard != "" {
+			guard = " [" + lc.GeminiGuard + "]"
+		}
+		fmt.Fprintf(w, "  %-7s %-37s models: %s%s%s\n", g[0], nonEmptyOr(lc.EffortMode, "default"), shown, extra, guard)
+	}
+	fmt.Fprintln(w, "\nInjectable Worker Skills (--skill <name>):")
+	if len(skills) == 0 {
+		fmt.Fprintln(w, "  (none discovered)")
+		return
+	}
+	for _, s := range skills {
+		tag := ""
+		if s.Core {
+			tag = " [built-in]"
+		}
+		fmt.Fprintf(w, "  %-10s : %s%s\n", s.Name, nonEmptyOr(s.Desc, "(no description)"), tag)
+	}
+}
+
+// ReportStatus prints fleet readiness or refreshes CLI capability discovery caches.
+func ReportStatus(w io.Writer, refresh bool) int {
+	if w == nil {
+		w = os.Stdout
+	}
+	q, err := fleet.LoadQuota("")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	caps := envelope.DiscoverFleetCaps(envelope.DiscoverOpts{Quota: q, ForceRefresh: refresh})
+	skills, nowUTC := worktree.DiscoverSkills(""), time.Now().UTC()
+	if refresh {
+		fmt.Fprintf(w, "Discovery cache    : %s (refreshed)\n", fleet.DiscoveryFilePath())
+	} else {
+		chain, pool := q.DefaultFallbackChain, q.ParallelStripePool
+		if len(chain) == 0 {
+			chain = fleet.DefaultPool
+		}
+		if len(pool) == 0 {
+			pool = fleet.StripePool
+		}
+		fmt.Fprintf(w, "Quota state        : %s (v%d, updated: %s)\n",
+			fleet.QuotaFilePath(""), q.Version, derefOr(q.UpdatedAt, ""))
+		fmt.Fprintf(w, "Drain capped first : %t (soonest expiring cycle prioritized)\n", q.DrainCappedFirst)
+		fmt.Fprintf(w, "Parallel stripe    : %s\nFallback chain     : %s\n\n",
+			strings.Join(pool, " -> "), strings.Join(chain, " -> "))
+	}
+	fmt.Fprintf(w, "%-13s %-9s %-10s %-9s %-9s %-28s %s\n",
+		"LANE", "STATUS", "TIER", "EFFORT", "CLI", "MODEL", "RESET / BINARY")
+	fmt.Fprintln(w, strings.Repeat("-", 119))
+	for _, name := range fleet.ProviderOrder {
+		if info := q.Providers[name]; info != nil {
+			fmt.Fprintln(w, statusRow(name, info, nowUTC, caps[name]))
+		}
+	}
+	if !refresh {
+		defP, _ := envelope.SelectProvider(envelope.SelectReq{RequestedLane: "auto", Quota: q})
+		fastP, _ := envelope.SelectProvider(envelope.SelectReq{RequestedLane: "auto", Complexity: "fast", Quota: q})
+		deepP, _ := envelope.SelectProvider(envelope.SelectReq{RequestedLane: "auto", Complexity: "deep", Quota: q})
+		fmt.Fprintf(w, "\nEffective default/heavy lane : %s\nEffective fast/recon lane    : %s\n",
+			nonEmptyOr(defP.Lane, "NONE"), nonEmptyOr(fastP.Lane, "NONE"))
+		fmt.Fprintf(w, "Effective deep/arch lane     : %s\n", nonEmptyOr(deepP.Lane, "NONE"))
+		revLbl := fleet.ReviewModelEnv()
+		if revLbl == "cli-default" {
+			revLbl = "cli default unless overridden"
+		}
+		fmt.Fprintf(w, "Auto-review mcode (%s): %s\n", revLbl, nonEmptyOr(fleet.ResolveCLI("mcode"), "MISSING"))
+	}
+	printDiscoveryFooter(w, caps, skills, refresh)
+	return 0
+}
+
+func usageRow(name string, info *fleet.ProviderConfig, regimes map[string]string, nowUTC time.Time) string {
+	cycStr, pref := "creds", "~"
+	if info.CycleHours != nil {
+		cycStr = fmt.Sprintf("%gh", *info.CycleHours)
+	}
+	if info.CycleTokensExact || info.CycleTokens == 0 {
+		pref = ""
+	}
+	tokStr, costStr := pref+formatCommas(info.CycleTokens), "-"
+	if info.CycleTokenBudget != nil && *info.CycleTokenBudget > 0 {
+		tokStr += "/" + formatCommas(*info.CycleTokenBudget)
+	}
+	if info.CycleCostBudget != nil && *info.CycleCostBudget > 0 {
+		costStr = fmt.Sprintf("$%.2f/$%.2f", info.CycleCostUSD, *info.CycleCostBudget)
+	} else if info.CycleCostUSD > 0 {
+		costStr = fmt.Sprintf("$%.4f", info.CycleCostUSD)
+	}
+	resetTS := info.NextResetAt
+	if info.CooldownUntil != nil && *info.CooldownUntil != "" {
+		resetTS = info.CooldownUntil
+	}
+	resetCD := fleet.FormatCountdown(resetTS, nowUTC)
+	if resetCD == "" {
+		resetCD = "idle"
+		if info.Tier == "credits" && info.Status != "active" {
+			resetCD = "top-up"
+		} else if info.ManualDisable {
+			resetCD = "manual"
+		}
+	}
+	note := ""
+	if info.Reason != nil && *info.Reason != "" {
+		note = *info.Reason
+	} else if info.CycleRuns == 0 && info.Status == "active" {
+		note = "fresh"
+	} else if info.Model != nil {
+		note = dispatch.ShortModel(*info.Model)
+	}
+	return fmt.Sprintf("%-13s %-9s %-9s %-6s %-5d %-14s %-9s %-12s %s",
+		name, info.Status, nonEmptyOr(regimes[name], "-"), cycStr, info.CycleRuns, tokStr, costStr, resetCD, note)
+}
+
+// DoUsage prints cycle token/cost telemetry, E-M regimes, and live muse usage probe.
+func DoUsage(w io.Writer) int {
+	if w == nil {
+		w = os.Stdout
+	}
+	museProbe := fleet.ProbeMuseUsage(10)
+	q, err := fleet.LoadQuota("")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	nowUTC := time.Now().UTC()
+	em := envelope.ComputeEMEnvelope(q, nowUTC)
+	fmt.Fprintf(w, "Cycle Usage Telemetry (%s, v%d)\n\n", fleet.QuotaFilePath(""), q.Version)
+	fmt.Fprintf(w, "%-13s %-9s %-9s %-6s %-5s %-14s %-9s %-12s %s\n",
+		"LANE", "STATUS", "E-M", "CYCLE", "RUNS", "TOKENS", "COST", "RESETS IN", "NOTE")
+	fmt.Fprintln(w, strings.Repeat("-", 116))
+	for _, name := range fleet.ProviderOrder {
+		if info := q.Providers[name]; info != nil {
+			fmt.Fprintln(w, usageRow(name, info, em.Regimes, nowUTC))
+		}
+	}
+	fastCap := fleet.DevinFastMaxPar
+	if fi := q.Providers["devin-fast"]; fi != nil && fi.MaxParallel != nil && *fi.MaxParallel > 0 {
+		fastCap = *fi.MaxParallel
+	}
+	emSum := "Ps>=0 SUSTAINED (capped capacity replenished or corner-dumping)"
+	if em.ConserveCapped {
+		emSum = "Ps<0 CONSERVE (<=1 capped lane, next wake >45m; sparing capped reserves on routine work)"
+	}
+	fmt.Fprintf(w, "\nFleet E-M envelope      : %s | devin-fast parallel slots: %d/%d busy\n",
+		emSum, fleet.CountActiveLeases("devin-fast", fastCap), fastCap)
+	fmt.Fprintf(w, "Live probe [muse usage] : %s\n", museProbe.Summary)
+	fmt.Fprintln(w, "Headless probes         : grok/devin/mcode omit remaining balance; "+
+		"agy-opus & vibe report exact per-run tokens")
+	return 0
+}

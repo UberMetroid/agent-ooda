@@ -1,32 +1,37 @@
-PYTHON ?= python3
+GO ?= go
 AGY ?= agy
 
-.PHONY: all portable line-cap density vocab shape plugin-check test dogfood install uninstall
+.PHONY: all build portable line-cap density vocab shape plugin-check test dogfood install uninstall
 
-all: portable line-cap density vocab shape plugin-check test dogfood
+all: build portable line-cap density vocab shape plugin-check test dogfood
+
+build:
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags="-s -w" -o plugins/ooda/bin/ooda ./cmd/ooda
+	ln -sfn ooda plugins/ooda/bin/ooda-hud
+	ln -sfn ooda plugins/ooda/bin/ooda-hook
 
 portable:
-	$(PYTHON) -m qa.gates.run_gates --gate portable
+	$(GO) run ./qa/gates --gate portable
 
 line-cap:
-	$(PYTHON) -m qa.gates.run_gates --gate line-cap
+	$(GO) run ./qa/gates --gate line-cap
 
 density:
-	$(PYTHON) -m qa.gates.run_gates --gate density
+	$(GO) run ./qa/gates --gate density
 
 vocab:
-	$(PYTHON) -m qa.gates.run_gates --gate vocab
+	$(GO) run ./qa/gates --gate vocab
 
 shape:
-	$(PYTHON) -m qa.gates.run_gates --gate shape
+	$(GO) run ./qa/gates --gate shape
 
-plugin-check:
-	$(PYTHON) -c 'import json,subprocess,sys; p=subprocess.run([sys.argv[1],"plugin","validate","plugins/ooda","--strict","--json"],capture_output=True,text=True); d=json.loads(p.stdout or "{}"); f=d.get("findings") or []; print(f"plugin-check: ok ({len(f)} findings)" if p.returncode==0 and not f else p.stdout); sys.exit(0 if p.returncode==0 and not f else 1)' $(AGY)
+plugin-check: build
+	$(GO) run ./qa/gates --gate plugin-check --agy $(AGY)
 
-test:
-	PYTHONPATH=plugins/ooda/src:. $(PYTHON) -m unittest discover -s qa/tests -v
+test: build
+	$(GO) vet ./... && $(GO) test -race -count=1 ./...
 
-dogfood:
+dogfood: build
 	@set -e; tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
 	export AGENT_QUOTA_FILE="$$tmp/quota.json" OODA_DISCOVERY_FILE="$$tmp/discovery.json" OODA_NO_AUTO_PROBE=1 ROUTER_HUD_DIR="$$tmp/hud" ROUTER_DEPTH=0; \
 	./plugins/ooda/bin/ooda --status >/dev/null; \

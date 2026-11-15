@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>agy-skills — OODA Multi-Agent Router &amp; HUD for Antigravity</title>
-  <meta name="description" content="Token-routed, cross-model OODA agent fleet, Energy-Maneuverability scheduler, and Bubble-Canopy HUD for Antigravity (agy). Stdlib Python 3.8+, zero dependencies.">
+  <title>agent-ooda — OODA Multi-Agent Router &amp; HUD</title>
+  <meta name="description" content="Token-routed, cross-model OODA agent fleet, Energy-Maneuverability scheduler, and Bubble-Canopy HUD for Antigravity (agy). Zero-dependency Go 1.22+ (CGO_ENABLED=0).">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -160,8 +160,28 @@
       flex-wrap: wrap;
       gap: 12px;
       align-items: center;
-      margin-bottom: 28px;
+      margin-bottom: 18px;
     }
+    .install-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px;
+      margin-bottom: 24px;
+      background: #05080c;
+      border: 1px solid rgba(46, 194, 126, 0.45);
+      border-radius: var(--radius);
+      font-family: var(--mono);
+      font-size: 0.84rem;
+    }
+    .install-bar code {
+      color: var(--text);
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .copy-btn { cursor: pointer; }
     .telemetry-strip {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
@@ -421,7 +441,7 @@
 
   <header class="topbar">
     <div class="wrap topbar-inner">
-      <a class="brand" href="#top"><span class="dot" aria-hidden="true"></span>UBERMETROID // AGY-SKILLS</a>
+      <a class="brand" href="#top"><span class="dot" aria-hidden="true"></span>UBERMETROID // AGENT-OODA</a>
       <nav class="nav" aria-label="Primary navigation">
         <a href="#hud">HUD</a>
         <a href="#theory">OODA + E-M</a>
@@ -429,23 +449,28 @@
         <a href="#review">Cross-Model Review</a>
         <a href="#quickstart">Quickstart</a>
       </nav>
-      <a class="btn btn-primary" href="https://github.com/UberMetroid/agy-skills">GitHub Repo</a>
+      <a class="btn btn-primary" href="https://github.com/UberMetroid/agent-ooda">GitHub Repo</a>
     </div>
   </header>
 
   <main id="top">
     <section class="hero">
       <div class="wrap">
-        <span class="eyebrow">Antigravity Plugin &bull; Stdlib Python 3.8+ &bull; Zero Dependencies</span>
+        <span class="eyebrow">OODA Agent Plugin Suite &bull; Static Go 1.22+ &bull; Zero Dependencies</span>
         <h1>Turn one session into a<br><span>token-routed agent fleet.</span></h1>
         <p class="lead">
-          <strong>UberMetroid/agy-skills</strong> ships <code>plugins/ooda</code> for Antigravity (<code>agy</code>):
-          a Boydian OODA orchestrator, Energy-Maneuverability quota router, cross-model diff reviewer,
-          and live Bubble-Canopy HUD built in strict House-Law stdlib Python.
+          <strong>UberMetroid/agent-ooda</strong> ships a shared zero-dependency Go router &amp; plugin suite
+          (<code>plugins/ooda</code> for Antigravity <code>agy</code>, extensible to <code>mcode</code>):
+          Boydian OODA dispatch, Energy-Maneuverability scheduling, cross-model diff review,
+          and a Bubble-Canopy HUD with live <code>~tok/s</code> streaming telemetry.
         </p>
+        <div class="install-bar" role="region" aria-label="One-line web installer">
+          <code id="install-cmd">curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash</code>
+          <button class="btn btn-primary copy-btn" type="button" id="copy-install">Copy command</button>
+        </div>
         <div class="hero-actions">
           <a class="btn btn-primary" href="#quickstart">Install &amp; Quickstart</a>
-          <a class="btn" href="https://github.com/UberMetroid/agy-skills">Browse Source</a>
+          <a class="btn" href="https://github.com/UberMetroid/agent-ooda">Browse Source</a>
           <a class="btn" href="#fleet">Inspect 8-Lane Fleet</a>
         </div>
         <div class="telemetry-strip">
@@ -495,7 +520,7 @@
             </li>
             <li class="hud-row">
               <span class="hud-stage">Observe / Recon</span>
-              <span class="hud-line"><span class="c-cyan">&#x280b; observe</span> &middot; devin-fast │ <span class="c-green">fleet 8/8</span></span>
+              <span class="hud-line"><span class="c-cyan">&#x280b; observe</span> &middot; MiniMax-M3.1-Flash &middot; <span class="c-green">~42 tok/s</span> │ <span class="c-green">fleet 8/8</span></span>
             </li>
             <li class="hud-row">
               <span class="hud-stage">Orient / Decide</span>
@@ -732,10 +757,10 @@
           </div>
           <div class="card">
             <span class="badge b-cyan">&gt; 8 KiB or Committed</span>
-            <h3>Lightweight Patch Mode</h3>
+            <h3>Bounded Patch Audit</h3>
             <p>
-              Streams a bounded single-pass patch prompt with <code>--mode lightweight --permission off --max-steps 4</code>
-              for fast, deterministic audits.
+              Streams a bounded patch audit prompt with <code>--permission smart --prompt-mode coding --max-steps 25</code>
+              for fast, thorough verification.
             </p>
           </div>
           <div class="card">
@@ -758,34 +783,37 @@
         </div>
         <div class="grid-2">
           <div>
-            <pre class="codeblock"><code>git clone https://github.com/UberMetroid/agy-skills.git
-cd agy-skills
-./install.sh          # links plugin, router/ooda CLI, HUD + statusLine
-                      # (./install.sh --help for options)
+            <pre class="codeblock"><code># One-line web installer (no Go required; SHA-256 verified binary)
+curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash
+
+# Or install from source (builds if Go 1.22+ is present)
+git clone https://github.com/UberMetroid/agent-ooda.git
+cd agent-ooda &amp;&amp; ./install.sh
+
 # restart agy so the plugin + statusLine load
 agy plugin list       # confirm "ooda" is enabled
 router --status       # fleet tiers, resets &amp; active locks
+router --discover     # refresh live CLI model probes
 router --usage        # per-lane 5h cycle telemetry
 router --recon "Map auth flow and callers"
 router --review .     # cross-model diff gate
 make all              # full House-Law + unit + dogfood suite
 
-git pull &amp;&amp; ./install.sh   # update
-./install.sh --uninstall   # or ./uninstall.sh
-./install.sh --uninstall --purge   # also drop quota state</code></pre>
+# Update or uninstall (works locally or via web installer)
+curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --uninstall --purge</code></pre>
           </div>
           <div class="card">
             <span class="badge b-green">Install</span>
-            <h3>What install.sh Wires</h3>
+            <h3>What the Installer Wires</h3>
             <p>
-              Symlinks <code>~/.gemini/config/plugins/ooda</code>, <code>~/.local/bin/ooda</code>,
-              <code>~/.local/bin/router</code>, and <code>~/.gemini/antigravity-cli/statusline.py</code> into
-              <code>plugins/ooda</code>, then adds the <code>statusLine</code> block to
-              <code>~/.gemini/antigravity-cli/settings.json</code> (opt out with <code>OODA_NO_STATUSLINE=1</code>).
-              It is idempotent. A malformed <code>settings.json</code> or <code>skills.json</code> stops it before
-              anything changes, and displaced files are archived rather than deleted. At the end, a health report
-              warns if <code>~/.local/bin</code> is not on <code>PATH</code> or <code>agy</code> is missing,
-              and lists which lane CLIs (<code>agy devin muse grok vibe mcode</code>) were found or missing.
+              The web installer clones or fast-forwards <code>UberMetroid/agent-ooda</code> into
+              <code>~/.local/share/agent-ooda</code> and invokes <code>./install.sh</code>. On hosts without Go,
+              <code>install.sh</code> downloads the matching static GitHub Release binary and verifies its SHA-256
+              checksum against <code>SHA256SUMS</code> before installing. It then links
+              <code>~/.gemini/config/plugins/ooda</code>, <code>~/.local/bin/ooda</code>,
+              <code>~/.local/bin/router</code>, and <code>~/.gemini/antigravity-cli/statusline.py</code>, and wires
+              <code>~/.gemini/antigravity-cli/settings.json</code> idempotently (malformed JSON fails closed before any
+              change; displaced files are archived).
             </p>
           </div>
         </div>
@@ -809,13 +837,13 @@ git pull &amp;&amp; ./install.sh   # update
               slot markers live in <code>/tmp/router-hud</code> (override with <code>ROUTER_HUD_DIR</code>).
             </p>
             <div class="pills">
-              <span class="pill">portable (no home paths/secrets)</span>
-              <span class="pill">line-cap (16&ndash;256 lines)</span>
-              <span class="pill">density (&le;8 defs/file, &le;64 lines/fn)</span>
-              <span class="pill">shape (&le;8 .py/dir)</span>
-              <span class="pill">vocab</span>
+              <span class="pill">portable (0 requires, no home paths)</span>
+              <span class="pill">line-cap (16&ndash;256 lines, &le;128 cols)</span>
+              <span class="pill">shape (&le;8 funcs/file, &le;64 lines/fn, depth &le;4)</span>
+              <span class="pill">density (&le;8 entries/dir)</span>
+              <span class="pill">vocab (&le;32-char IDs)</span>
               <span class="pill">plugin-check</span>
-              <span class="pill">unittest</span>
+              <span class="pill">go test -race</span>
               <span class="pill">dogfood</span>
             </div>
           </div>
@@ -828,12 +856,30 @@ git pull &amp;&amp; ./install.sh   # update
     <div class="wrap foot-inner">
       <span>Built by <a href="https://github.com/UberMetroid">UberMetroid</a> &bull; Inspired by Col. John Boyd (USAF)</span>
       <span>
-        <a href="https://github.com/UberMetroid/agy-skills">UberMetroid/agy-skills</a>
+        <a href="https://github.com/UberMetroid/agent-ooda">UberMetroid/agent-ooda</a>
         &middot;
         <a href="https://ubermetroid.github.io/">ubermetroid.github.io</a>
       </span>
     </div>
   </footer>
+
+  <script>
+    (function () {
+      var btn = document.getElementById("copy-install");
+      var cmd = document.getElementById("install-cmd");
+      if (!btn || !cmd) return;
+      btn.addEventListener("click", function () {
+        var text = cmd.textContent.trim();
+        var done = function () {
+          btn.textContent = "Copied!";
+          setTimeout(function () { btn.textContent = "Copy command"; }, 1800);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done, function () {});
+        }
+      });
+    })();
+  </script>
 
 </body>
 </html>

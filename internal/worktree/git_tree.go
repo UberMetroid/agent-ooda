@@ -1,0 +1,205 @@
+package worktree
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/UberMetroid/agent-ooda/internal/fleet"
+)
+
+const gitTimeoutSec = 120
+
+// EnsureSlot creates a private runtime scratch directory for prompts/exports.
+func EnsureSlot(slotKey string) (string, error) {
+	slot := filepath.Join(fleet.SlotsRootPath(), "slot-"+fleet.SafeID(slotKey))
+	if err := os.MkdirAll(slot, 0o700); err != nil {
+		return "", err
+	}
+	_ = os.Chmod(slot, 0o700)
+	return slot, nil
+}
+
+// EnsureWorktree creates .worktrees/<taskID> on branch ooda/<taskID>.
+func EnsureWorktree(repoRoot, taskID string) (string, string, error) {
+	rootAbs, err := filepath.Abs(repoRoot)
+	if err != nil {
+		return "", "", err
+	}
+	wtRoot := filepath.Join(rootAbs, ".worktrees")
+	if err := os.MkdirAll(wtRoot, 0o755); err != nil {
+		return "", "", err
+	}
+	wtPath := filepath.Join(wtRoot, taskID)
+	branch := "ooda/" + taskID
+	if _, err := os.Stat(wtPath); err == nil {
+		_, _ = fleet.RunCmd(fleet.CmdSpec{
+			Argv: []string{"git", "worktree", "remove", "--force", wtPath},
+			Cwd:  rootAbs, TimeoutSec: gitTimeoutSec,
+		})
+		_ = os.RemoveAll(wtPath)
+	}
+	chk, _ := fleet.RunCmd(fleet.CmdSpec{
+		Argv: []string{"git", "rev-parse", "--verify", "--quiet", "refs/heads/" + branch},
+		Cwd:  rootAbs, TimeoutSec: gitTimeoutSec,
+	})
+	argv := []string{"git", "worktree", "add", "-b", branch, wtPath}
+	if chk.ExitCode == 0 {
+		argv = []string{"git", "worktree", "add", wtPath, branch}
+	}
+	res, runErr := fleet.RunCmd(fleet.CmdSpec{Argv: argv, Cwd: rootAbs, TimeoutSec: gitTimeoutSec})
+	if runErr != nil || res.ExitCode != 0 {
+		return "", "", fleet.UsageErr("error: worktree add failed for %s:\n%s", taskID, res.Combined)
+	}
+	return wtPath, branch, nil
+}
+
+// DirtyState fingerprints modified/staged/untracked files over a dirty baseline.
+func DirtyState(wt string) map[string]string {
+	snap := make(map[string]string)
+	for _, rel := range ChangedFilesIn(wt, nil) {
+		target := filepath.Join(wt, filepath.FromSlash(rel))
+		st, err := os.Lstat(target)
+		if err != nil {
+			snap[rel] = "missing"
+			continue
+		}
+		if st.Mode()&os.ModeSymlink != 0 {
+			dest, _ := os.Readlink(target)
+			snap[rel] = "link:" + dest
+			continue
+		}
+		if !st.Mode().IsRegular() {
+			snap[rel] = "missing"
+			continue
+		}
+		data, rerr := os.ReadFile(target)
+		if rerr != nil {
+			snap[rel] = "missing"
+			continue
+		}
+		sum := sha256.Sum256(data)
+		snap[rel] = hex.EncodeToString(sum[:])
+	}
+	return snap
+}
+
+// ChangedFilesIn returns sorted relative paths changed relative to base (or HEAD).
+func ChangedFilesIn(wt string, base map[string]string) []string {
+	if base != nil {
+		now := DirtyState(wt)
+		var diff []string
+		for rel, sig := range now {
+			if old, ok := base[rel]; !ok || old != sig {
+				diff = append(diff, rel)
+			}
+		}
+		sort.Strings(diff)
+		return diff
+	}
+	queries := [][]string{
+		{"git", "diff", "-z", "--name-only", "HEAD", "--", "."},
+		{"git", "diff", "-z", "--cached", "--name-only", "--", "."},
+		{"git", "ls-files", "-z", "--others", "--exclude-standard", "--", "."},
+	}
+	seen := make(map[string]bool)
+	for _, argv := range queries {
+		res, err := fleet.RunCmd(fleet.CmdSpec{Argv: argv, Cwd: wt, TimeoutSec: gitTimeoutSec})
+		if err != nil || res.ExitCode != 0 {
+			continue
+		}
+		for _, entry := range strings.Split(res.Stdout, "\x00") {
+			if entry == "" {
+				continue
+			}
+			rel, rerr := NormalizeRelPath(entry)
+			if rerr == nil && !IsIgnoredArtifact(rel) {
+				seen[rel] = true
+			}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for k := range seen {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// FindScopeViolations returns changed paths outside declared scope entries.
+func FindScopeViolations(changed, declared []string) []string {
+	if len(declared) == 0 {
+		return nil
+	}
+	var allowed []string
+	for _, d := range declared {
+		if norm, err := NormalizeRelPath(d); err == nil && norm != "" {
+			allowed = append(allowed, strings.TrimRight(norm, "/"))
+		}
+	}
+	var viols []string
+	for _, cf := range changed {
+		ok := false
+		for _, df := range allowed {
+			if cf == df || strings.HasPrefix(cf, df+"/") {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			viols = append(viols, cf)
+		}
+	}
+	return viols
+}
+
+// DiffStat returns a compact git diff --stat and short status summary.
+func DiffStat(wt string) string {
+	p, err := fleet.RunCmd(fleet.CmdSpec{
+		Argv: []string{"git", "diff", "--stat", "HEAD", "--", "."}, Cwd: wt, TimeoutSec: gitTimeoutSec,
+	})
+	stat := "<diff failed>"
+	if err == nil && p.ExitCode == 0 {
+		stat = strings.TrimSpace(p.Stdout)
+	}
+	s, serr := fleet.RunCmd(fleet.CmdSpec{
+		Argv: []string{"git", "status", "--short", "--", "."}, Cwd: wt, TimeoutSec: gitTimeoutSec,
+	})
+	if serr == nil && s.ExitCode == 0 && strings.TrimSpace(s.Stdout) != "" {
+		if stat != "" {
+			stat += "\n"
+		}
+		stat += "-- untracked/modified --\n" + strings.TrimSpace(s.Stdout)
+	}
+	if strings.TrimSpace(stat) == "" {
+		return "(clean)"
+	}
+	return stat
+}
+
+// SafeWorktreeFiles resolves existing declared files contained within worktree.
+func SafeWorktreeFiles(files []string, wt string) []string {
+	wtReal, err := filepath.EvalSymlinks(wt)
+	if err != nil {
+		wtReal, _ = filepath.Abs(wt)
+	}
+	var out []string
+	for _, f := range files {
+		cand := filepath.Join(wt, filepath.FromSlash(f))
+		candReal, rerr := filepath.EvalSymlinks(cand)
+		if rerr != nil {
+			continue
+		}
+		rel, relErr := filepath.Rel(wtReal, candReal)
+		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			continue
+		}
+		if _, serr := os.Stat(cand); serr == nil {
+			out = append(out, cand)
+		}
+	}
+	return out
+}

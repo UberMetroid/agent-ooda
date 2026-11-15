@@ -3,7 +3,7 @@
     "SessionStart": [
       {
         "type": "command",
-        "command": "python3 ./bin/ooda-hook",
+        "command": "./bin/ooda-hook",
         "timeout": 5
       }
     ],
@@ -13,7 +13,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ./bin/ooda-hook",
+            "command": "./bin/ooda-hook",
             "timeout": 5
           }
         ]
