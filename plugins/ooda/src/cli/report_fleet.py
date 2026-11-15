@@ -15,8 +15,8 @@ def _status_row(name, info, now_utc):
     """Format one provider row for the --status readiness table."""
     cli = info.get("cli", "")
     bin_note = resolve_cli(cli) or "MISSING"
-    effort = info.get("effort") or "high"
-    model_disp = short_model(info.get("model", ""))
+    effort = info.get("effort") or "default"
+    model_disp = short_model(info.get("model") or "default")
     reset_cd = format_countdown(info.get("cooldown_until") or info.get("next_reset_at"), now_utc=now_utc)
     if info.get("status") != "active":
         why = info.get("reason") or "cooldown"
@@ -71,7 +71,8 @@ def do_status():
     print(f"Effective default/heavy lane : {default_pick}")
     print(f"Effective fast/recon lane    : {fast_pick}")
     print(f"Effective deep/arch lane     : {deep_pick}")
-    print(f"Auto-review ({REVIEW_MODEL}): {review_bin}")
+    rev_lbl = REVIEW_MODEL if REVIEW_MODEL != "cli-default" else "cli default unless overridden"
+    print(f"Auto-review mcode ({rev_lbl}): {review_bin}")
     return 0
 
 
@@ -133,7 +134,7 @@ def do_usage():
         em_summary = "Ps<0 CONSERVE (<=1 capped lane, next wake >45m; sparing capped reserves on routine work)"
     else:
         em_summary = "Ps>=0 SUSTAINED (capped capacity replenished or corner-dumping)"
-    print(f"Fleet E-M envelope      : {em_summary} | swe-2-flash-max parallel slots: {fast_busy}/{fast_cap} busy")
+    print(f"Fleet E-M envelope      : {em_summary} | devin-fast parallel slots: {fast_busy}/{fast_cap} busy")
     print(f"Live probe [muse usage] : {muse_probe['summary']}")
     print("Headless probes         : grok/devin/mcode omit remaining balance; agy-opus & vibe report exact per-run tokens")
     return 0

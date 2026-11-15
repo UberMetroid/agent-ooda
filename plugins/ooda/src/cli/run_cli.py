@@ -5,7 +5,7 @@ import sys
 from dispatch import run_manifest_batch
 from envelope import select_provider
 from fleet import (
-    MAX_JOBS, STRIPE_POOL, configure_cycle, load_quota, normalize_lane, parse_timeout,
+    MAX_JOBS, STRIPE_POOL, configure_cycle, load_quota, parse_lanes, parse_timeout,
     quota_file_path, repo_root, router_depth, set_provider_status,
 )
 from worktree import load_manifest, parse_csv_arg
@@ -34,9 +34,11 @@ def _handle_quota_flags(args):
             cost_budget=args.cost_budget, reset_now=args.reset_now, effort=args.effort,
             model=args.model, max_parallel=args.max_parallel,
         )
+        model_s = entry.get("model") or "cli-default"
+        eff_s = entry.get("effort") or "cli-default"
         print(
-            f"configured {canon}: status={entry['status']} model={entry['model']} "
-            f"effort={entry['effort']} cycle_hours={entry['cycle_hours']} "
+            f"configured {canon}: status={entry['status']} model={model_s} "
+            f"effort={eff_s} cycle_hours={entry['cycle_hours']} "
             f"next_reset_at={entry['next_reset_at']}"
         )
         return 0
@@ -62,7 +64,7 @@ def _check_recursion_guard(args):
 def _dispatch_manifest(args):
     """Validate flags, preview routing, and run a parallel worktree manifest batch."""
     root = repo_root()
-    normalize_lane(args.lane, allow_auto=True)
+    parse_lanes(args.lane, allow_auto=True)
     if args.timeout is not None:
         parse_timeout(args.timeout)
     parse_csv_arg(args.exclude_lanes)
@@ -108,7 +110,8 @@ def main(argv=None):
     if args.task is not None:
         return do_single_task(args)
     if args.review is not None:
-        return do_standalone_review(args.review if args.review != "." else (args.manifest or "."))
+        target = args.review if args.review != "." else (args.manifest or ".")
+        return do_standalone_review(target, args=args)
     if not args.manifest:
         repo_root()
         ap.error(

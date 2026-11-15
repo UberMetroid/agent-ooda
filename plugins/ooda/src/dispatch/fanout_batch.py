@@ -152,9 +152,15 @@ def run_manifest_batch(args, root, quota_data, tasks, jobs):
     out = wt_dir / "results.json"
     atomic_write_json(wt_dir / "results.json", results)
     print(f"wrote {out}")
-    failed = [r["id"] for r in results if r["exit_code"] != 0]
+    failed = [
+        r["id"]
+        for r in results
+        if r.get("exit_code") != 0
+        or r.get("scope_violations")
+        or (r.get("review") or {}).get("verdict") == "REJECT"
+    ]
     if failed:
-        print(f"{len(failed)} task(s) failed: {', '.join(failed)}")
+        print(f"{len(failed)} task(s) failed/rejected: {', '.join(failed)}")
         return 1
     print("all tasks exited 0")
     return 0

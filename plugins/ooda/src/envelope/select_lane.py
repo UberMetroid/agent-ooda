@@ -11,8 +11,8 @@ from fleet import (
     REVIEW_ORDER,
     STRIPE_POOL,
     count_active_leases,
-    normalize_lane,
     parse_iso_utc,
+    parse_lanes,
     resolve_cli,
     router_depth,
 )
@@ -90,9 +90,9 @@ def build_candidate_order(
     providers = quota_data.get("providers") or {}
     chain = list(quota_data.get("default_fallback_chain") or DEFAULT_POOL)
     pool = list(quota_data.get("parallel_stripe_pool") or STRIPE_POOL)
-    canon = normalize_lane(requested_lane or "auto", allow_auto=True)
-    if canon != "auto":
-        return [canon] + [p for p in chain if p != canon]
+    lanes = parse_lanes(requested_lane or "auto", allow_auto=True)
+    if lanes != ["auto"]:
+        return lanes + [p for p in chain if p not in lanes]
     em = compute_em_envelope(quota_data)
     comp = str(task_complexity or "").strip().lower()
     capped_active = []
@@ -131,7 +131,7 @@ def select_provider(
     """Pick first active + installed provider, deferring lanes at max_parallel capacity in auto mode."""
     excluded = set(exclude or ())
     providers = quota_data.get("providers") or {}
-    auto = normalize_lane(requested_lane or "auto", allow_auto=True) == "auto"
+    auto = parse_lanes(requested_lane or "auto", allow_auto=True) == ["auto"]
     candidates = build_candidate_order(
         requested_lane, task_complexity, quota_data,
         stripe_index=stripe_index, avoid_families=avoid_families,

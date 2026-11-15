@@ -59,11 +59,13 @@ Lock in the minimal concrete plan before touching any code:
 
 - **Files in scope** and **off-limits files**
 - **Execution mode:** Sequential vs. Parallel Worktrees
-- **E-M Complexity Tags & Fast Transients:** label each slice `fast` (`5m` timeout,
-  mechanical / tests / boilerplate on free `swe-2-flash-max`, capped at **4
-  parallel workers**), standard (`8m` timeout, E-M $P_s$-protected routine `act`),
-  `heavy` (`10m`), or `deep` (`15m`, pulls full $G$ on `agy-opus` / `muse` /
-  `grok`). Read-only `OBSERVE` defaults to `3m` (`--recon`).
+- **E-M Complexity Tags & Dynamic Routing:** Pick lanes dynamically from
+  `router --status` / `router --usage`, overriding `--lane` (or a priority list
+  like `mcode,devin-fast`), `--model`, `--effort`, and `--timeout` on the fly
+  (when omitted, each CLI uses its own user default). Optionally tag each slice
+  `fast` (`5m` timeout, prefers `devin-fast` / `mcode` / `devin-pro`, capped at
+  **4 parallel workers** per lease pool), standard (`8m` timeout), `heavy`
+  (`10m`), or `deep` (`15m`). Read-only `OBSERVE` defaults to `3m` (`--recon`).
 - **Exact build/test gate command** (e.g. `pytest -q`, `npm test`,
   `go test ./...`, `make test`)
 
@@ -87,8 +89,8 @@ Lock in the minimal concrete plan before touching any code:
    with the worker contract:
    *Observe first, modify only listed `files`, run `<DECIDE gate command>` before
    exiting, and end with a diff summary.*
-2. Execute the parallel worktree runner (`--jobs` up to `8`; `devin-fast`
-   `swe-2-flash-max` is automatically capped at `4` concurrent workers with spill
+2. Execute the parallel worktree runner (`--jobs` up to `8`; `devin-fast` and
+   `mcode` are automatically capped at `4` concurrent workers each with spill
    overflow):
    ```bash
    router .worktrees/tasks.json
@@ -128,12 +130,13 @@ Lock in the minimal concrete plan before touching any code:
 ## Composing with `router`
 
 `ooda` governs **engineering discipline** (when to explore vs. edit, how work is
-isolated, and what verification gates must pass). `router` governs
-**execution routing & token optimization** (`~/.local/state/ooda/quota.json` `v7`,
-active capped-lane draining, task-complexity model selection, parallel striping,
-and cross-model review: lightweight `mcode` M3.1-Flash first, max `4`
-parallel, then `devin-fast` -> `devin-pro` -> `grok` -> `mistral` -> `muse` ->
-`agy-opus` with the author family pushed to the back and never `devin-fusion`
-credits; 5h capped clocks auto-wake and drain `muse` / `grok` / `mistral` across
-single, parallel, deep, mismatch, and review modes). Use `ooda` together with `router` for multi-module work,
-or invoke `router` standalone for quick recon, single-shot tasks, and reviews.
+isolated, and what verification gates must pass). `router` governs **execution routing & dynamic lane selection**
+(`~/.local/state/ooda/quota.json` `v7`, active capped-lane draining, dynamic
+`--lane`/`--model`/`--effort` overrides from `agy` or CLI user defaults when
+omitted, parallel striping, and cross-model review: `mcode` first in `auto`,
+max `4` parallel, then `devin-fast` -> `devin-pro` -> `grok` -> `mistral` ->
+`muse` -> `agy-opus` with the author family pushed to the back and never
+`devin-fusion` credits; 5h capped clocks auto-wake and drain across single,
+parallel, deep, mismatch, and review modes). Use `ooda` together with `router`
+for multi-module work, or invoke `router` standalone for quick recon,
+single-shot tasks, and reviews.

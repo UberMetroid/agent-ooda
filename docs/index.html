@@ -495,7 +495,7 @@
             </li>
             <li class="hud-row">
               <span class="hud-stage">Observe / Recon</span>
-              <span class="hud-line"><span class="c-cyan">&#x280b; observe</span> &middot; swe-2-flash-max │ <span class="c-green">fleet 8/8</span></span>
+              <span class="hud-line"><span class="c-cyan">&#x280b; observe</span> &middot; devin-fast │ <span class="c-green">fleet 8/8</span></span>
             </li>
             <li class="hud-row">
               <span class="hud-stage">Orient / Decide</span>
@@ -503,11 +503,11 @@
             </li>
             <li class="hud-row">
               <span class="hud-stage">Parallel Act</span>
-              <span class="hud-line"><span class="c-green">&#x280b; act &times;2</span> &middot; claude-opus-5-5-high, grok-4.7 │ fleet 7/8</span>
+              <span class="hud-line"><span class="c-green">&#x280b; act &times;2</span> &middot; agy-opus, grok │ fleet 7/8</span>
             </li>
             <li class="hud-row">
               <span class="hud-stage">Cross-Model Verify</span>
-              <span class="hud-line"><span class="c-cyan">&#x280b; verify</span> &middot; MiniMax-M3.1-Flash │ fleet 7/8</span>
+              <span class="hud-line"><span class="c-cyan">&#x280b; verify</span> &middot; mcode │ fleet 7/8</span>
             </li>
           </ul>
         </div>
@@ -623,7 +623,7 @@
               <tr>
                 <th>Lane</th>
                 <th>CLI</th>
-                <th>Engine / Model</th>
+                <th>Model &amp; Effort</th>
                 <th>Tier &amp; Cycle</th>
                 <th>Parallelism &amp; Role</th>
               </tr>
@@ -632,56 +632,56 @@
               <tr>
                 <td><code>agy-opus</code></td>
                 <td><code>agy</code></td>
-                <td><code>claude-opus-5-5-high</code></td>
+                <td><code>CLI/user default (or --model/--effort)</code></td>
                 <td>capped &bull; 5h renewable</td>
-                <td>Default heavy coding &amp; deep architecture lead</td>
+                <td>Default capped coding lane &bull; 5h renewable pool</td>
               </tr>
               <tr>
                 <td><code>muse</code></td>
                 <td><code>muse</code></td>
-                <td><code>muse-ember-1.0</code></td>
+                <td><code>CLI/user default (or --model/--effort)</code></td>
                 <td>capped &bull; 5h renewable</td>
-                <td>2nd deep/heavy slot &amp; parallel stripe member</td>
+                <td>2nd capped slot &amp; parallel stripe member</td>
               </tr>
               <tr>
                 <td><code>grok</code></td>
                 <td><code>grok</code></td>
-                <td><code>grok-4.7</code></td>
+                <td><code>CLI/user default (or --model/--effort)</code></td>
                 <td>capped &bull; 5h renewable</td>
-                <td>3rd deep/heavy slot &amp; primary backup reviewer</td>
+                <td>3rd capped slot &amp; off-family backup reviewer</td>
               </tr>
               <tr>
                 <td><code>mistral</code></td>
                 <td><code>vibe</code></td>
-                <td><code>glm-5-3</code></td>
+                <td><code>CLI/user default (or --model)</code></td>
                 <td>capped &bull; 5h renewable</td>
-                <td>4th heavy/parallel stripe &amp; off-family reviewer</td>
+                <td>4th capped stripe &amp; off-family reviewer</td>
               </tr>
               <tr>
                 <td><code>mcode</code></td>
                 <td><code>mcode</code></td>
-                <td><code>MiniMax-M3.1-Flash</code></td>
+                <td><code>CLI/user default (or --model/--effort)</code></td>
                 <td>high-cap &bull; 5h renewable</td>
                 <td>Primary diff reviewer &bull; <strong>max 4 parallel</strong> (<code>flock</code>)</td>
               </tr>
               <tr>
                 <td><code>devin-fast</code></td>
                 <td><code>devin</code></td>
-                <td><code>swe-2-flash-max</code></td>
-                <td>free / unlimited</td>
+                <td><code>CLI/user default (or --model)</code></td>
+                <td>unlimited</td>
                 <td>Read-only recon (Observe) &bull; <strong>max 4 parallel</strong></td>
               </tr>
               <tr>
                 <td><code>devin-pro</code></td>
                 <td><code>devin</code></td>
-                <td><code>swe-2-max</code></td>
-                <td>free / unlimited</td>
+                <td><code>CLI/user default (or --model)</code></td>
+                <td>unlimited</td>
                 <td>Conserve-mode coder &amp; off-family backup reviewer</td>
               </tr>
               <tr>
                 <td><code>devin-fusion</code></td>
                 <td><code>devin</code></td>
-                <td><code>fusion(opus-5.5-hi+swe2)</code></td>
+                <td><code>CLI/user default (or --model)</code></td>
                 <td>paid credits (reserve)</td>
                 <td>Protected reserve when renewable/free lanes deplete</td>
               </tr>

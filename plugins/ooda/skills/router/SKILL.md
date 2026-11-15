@@ -2,58 +2,59 @@
 name: router
 description: >-
   Multi-agent token router and CLI dispatcher (`router` / `ooda`) for Antigravity
-  (agy). Use whenever dispatching coding, reconnaissance, debugging, test writing,
-  or code review to local agent CLIs (Antigravity Claude Opus 5.5 `agy-opus`,
-  Devin Fusion / SWE-2 Max / SWE-2 Flash Max, Muse Ember 1.0, MiniMax mcode
-  M3.1-Flash, xAI Grok 4.7, Mistral Vibe GLM-5.3) with automatic cycle reset
-  tracking, expiring-budget drain priority, credit-to-free fallback, and `--skill`
-  injection.
+  (agy). Dispatches coding, reconnaissance, debugging, test writing, and code
+  review to local agent CLIs (`agy`, `devin`, `muse`, `mcode`, `grok`, `vibe`)
+  without hardcoding models or efforts — each CLI uses its own default unless
+  dynamically overridden via `--lane` (single or comma-separated priority),
+  `--model`, `--effort`, or `--set-cycle`.
 ---
 
 # Router — Multi-Agent CLI Dispatcher & Cycle Tracker
 
-## Overview & Antigravity Conservation Strategy
+## Overview & Dynamic OODA Orchestration
 
-Antigravity's top-level Gemini orchestrator stays strictly thin (`<10%` of total
-token burn) for planning, verification, and synthesis. Offload heavy reading,
-implementation, test sweeps, and diff reviews to external CLIs and your separate
-Antigravity Claude pool via `router` (`~/.local/bin/router` ->
-`~/.gemini/config/plugins/ooda/bin/ooda`):
+Antigravity's top-level orchestrator stays thin (`<10%` of total token burn) for
+planning, live agent selection, verification, and synthesis. Rather than pinning
+static model names or effort levels in config, `agy` checks `router --status` /
+`router --usage` and adjusts routing on the fly — letting each CLI use its own
+user-configured default when omitted, or passing `--lane` (single lane or
+comma-separated priority like `--lane mcode,devin-fast`), `--model`, `--effort`,
+and `--timeout` per task:
 
-- **Broad exploration & reading (`--recon`):** Offload codebase sweeps to free
-  `devin-fast` (`swe-2-flash-max`) before pulling dozens of files into context.
-- **Hard coding & deep reasoning (`--task`):** Drain renewable `capped` 5h
-  cycles first — including your separate **Antigravity Claude 5.5 pool**
-  (`agy-opus`, `claude-opus-5-5-high`, exact JSON token tracking, protected by
-  `ROUTER_DEPTH` recursion guard) — then paid `devin-fusion` credits, auto-falling
-  back to free `devin-fast` / `devin-pro` / `muse`.
+- **Broad exploration & reading (`--recon`):** Offload read-only codebase sweeps
+  (prefers `devin-fast` -> `mcode` -> `devin-pro` in `auto`, or follow `--lane`)
+  before pulling dozens of files into context.
+- **Coding & reasoning (`--task`):** Drain renewable `capped` 5h cycles first
+  (`agy-opus`, `muse`, `grok`, `mistral`), keep paid `devin-fusion` credits in
+  reserve, and fall back seamlessly to `unlimited`/`high-cap` lanes (`devin-pro`,
+  `devin-fast`, `mcode`).
 - **Parallel multi-module work (`.worktrees/tasks.json`):** Stripe concurrent
-  subtasks across isolated git worktrees with per-task `--skill` guidance and
-  automatic cross-model diff review (lightweight `mcode` M3.1-Flash first).
-- **Independent code review (`--review`):** Run read-only `mcode`
-  (`minimax/MiniMax-M3.1-Flash`) over diffs instead of spending orchestrator
-  tokens on line-by-line review. Targeted working-tree diffs (`<= 8 KiB`) invoke
-  native `mcode exec review` (`--permission smart --max-steps 15`), while larger
-  (`> 8 KiB`) or committed diffs run a single-pass inline patch review
-  (`--mode lightweight --permission off --max-steps 4`), falling back
-  automatically to off-family backup lanes on cooldown, non-zero exit, or
-  `UNKNOWN` verdicts.
+  subtasks across isolated git worktrees with per-task `--skill` guidance,
+  optional per-task `lane`/`model`/`effort`, and automatic cross-model review.
+- **Independent code review (`--review`):** Run cross-model read-only diff
+  review (`mcode` first in `auto`, or pass `--lane`, `--model`, `--effort`).
+  Targeted working-tree diffs (`<= 8 KiB`) on `mcode` invoke native `mcode exec
+  review` (`--permission smart --max-steps 15`), while larger (`> 8 KiB`),
+  committed, or non-`mcode` diffs run a single-pass inline patch review,
+  falling back automatically across off-family backup lanes on cooldown,
+  non-zero exit, or `UNKNOWN` verdicts.
 
-## Configured Agent Fleet, Models & Effort Standards
+## Configured Agent Fleet & Dynamic Defaults
 
 Live quota state and cycle telemetry live outside git in
 `~/.local/state/ooda/quota.json` (`v7`, `$XDG_STATE_HOME/ooda` when set; overrideable via `AGENT_QUOTA_FILE`).
+All lanes default to `model: null` and `effort: null` so each CLI uses its own user default unless overridden at dispatch time (`--model`, `--effort`, `AGENT_MODEL`/`AGENT_EFFORT`) or persisted per pool (`--set-cycle`).
 
-| Lane | CLI | Default Model | Standard Effort | Tier | Cycle / Cap |
-|---|---|---|---|---|---|
-| `agy-opus` | `agy` | `claude-opus-5-5-high` | `high` | `capped` | `5h` |
-| `devin-fusion` | `devin` | `fusion-claude-opus-5-5-high-sidekick-swe-2-medium` | `high` (+ free `medium` sidekick) | `credits` | top-up |
-| `devin-pro` | `devin` | `swe-2-max` | `max` | `unlimited` | `1h` |
-| `devin-fast` | `devin` | `swe-2-flash-max` | `max` | `unlimited` | `1h` · max `4` parallel |
-| `muse` | `muse` | `muse-ember-1.0` | `high` (`xhigh` on `deep`) | `capped` | `5h` |
-| `mcode` | `mcode` | `minimax/MiniMax-M3.1-Flash` | `high` (review: native `15` steps ≤ 8 KiB, else `lightweight` `4` steps) | `high-cap` | `5h` · max `4` parallel |
-| `grok` | `grok` | `grok-4.7` | `high` (`xhigh` on `deep`) | `capped` | `5h` |
-| `mistral` | `vibe` | `glm-5-3` (`zai-glm-5-3`; `--model ml4` for `Mistral Large 4`) | `high` | `capped` | `5h` |
+| Lane | CLI | Model & Effort Default | Tier | Cycle / Cap |
+|---|---|---|---|---|
+| `agy-opus` | `agy` | CLI/user default (`--model` / `--effort` optional) | `capped` | `5h` |
+| `devin-fusion` | `devin` | CLI/user default (`--model` optional) | `credits` | top-up |
+| `devin-pro` | `devin` | CLI/user default (`--model` optional) | `unlimited` | `1h` |
+| `devin-fast` | `devin` | CLI/user default (`--model` optional) | `unlimited` | `1h` · max `4` parallel |
+| `muse` | `muse` | CLI/user default (`--model` / `--effort` optional) | `capped` | `5h` |
+| `mcode` | `mcode` | CLI/user default (`--model` / `--effort` optional) | `high-cap` | `5h` · max `4` parallel |
+| `grok` | `grok` | CLI/user default (`--model` / `--effort` optional) | `capped` | `5h` |
+| `mistral` | `vibe` | CLI/user default (`--model` optional) | `capped` | `5h` |
 
 ## E-M Fly-By-Wire Routing, Parallel Caps & Mismatch Pivoting
 
@@ -63,29 +64,26 @@ Live quota state and cycle telemetry live outside git in
 2. **Stall Protection (`CONSERVE` / $P_s < 0$ Guard):**
    - If `<= 1` `capped` lane remains active (none in `CORNER`) and the next
      cooldown wake is `> 45m` away, `CONSERVE` triggers: routine `act` work
-     spares `agy-opus` and paid `devin-fusion` by routing to free `devin-pro`
+     spares `agy-opus` and paid `devin-fusion` by routing to `devin-pro`
      -> `devin-fast` -> `mcode`, while `--complexity deep` / `heavy` still pulls
      full $G$ on `agy-opus`.
    - `fast` / `mechanical` / `tests` / `docs` / `recon` skips `credits`
-     (`devin-fusion`) and defers all `capped` lanes behind free `devin-fast` ->
+     (`devin-fusion`) and defers `capped` lanes behind `devin-fast` ->
      `mcode` -> `devin-pro`.
-   - `review` (cross-model backup order): `mcode` (`MiniMax-M3.1-Flash`,
-     native ≤ 8 KiB / single-pass inline otherwise) -> `devin-fast` ->
-     `devin-pro` -> `grok` -> `mistral` -> `muse` -> `agy-opus`. The author
-     lane's model family is pushed to the back
-     so a model never grades its own diff, and `devin-fusion` credits are never
-     spent on review. Busy (all slots leased), quota-/auth-failed, timed-out,
-     non-zero-exit, or `UNKNOWN`-verdict reviewers hand off to the next
-     off-family candidate automatically; `[P0-3]` findings always fail closed.
+   - `review` (cross-model backup order): `mcode` -> `devin-fast` -> `devin-pro`
+     -> `grok` -> `mistral` -> `muse` -> `agy-opus` (or any custom priority via
+     `--review --lane <lanes>`). The author lane's model family is pushed to the
+     back so a model never grades its own diff, and `devin-fusion` credits are
+     never spent on review. Busy, quota-/auth-failed, timed-out, non-zero-exit,
+     or `UNKNOWN`-verdict reviewers hand off automatically; `[P0-3]` findings
+     always fail closed.
 3. **Max-4 Parallel Caps on `devin-fast` and `mcode`:**
    Parallel manifests support up to `--jobs 8`, while cross-process `flock`
-   leases cap both `devin-fast` (`swe-2-flash-max`) and `mcode`
-   (`MiniMax-M3.1-Flash`) at `4` concurrent workers each (`max_parallel: 4`).
-   In `auto` mode, a 5th concurrent task or review automatically spills to
-   another free lane (or queues cleanly until a slot frees when the lane is
-   forced). Single-pass inline `mcode` reviews (`--mode lightweight
-   --permission off --max-steps 4`) keep the verify stage fast even with 4
-   parallel worktrees.
+   leases cap both `devin-fast` and `mcode` at `4` concurrent workers each
+   (`max_parallel: 4`). In `auto` mode, a 5th concurrent task or review spills
+   to another free lane (or queues cleanly when the lane is forced). Single-pass
+   inline `mcode` reviews keep the verify stage fast even across 4 parallel
+   worktrees.
 4. **Fast-Transient Timeouts & Cross-Model Mismatch Pivoting:**
    - Default timeouts scale by OODA regime (`3m` `observe`, `5m` `fast`, `8m`
      `act`, `10m` `heavy`, `15m` `deep`, `4m` `verify`; override via `--timeout`).

@@ -52,8 +52,6 @@ def _migrate_provider(name, info, tmpl, old_version, legacy_updated):
             changed = True
     if old_version < QUOTA_SCHEMA_VERSION:
         upgrades = (
-            (name == "mistral" and info.get("model") in (None, "", "default"),
-             {"model": "glm-5-3", "role": tmpl["role"]}),
             (name == "mcode" and info.get("tier") == "unlimited", {"tier": "high-cap"}),
             (name == "muse" and info.get("tier") == "unlimited", {"tier": "capped"}),
             (name == "devin-fast" and info.get("max_parallel") is None,
@@ -173,10 +171,31 @@ def read_and_prep_unlocked(path):
     return data
 
 
+import contextlib
+import fcntl
+import os
+
+
+@contextlib.contextmanager
+def quota_lock(quota_path=None):
+    """Acquire thread lock + cross-process flock on quota.lock around quota.json I/O."""
+    path = quota_file_path(quota_path)
+    lock_path = path.with_suffix(".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with QUOTA_LOCK:
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+        with os.fdopen(fd, "a+", encoding="utf-8") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield path
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
 def load_quota(quota_path=None):
     """Load quota.json (seeding if absent), migrate, expire lapsed cycles, and persist."""
     path = quota_file_path(quota_path)
-    with QUOTA_LOCK:
+    with quota_lock(path):
         if not path.is_file():
             data = read_and_prep_unlocked(path)
             save_quota_unlocked(data, path)

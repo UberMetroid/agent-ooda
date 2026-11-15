@@ -4,10 +4,9 @@ from datetime import datetime, timedelta, timezone
 import subprocess
 import sys
 
-from .lane_catalog import QUOTA_LOCK
 from .locate_cli import format_local_iso, now_iso, parse_iso_utc, resolve_cli, run
 from .model_aliases import extract_reset_timestamp, normalize_lane, normalize_model_for_provider
-from .quota_state import load_quota, read_and_prep_unlocked, save_quota_unlocked
+from .quota_state import load_quota, quota_lock, read_and_prep_unlocked, save_quota_unlocked
 from .runtime_paths import quota_file_path
 
 
@@ -45,7 +44,7 @@ def set_provider_status(
     path = quota_file_path(quota_path)
     canon = normalize_lane(provider_name, allow_auto=False)
     load_quota(path)
-    with QUOTA_LOCK:
+    with quota_lock(path):
         data = read_and_prep_unlocked(path)
         providers = data.setdefault("providers", {})
         if canon not in providers:
@@ -83,7 +82,7 @@ def mark_provider_cooldown(
     """Put a provider into cooldown using server reset timestamps or cycle schedule."""
     path = quota_file_path(quota_path)
     canon = normalize_lane(provider_name, allow_auto=False)
-    with QUOTA_LOCK:
+    with quota_lock(path):
         data = read_and_prep_unlocked(path)
         entry = data["providers"][canon]
         now_local = datetime.now().astimezone()
@@ -103,7 +102,7 @@ def record_usage(provider_name, prompt, output, export_info=None, quota_path=Non
     path = quota_file_path(quota_path)
     canon = normalize_lane(provider_name, allow_auto=False)
     export_info = export_info or {}
-    with QUOTA_LOCK:
+    with quota_lock(path):
         data = read_and_prep_unlocked(path)
         entry = (data.get("providers") or {}).get(canon)
         if entry is None:
@@ -148,7 +147,7 @@ def configure_cycle(
     """Update cycle length, budgets, concurrency cap, effort/model defaults, or reset now."""
     path = quota_file_path(quota_path)
     canon = normalize_lane(provider_name, allow_auto=False)
-    with QUOTA_LOCK:
+    with quota_lock(path):
         data = read_and_prep_unlocked(path)
         providers = data.setdefault("providers", {})
         if canon not in providers:

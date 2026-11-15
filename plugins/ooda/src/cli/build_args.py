@@ -11,7 +11,7 @@ def _add_execution_flags(ap):
     """Register worker routing, model, effort, timeout, and review-toggle flags."""
     ap.add_argument(
         "--lane", default="auto",
-        help="worker lane (auto, agy-opus, devin-fusion, devin-pro, devin-fast, muse, mcode, grok, mistral)",
+        help="worker lane or comma-separated priority list (e.g. auto, mcode,devin-fast, agy-opus, muse)",
     )
     ap.add_argument("--exclude-lane", dest="exclude_lanes", action="append", default=[],
                     help="comma-separated lane(s) to exclude (e.g. after a failed OODA loop)")
@@ -19,11 +19,11 @@ def _add_execution_flags(ap):
                     help="disable automatic cross-model mismatch pivot on crash/timeout/reject")
     ap.add_argument("--model", default=None, help="override worker model id (or set with --set-cycle)")
     ap.add_argument("--effort", default=None,
-                    help="reasoning effort override (default: provider standard; auto-bumps muse/grok on deep)")
+                    help="reasoning effort override (default: CLI/user default unless overridden)")
     ap.add_argument("--timeout", default=None,
                     help="per-task timeout override (default: fast-transient 3m observe, 5m fast, 8m act, 10m heavy, 15m deep)")
     ap.add_argument("--no-review", action="store_true",
-                    help="skip automatic post-worker M3.1-Flash code review")
+                    help="skip automatic post-worker cross-model code review")
 
 
 def _add_quota_flags(ap):
@@ -55,13 +55,13 @@ def build_parser():
     ap = argparse.ArgumentParser(
         prog=prog,
         description="Multi-agent token router, single-shot OODA observe/act dispatcher, "
-                    "parallel worktree runner, cycle tracker, and M3.1-Flash auto-reviewer.",
+                    "parallel worktree runner, cycle tracker, and cross-model auto-reviewer.",
     )
     ap.add_argument("manifest", nargs="?", help="JSON manifest path ([], {tasks: []}, or {subtasks: []})")
     ap.add_argument("--recon", metavar="PROMPT", default=None,
                     help="run a read-only reconnaissance query in CWD and print findings")
     ap.add_argument("--task", metavar="PROMPT", default=None,
-                    help="run a single coding task directly in CWD (plus M3.1 review unless --no-review)")
+                    help="run a single coding task directly in CWD (plus cross-model review unless --no-review)")
     ap.add_argument("--files", action="append", default=[],
                     help="comma-separated files in scope for --task or --recon (repeatable)")
     ap.add_argument("--skill", "--skills", dest="skills", action="append", default=[],
@@ -74,7 +74,7 @@ def build_parser():
                     help="disable round-robin provider striping across parallel auto manifest tasks")
     _add_execution_flags(ap)
     ap.add_argument("--review", nargs="?", const=".", default=None, metavar="PATH",
-                    help="run standalone read-only M3.1-Flash code review on PATH (default CWD) and exit")
+                    help="run standalone read-only cross-model code review on PATH (default CWD) and exit")
     ap.add_argument("--status", action="store_true",
                     help="show agent quota state, local CLI readiness, reset timers, and routing order")
     ap.add_argument("--usage", action="store_true",

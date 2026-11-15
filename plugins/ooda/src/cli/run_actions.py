@@ -8,29 +8,44 @@ import sys
 from dispatch import execute_once, hud_review_hooks, run_task_with_fallback
 from envelope import clear_mismatch, load_recent_mismatch, record_mismatch
 from fleet import (
-    ID_RE, RECON_PREFIX, REVIEW_MODEL, normalize_lane, parse_timeout, repo_root,
+    ID_RE, RECON_PREFIX, REVIEW_TIMEOUT, normalize_lane, parse_lanes, parse_timeout, repo_root,
     run, slots_root_path, try_repo_root,
 )
 from verify import collect_diff_context, run_mcode_review
-from worktree import changed_files_in, ensure_slot, find_scope_violations, parse_csv_arg, parse_files_arg
+from worktree import (
+    changed_files_in, dirty_state, ensure_slot, find_scope_violations, parse_csv_arg,
+    parse_files_arg,
+)
 
 
-def do_standalone_review(target_arg):
-    """Run standalone cross-model code review (mcode lightweight first) against a directory."""
+def do_standalone_review(target_arg, args=None):
+    """Run standalone cross-model code review against a directory (honors routing flags)."""
     target = Path(target_arg or ".").expanduser().resolve()
     if not target.is_dir():
         sys.stderr.write(f"error: review target is not a directory: {target}\n")
         return 2
+    req_lane = (args.lane if args and args.lane else "auto")
+    parse_lanes(req_lane, allow_auto=True)
+    cli_excluded = (
+        [normalize_lane(x, allow_auto=False) for x in parse_csv_arg(args.exclude_lanes)]
+        if args else []
+    )
+    timeout = parse_timeout(args.timeout) if (args and args.timeout is not None) else REVIEW_TIMEOUT
     root = repo_root(target)
     slot = ensure_slot("review-standalone")
     diff_ctx = collect_diff_context(root, include_last_commit_fallback=True)
     if not diff_ctx["has_changes"]:
         print(f"No uncommitted changes or commit diff found to review in {root}.")
         return 0
-    print(f"Reviewing {diff_ctx['source']} in {root} (cross-model, {REVIEW_MODEL} first)...")
+    print(f"Reviewing {diff_ctx['source']} in {root} (cross-model, lane={req_lane})...")
     on_start, on_finish = hud_review_hooks()
-    res = run_mcode_review(root, slot, diff_ctx, on_start=on_start, on_finish=on_finish,
-                           runner=execute_once)
+    res = run_mcode_review(
+        root, slot, diff_ctx, timeout=timeout, on_start=on_start, on_finish=on_finish,
+        exclude_lanes=cli_excluded, requested_lane=req_lane,
+        model_override=(args.model if args else None),
+        effort_override=(args.effort if args else None),
+        runner=execute_once,
+    )
     if res["verdict"] == "SKIPPED" and res["exit_code"] is None and not res.get("lane"):
         sys.stderr.write(f"error: no review provider available ({res.get('reason')})\n")
         return 2
@@ -43,7 +58,7 @@ def do_standalone_review(target_arg):
 
 def do_recon(args):
     """Execute a read-only reconnaissance query in CWD without creating worktrees."""
-    normalize_lane(args.lane, allow_auto=True)
+    parse_lanes(args.lane, allow_auto=True)
     if args.timeout is not None:
         parse_timeout(args.timeout)
     cli_excluded = [normalize_lane(x, allow_auto=False) for x in parse_csv_arg(args.exclude_lanes)]
@@ -68,11 +83,12 @@ def do_recon(args):
     return code if isinstance(code, int) and code >= 0 else 1
 
 
-def _review_and_track(args, exec_res, target_dir, files):
+def _review_and_track(args, exec_res, target_dir, files, baseline=None):
     """Scope-check + cross-model review the CWD diff, then record or clear the mismatch log."""
     review_verdict = None
+    violations = []
     if try_repo_root(target_dir) is not None:
-        changed = changed_files_in(target_dir)
+        changed = changed_files_in(target_dir, baseline=baseline)
         violations = find_scope_violations(changed, files)
         if violations:
             print(f"SCOPE VIOLATIONS: {', '.join(violations)}")
@@ -93,21 +109,26 @@ def _review_and_track(args, exec_res, target_dir, files):
         print("note: skipped cross-model diff review (working directory is not a git repository)")
     if exec_res["exit_code"] != 0:
         record_mismatch(target_dir, files, exec_res.get("lane"), f"exited {exec_res['exit_code']}")
+    elif violations:
+        record_mismatch(target_dir, files, exec_res.get("lane"), f"violated scope: {', '.join(violations)}")
     elif review_verdict == "REJECT":
         record_mismatch(target_dir, files, exec_res.get("lane"), "was REJECTED by verify")
     else:
         clear_mismatch(target_dir, files)
+    return bool(violations) or review_verdict == "REJECT"
 
 
 def do_single_task(args):
-    """Execute a single coding task directly in CWD with optional scope check & M3.1 review."""
-    canon_req = normalize_lane(args.lane, allow_auto=True)
+    """Execute a single coding task directly in CWD with optional scope check & verify."""
+    req_lanes = parse_lanes(args.lane, allow_auto=True)
+    canon_req = "auto" if req_lanes == ["auto"] else ",".join(req_lanes)
     if args.timeout is not None:
         parse_timeout(args.timeout)
     cli_excluded = [normalize_lane(x, allow_auto=False) for x in parse_csv_arg(args.exclude_lanes)]
     target_dir = Path.cwd()
     slot = ensure_slot("task")
     files = parse_files_arg(args.files)
+    baseline = dirty_state(target_dir) if try_repo_root(target_dir) is not None else None
     avoid_families = set()
     if canon_req == "auto" and not args.no_pivot:
         mm = load_recent_mismatch(target_dir, files)
@@ -133,9 +154,11 @@ def do_single_task(args):
         print(f"routing note: {exec_res['fallback_from']}")
     if exec_res["output"]:
         print(exec_res["output"])
-    _review_and_track(args, exec_res, target_dir, files)
+    review_failed = _review_and_track(args, exec_res, target_dir, files, baseline=baseline)
     code = exec_res["exit_code"]
-    return code if isinstance(code, int) and code >= 0 else 1
+    if isinstance(code, int) and code != 0:
+        return code if code > 0 else 1
+    return 1 if review_failed else 0
 
 
 def _result_ids(results_file):

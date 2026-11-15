@@ -14,7 +14,7 @@ MCODE_MAX_PARALLEL = 4
 REVIEW_MODEL = (
     os.environ.get("AGENT_REVIEW_MODEL")
     or os.environ.get("OODA_REVIEW_MODEL")
-    or "minimax/MiniMax-M3.1-Flash"
+    or "cli-default"
 )
 DEFAULT_AGY_OPUS_MODEL = "claude-opus-5-5-high"
 DEFAULT_FUSION_MODEL = "fusion-claude-opus-5-5-high-sidekick-swe-2-medium"
@@ -123,37 +123,36 @@ QUOTA_LOCK = threading.Lock()
 # name -> (cli, model, effort, tier, cycle_hours, max_parallel, role)
 PROVIDER_SPECS = {
     "agy-opus": (
-        "agy", DEFAULT_AGY_OPUS_MODEL, "high", "capped", 5.0, None,
-        "Antigravity Claude Pool (Claude Opus 5.5 High) — separate 5h quota pool",
+        "agy", None, None, "capped", 5.0, None,
+        "Antigravity agent pool (separate 5h quota pool; uses CLI default unless overridden)",
     ),
     "devin-fusion": (
-        "devin", DEFAULT_FUSION_MODEL, "high", "credits", None, None,
-        "Devin Fusion (Claude Opus 5.5 High + Free SWE-2 Medium sidekick) — paid credits",
+        "devin", None, None, "credits", None, None,
+        "Devin Fusion pool (paid credits; uses CLI default unless overridden)",
     ),
     "devin-pro": (
-        "devin", "swe-2-max", "max", "unlimited", 1.0, None,
-        "Heavy multi-file implementation, complex bugs, refactors (SWE-2 Max, Free)",
+        "devin", None, None, "unlimited", 1.0, None,
+        "Heavy multi-file implementation, complex bugs, refactors (Devin Pro pool)",
     ),
     "devin-fast": (
-        "devin", "swe-2-flash-max", "max", "unlimited", 1.0, DEVIN_FAST_MAX_PARALLEL,
-        "Fast mechanical sweeps, tests, boilerplate, read-only recon "
-        "(SWE-2 Flash Max, Free, max 4 parallel)",
+        "devin", None, None, "unlimited", 1.0, DEVIN_FAST_MAX_PARALLEL,
+        "Fast mechanical sweeps, tests, boilerplate, read-only recon (max 4 parallel)",
     ),
     "muse": (
-        "muse", "muse-ember-1.0", "high", "capped", 5.0, None,
-        "Deep reasoning, architecture, second-opinion implementation (Muse Ember 1.0)",
+        "muse", None, None, "capped", 5.0, None,
+        "Deep reasoning, architecture, second-opinion implementation (Muse pool)",
     ),
     "mcode": (
-        "mcode", REVIEW_MODEL, "high", "high-cap", 5.0, MCODE_MAX_PARALLEL,
-        "M3.1-Flash primary code review + fast parallel coding & recon (5h cap, max 4 parallel)",
+        "mcode", None, None, "high-cap", 5.0, MCODE_MAX_PARALLEL,
+        "Primary code review + fast parallel coding & recon (5h cap, max 4 parallel)",
     ),
     "grok": (
-        "grok", "grok-4.7", "high", "capped", 5.0, None,
-        "xAI Grok Build agent (Grok 4.7)",
+        "grok", None, None, "capped", 5.0, None,
+        "xAI Grok Build coding agent (Grok pool)",
     ),
     "mistral": (
-        "vibe", "glm-5-3", "high", "capped", 5.0, None,
-        "Mistral Vibe agent (GLM-5.3 High)",
+        "vibe", None, None, "capped", 5.0, None,
+        "Mistral Vibe coding agent (Mistral pool)",
     ),
 }
 

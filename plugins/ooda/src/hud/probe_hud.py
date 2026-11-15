@@ -144,8 +144,8 @@ def load_fleet_summary():
     code_lane = next((c for c in chain if c in active_set), "none")
     if code_lane == "none" and active_set:
         code_lane = next(iter(active_set))
-    code_eff = str((providers.get(code_lane) or {}).get("effort") or "high")
+    code_eff = str((providers.get(code_lane) or {}).get("effort") or "default")
     fast_lane = next((c for c in FAST_CHAIN if c in active_set), "none")
-    fast_eff = str((providers.get(fast_lane) or {}).get("effort") or "max")
+    fast_eff = str((providers.get(fast_lane) or {}).get("effort") or "default")
     wake_cd = format_cd(soonest_wake_s) if soonest_wake_s is not None else None
     return len(active_set), len(providers), wake_cd, code_lane, code_eff, fast_lane, fast_eff

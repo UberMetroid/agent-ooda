@@ -6,7 +6,7 @@ import posixpath
 from pathlib import Path
 import sys
 
-from fleet import ID_RE, normalize_lane, parse_timeout
+from fleet import ID_RE, normalize_lane, parse_lanes, parse_timeout
 
 _IGNORED_CACHE_DIRS = (".pytest_cache", ".ruff_cache", ".mypy_cache")
 _TASK_SHAPE_ERROR = (
@@ -72,7 +72,7 @@ def _validate_task(t, seen_ids, file_owners):
         sys.exit(2)
     seen_ids.add(tid)
     if t.get("lane") is not None:
-        normalize_lane(t["lane"], allow_auto=True)
+        parse_lanes(t["lane"], allow_auto=True)
     if t.get("timeout") is not None:
         parse_timeout(t["timeout"])
     for key in ("skills", "exclude_lanes", "files"):
@@ -86,12 +86,22 @@ def _validate_task(t, seen_ids, file_owners):
         if not norm:
             sys.stderr.write(f"error: task {tid} file path {f!r} must point to a file or subdir\n")
             sys.exit(2)
-        prev = file_owners.get(norm)
-        if prev and prev != tid:
-            sys.stderr.write(
-                f"error: overlapping file {norm!r} declared by tasks {prev!r} and {tid!r}\n"
+        for prev_path, prev_tid in file_owners.items():
+            if prev_tid == tid:
+                continue
+            overlap = (
+                norm == prev_path
+                or norm == "."
+                or prev_path == "."
+                or norm.startswith(prev_path.rstrip("/") + "/")
+                or prev_path.startswith(norm.rstrip("/") + "/")
             )
-            sys.exit(2)
+            if overlap:
+                sys.stderr.write(
+                    f"error: overlapping file {norm!r} "
+                    f"(conflicts with {prev_path!r} in task {prev_tid!r})\n"
+                )
+                sys.exit(2)
         file_owners[norm] = tid
 
 

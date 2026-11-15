@@ -1,10 +1,9 @@
 """Calibrated cross-model read-only diff review with off-family fallback.
 
-Small working-tree diffs (<= NATIVE_REVIEW_MAX_BYTES) run mcode M3.1-Flash's native
-``mcode exec review`` (15 steps); larger or committed diffs run a single-pass inline
-patch review (``--mode lightweight --permission off --max-steps 4``). Timeouts,
-non-zero exits, or UNKNOWN verdicts cascade across off-family backup reviewers;
-[P0-3] findings and REJECT verdicts always fail closed.
+Small working-tree diffs (<= NATIVE_REVIEW_MAX_BYTES) run native review when on the mcode
+lane; larger or committed diffs run a single-pass inline patch review. Timeouts, non-zero
+exits, or UNKNOWN verdicts cascade across off-family backup reviewers; [P0-3] findings and
+REJECT verdicts always fail closed. Model and effort defer to CLI defaults unless overridden.
 """
 
 import re
@@ -21,9 +20,12 @@ from fleet import (
     is_quota_error,
     load_quota,
     mark_provider_cooldown,
+    normalize_model_for_provider,
     now_iso,
+    parse_lanes,
     record_usage,
     release_parallel_lease,
+    resolve_effort,
 )
 
 NATIVE_REVIEW_MAX_BYTES = 8192
@@ -142,15 +144,18 @@ def _acquire_review_lease(provider_name, info, quota, tried, avoid, timeout, log
 
 def _invoke_reviewer(ctx, provider_name, info, cli_path, lease):
     """Run one review attempt with banner + HUD hooks; always releases the lease."""
-    model = REVIEW_MODEL if provider_name == "mcode" else info["model"]
-    effort = info.get("effort") or "high"
+    raw_model = ctx.get("model_override") or info.get("model")
+    if provider_name == "mcode" and not raw_model and REVIEW_MODEL != "cli-default":
+        raw_model = REVIEW_MODEL
+    model = normalize_model_for_provider(provider_name, raw_model)
+    effort = resolve_effort(provider_name, info, ctx.get("effort_override"), "review")
     slot, target_dir, timeout = ctx["slot"], ctx["target_dir"], ctx["timeout"]
     task_id = f"review-{slot.name}"
     log_stream = ctx["log_stream"]
     if log_stream is not None:
-        short = str(model).rsplit("/", 1)[-1]
+        short = str(model or "default").rsplit("/", 1)[-1]
         log_stream.write(f"▸ [OODA:ACT verify] agent={provider_name} ({info['cli']}:{short}) "
-                         f"| effort={effort}\n")
+                         f"| effort={effort or 'default'}\n")
         log_stream.flush()
     marker, rev_exit, start = None, -1, time.time()
     try:
@@ -176,6 +181,7 @@ def run_mcode_review(
     target_dir, slot, diff_ctx, scope_violations=None, declared_files=None,
     timeout=REVIEW_TIMEOUT, log_stream=sys.stdout, on_start=None, on_finish=None,
     author_lane=None, exclude_lanes=None, runner=None,
+    requested_lane="auto", model_override=None, effort_override=None,
 ):
     """Read-only cross-model review: calibrated mcode first, then off-family fallback reviewers."""
     if runner is None:
@@ -190,11 +196,13 @@ def run_mcode_review(
     )
     ctx = {"slot": slot, "target_dir": target_dir, "timeout": timeout, "log_stream": log_stream,
            "on_start": on_start, "on_finish": on_finish, "runner": runner, "prompt": prompt,
-           "native_eligible": native_eligible, "scope_note": scope_note}
+           "native_eligible": native_eligible, "scope_note": scope_note,
+           "requested_lane": requested_lane, "model_override": model_override,
+           "effort_override": effort_override}
     while True:
         quota = load_quota()
         provider_name, info, cli_path, skipped = select_provider(
-            "auto", "review", quota, exclude=tried, avoid_families=avoid)
+            requested_lane, "review", quota, exclude=tried, avoid_families=avoid)
         if provider_name is None:
             return _skipped(skipped or "no review provider available")
         lease, retry = _acquire_review_lease(provider_name, info, quota, tried, avoid, timeout,

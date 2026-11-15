@@ -24,16 +24,18 @@ The design borrows two ideas from fighter pilot and strategist **Col. John Boyd*
 
 ## The 8-lane fleet
 
-| Lane | Engine | Tier / clock |
+| Lane | Engine / CLI | Tier / clock |
 | --- | --- | --- |
-| `agy-opus` | Antigravity Claude Opus 5.5 High | capped, 5h renewable |
-| `devin-fusion` | Devin Fusion (Opus 5.5 + SWE-2 sidekick) | paid credits (reserve) |
-| `devin-pro` | SWE-2 Max | free |
-| `devin-fast` | SWE-2 Flash Max | free, **max 4 parallel** |
-| `mcode` | MiniMax M3.1-Flash (primary reviewer) | high-cap 5h, **max 4 parallel** |
-| `muse` | Muse Ember 1.0 | capped, 5h renewable |
-| `grok` | xAI Grok 4.7 | capped, 5h renewable |
-| `mistral` | Mistral Vibe GLM-5.3 | capped, 5h renewable |
+| `agy-opus` | Antigravity CLI (`agy`) | capped, 5h renewable |
+| `devin-fusion` | Devin Fusion pool (`devin`) | paid credits (reserve) |
+| `devin-pro` | Devin Pro pool (`devin`) | unlimited / free pool |
+| `devin-fast` | Devin Fast pool (`devin`) | unlimited, **max 4 parallel** |
+| `mcode` | MiniMax mcode CLI (primary reviewer) | high-cap 5h, **max 4 parallel** |
+| `muse` | Muse CLI (`muse`) | capped, 5h renewable |
+| `grok` | xAI Grok CLI (`grok`) | capped, 5h renewable |
+| `mistral` | Mistral Vibe CLI (`vibe`) | capped, 5h renewable |
+
+Model IDs and reasoning efforts are **not hardcoded**: each CLI uses its own user-configured default unless `agy` (or a `--model`/`--effort`/`--set-cycle` override) sets them on the fly, and `--lane a,b` overrides priority dynamically.
 
 **How the clocks are spent.** Each capped lane runs on a 5h renewable cycle.
 Quota errors (HTTP 429, server reset timestamps) put a lane into cooldown, and

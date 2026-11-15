@@ -1,5 +1,6 @@
 """Per-task git worktree isolation, change detection, and scope enforcement."""
 
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -51,20 +52,39 @@ def ensure_worktree(root, task_id):
     return path, branch
 
 
-def changed_files_in(worktree):
+def dirty_state(worktree):
+    """Fingerprint modified/staged/untracked files to detect changes over a dirty baseline."""
+    wt = Path(worktree)
+    snap = {}
+    for rel in changed_files_in(wt):
+        target = wt / rel
+        if target.is_symlink():
+            snap[rel] = f"link:{os.readlink(target)}"
+        elif target.is_file():
+            snap[rel] = hashlib.sha256(target.read_bytes()).hexdigest()
+        else:
+            snap[rel] = "missing"
+    return snap
+
+
+def changed_files_in(worktree, baseline=None):
     """Return sorted relative paths of modified, staged, or untracked files."""
+    if baseline is not None:
+        now = dirty_state(worktree)
+        return sorted(rel for rel, sig in now.items() if baseline.get(rel) != sig)
     files = set()
     queries = (
-        ["git", "diff", "--name-only", "HEAD", "--", "."],
-        ["git", "ls-files", "--others", "--exclude-standard", "--", "."],
+        ["git", "diff", "-z", "--name-only", "HEAD", "--", "."],
+        ["git", "diff", "-z", "--cached", "--name-only", "--", "."],
+        ["git", "ls-files", "-z", "--others", "--exclude-standard", "--", "."],
     )
     for argv in queries:
         p = run(argv, cwd=worktree, timeout=_GIT_TIMEOUT)
         if p.returncode != 0:
             continue
-        for line in p.stdout.splitlines():
-            if line.strip():
-                rel = normalize_rel_path(line)
+        for entry in p.stdout.split("\0"):
+            if entry:
+                rel = normalize_rel_path(entry)
                 if not is_ignored_worktree_artifact(rel):
                     files.add(rel)
     return sorted(files)

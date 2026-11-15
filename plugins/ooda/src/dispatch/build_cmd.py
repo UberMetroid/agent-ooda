@@ -6,7 +6,6 @@ import subprocess
 import time
 
 from fleet import (
-    DEFAULT_AGY_OPUS_MODEL,
     GROK_EFFORT_MAP,
     MCODE_EFFORT_MAP,
     MUSE_VALID_EFFORTS,
@@ -25,63 +24,83 @@ OUTPUT_TAIL = 20000
 
 
 def _agy_cmd(cli, model, effort, ctx):
-    """agy-opus: strip ANTIGRAVITY_* env, accept-edits JSON headless run scoped to worktree."""
+    """agy: strip ANTIGRAVITY_* env, plan/sandbox when read-only else accept-edits JSON."""
     for key in [k for k in ctx["env"] if k.startswith("ANTIGRAVITY_")]:
         ctx["env"].pop(key, None)
-    agy_model = model or DEFAULT_AGY_OPUS_MODEL
-    eff_key = str(effort or "high").lower()
-    if eff_key in ("low", "medium") and agy_model.endswith("-high"):
-        agy_model = agy_model[:-5] + f"-{eff_key}"
+    ro = bool(ctx["read_only"] or ctx.get("review_mode"))
     ctx["meta"]["parse_agy_json"] = True
-    return [cli, "-p", ctx["prompt"], "--model", agy_model, "--mode", "accept-edits",
-            "--dangerously-skip-permissions", "--disable-slash-commands",
-            "--output-format", "json", "--add-dir", str(ctx["worktree"])]
+    cmd = [cli, "-p", ctx["prompt"]]
+    if model and model != "default":
+        cmd += ["--model", model]
+    if effort:
+        cmd += ["--effort", str(effort).lower()]
+    mode_args = ["--mode", "plan", "--sandbox"] if ro else [
+        "--mode", "accept-edits", "--dangerously-skip-permissions",
+    ]
+    return cmd + mode_args + [
+        "--disable-slash-commands", "--output-format", "json", "--add-dir", str(ctx["worktree"]),
+    ]
 
 
 def _devin_cmd(cli, model, effort, ctx):
-    """devin-*: prompt-file driven; inherits env untouched (never overrides MINIMAX_DATA_DIR)."""
-    perm_mode = "auto" if ctx["read_only"] else "smart"
-    return [cli, "--model", model, "--permission-mode", perm_mode,
-            "--respect-workspace-trust", "false", "--prompt-file", str(ctx["prompt_file"]), "-p"]
+    """devin: prompt-file driven; inherits env untouched (never overrides MINIMAX_DATA_DIR)."""
+    ro = bool(ctx["read_only"] or ctx.get("review_mode"))
+    perm_mode = "auto" if ro else "smart"
+    mod_args = ["--model", model] if model and model != "default" else []
+    return [cli] + mod_args + [
+        "--permission-mode", perm_mode, "--respect-workspace-trust", "false",
+        "--prompt-file", str(ctx["prompt_file"]), "-p",
+    ]
 
 
 def _mcode_cmd(cli, model, effort, ctx):
     """mcode: native exec review, single-pass inline patch review, or scoped --file exec run."""
-    mcode_effort = MCODE_EFFORT_MAP.get(str(effort or "high").lower(), "high")
+    ro = bool(ctx["read_only"] or ctx.get("review_mode"))
+    mod_args = ["--model", model] if model and model != "default" else []
+    mcode_effort = MCODE_EFFORT_MAP.get(str(effort).lower(), "high") if effort else None
+    eff_args = ["--effort", mcode_effort] if mcode_effort else []
     if ctx.get("review_mode") == "native":
         # mcode exec review requires --permission smart to inspect local git diff/status;
         # the appended system prompt forbids edits, state-mutating commands, and broad crawling.
         extra = ["--append-system-prompt", ctx["prompt"]] if ctx["prompt"] else []
-        return [cli, "exec", "review", "--cwd", str(ctx["worktree"]), "--model", model,
-                "--effort", mcode_effort, "--permission", "smart", "--max-steps", "15",
-                "--output-format", "text"] + extra
+        return [cli, "exec", "review", "--cwd", str(ctx["worktree"])] + mod_args + eff_args + [
+            "--permission", "smart", "--max-steps", "15", "--output-format", "text",
+        ] + extra
     if ctx.get("review_mode"):
-        return [cli, "exec", "--cwd", str(ctx["worktree"]), "--model", model,
-                "--effort", mcode_effort, "--mode", "lightweight", "--permission", "off",
-                "--max-steps", "4", "--output-format", "text", ctx["prompt"]]
+        return [cli, "exec", "--cwd", str(ctx["worktree"])] + mod_args + eff_args + [
+            "--mode", "lightweight", "--permission", "off", "--max-steps", "4",
+            "--output-format", "text", ctx["prompt"],
+        ]
     file_args = []
     for path_str in safe_worktree_files(ctx["files"], ctx["worktree"]):
         file_args += ["--file", path_str]
-    perm = "smart" if ctx["read_only"] else "full"
-    return [cli, "exec", "--cwd", str(ctx["worktree"]), "--model", model, "--effort", mcode_effort,
-            "--permission", perm, "--prompt-mode", "coding", "--output-format", "text",
-            ] + file_args + [ctx["prompt"]]
+    perm = "smart" if ro else "full"
+    return [cli, "exec", "--cwd", str(ctx["worktree"])] + mod_args + eff_args + [
+        "--permission", perm, "--prompt-mode", "coding", "--output-format", "text",
+    ] + file_args + [ctx["prompt"]]
 
 
 def _grok_cmd(cli, model, effort, ctx):
-    """grok: bypassPermissions prompt-file run with mapped reasoning effort."""
-    grok_effort = GROK_EFFORT_MAP.get(str(effort or "high").lower(), "high")
-    return [cli, "--cwd", str(ctx["worktree"]), "--model", model, "--reasoning-effort", grok_effort,
-            "--permission-mode", "bypassPermissions", "--prompt-file", str(ctx["prompt_file"])]
+    """grok: plan mode when read-only else bypassPermissions prompt-file run."""
+    ro = bool(ctx["read_only"] or ctx.get("review_mode"))
+    perm_mode = "plan" if ro else "bypassPermissions"
+    cmd = [cli, "--cwd", str(ctx["worktree"]), "--permission-mode", perm_mode,
+           "--prompt-file", str(ctx["prompt_file"])]
+    if model and model != "default":
+        cmd += ["--model", model]
+    if effort:
+        cmd += ["--reasoning-effort", GROK_EFFORT_MAP.get(str(effort).lower(), "high")]
+    return cmd
 
 
 def _mistral_cmd(cli, model, effort, ctx):
     """mistral vibe: trusted workdir run exporting usage JSON into a fresh slot directory."""
+    ro = bool(ctx["read_only"] or ctx.get("review_mode"))
     export_dir = ctx["slot"] / f"vibe-export-{ctx['safe_tid']}"
     if export_dir.exists():
         shutil.rmtree(export_dir, ignore_errors=True)
     cmd = [cli, "--workdir", str(ctx["worktree"]), "--trust",
-           "--smart-approve" if ctx["read_only"] else "--auto-approve",
+           "--smart-approve" if ro else "--auto-approve",
            "--output", "text", "--output-dir", str(export_dir),
            "--prompt-file", str(ctx["prompt_file"])]
     if model and model != "default":
@@ -91,12 +110,16 @@ def _mistral_cmd(cli, model, effort, ctx):
 
 
 def _muse_cmd(cli, model, effort, ctx):
-    """muse: yolo exec in worktree with validated reasoning effort."""
-    muse_effort = str(effort or "high").lower()
-    if muse_effort not in MUSE_VALID_EFFORTS:
-        muse_effort = "high"
+    """muse: yolo exec in worktree with optional --disable-write, effort, and model."""
+    ro = bool(ctx["read_only"] or ctx.get("review_mode"))
     cmd = [cli, "exec", "--workspace", str(ctx["worktree"]), "--yolo",
-           "--reasoning-effort", muse_effort, "--prompt-file", str(ctx["prompt_file"])]
+           "--prompt-file", str(ctx["prompt_file"])]
+    if ro:
+        cmd += ["--disable-write"]
+    if effort:
+        muse_effort = str(effort).lower()
+        if muse_effort in MUSE_VALID_EFFORTS:
+            cmd += ["--reasoning-effort", muse_effort]
     if model and model != "default":
         cmd += ["--model", model]
     return cmd

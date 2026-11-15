@@ -13,9 +13,9 @@ from fleet import (
     is_quota_error,
     load_quota,
     mark_provider_cooldown,
-    normalize_lane,
     normalize_model_for_provider,
     now_iso,
+    parse_lanes,
     parse_timeout,
     record_usage,
     release_parallel_lease,
@@ -68,11 +68,13 @@ def _init_state(task, worktree, slot, default_lane, default_timeout, **opts):
     read_only = bool(task.get("read_only", False))
     complexity = task.get("complexity")
     requested_lane = task.get("lane") or default_lane or "auto"
+    req_lanes = parse_lanes(requested_lane, allow_auto=True)
+    canon_req = "auto" if req_lanes == ["auto"] else ",".join(req_lanes)
     return dict(
         opts, task=task, worktree=worktree, slot=slot, files=files, skills=skills,
         prompt=prompt, read_only=read_only, complexity=complexity,
         timeout=resolve_task_timeout(default_timeout, task.get("timeout"), complexity, read_only=read_only),
-        requested_lane=requested_lane, canon_req=normalize_lane(requested_lane, allow_auto=True),
+        requested_lane=requested_lane, canon_req=canon_req,
         tried=set(opts.get("exclude_lanes") or ()), avoid=set(opts.get("avoid_families") or ()),
         crash_pivoted=False, attempts=[], notes=[], skipped=None,
     )
@@ -112,10 +114,9 @@ def _acquire_task_lease(st, provider_name, info, quota_data):
 def _run_provider_attempt(st, provider_name, info, cli_path, lease):
     """Run one leased attempt with banner + HUD markers; record usage; return (res, model, effort)."""
     task, log = st["task"], st["log_stream"]
-    model = st["model_override"] or task.get("model") or info["model"]
-    if provider_name == "mcode" and not st["model_override"] and not task.get("model"):
-        model = os.environ.get("AGENT_MODEL") or os.environ.get("OODA_MODEL") or info["model"]
-    model = normalize_model_for_provider(provider_name, model)
+    env_model = os.environ.get("AGENT_MODEL") or os.environ.get("OODA_MODEL") or None
+    raw_model = st["model_override"] or task.get("model") or env_model or info.get("model")
+    model = normalize_model_for_provider(provider_name, raw_model)
     effort = resolve_effort(provider_name, info, st["effort_override"] or task.get("effort"), st["complexity"])
     extra = visible_extra_skills(st["skills"])
     parallel_run = bool(st["is_parallel"] or st["stripe_index"] is not None)
@@ -129,7 +130,7 @@ def _run_provider_attempt(st, provider_name, info, cli_path, lease):
             log.write(f"[{task['id']}] fallback: requested {st['requested_lane']!r} -> "
                       f"using {provider_name!r} ({st['skipped']})\n")
         log.write(f"▸ [{stage}] agent={provider_name} ({info['cli']}:{short_model(model)}) "
-                  f"| effort={effort}{skill_suffix}\n")
+                  f"| effort={effort or 'default'}{skill_suffix}\n")
         log.flush()
         marker = hud_worker_start(mode_tag, task["id"], provider_name, info["cli"], model, effort,
                                   extra, st["worktree"])

@@ -38,10 +38,12 @@ def _apply_tool_call(skills, payload):
     elif tname == "run_command":
         cmd_str = str(args.get("CommandLine") or args.get("command") or "")
         if ROUTER_CMD_RE.search(cmd_str):
-            skills = []
-            for m in SKILL_FLAG_RE.finditer(cmd_str):
-                for part in m.group(1).split(","):
-                    _append_skill(skills, part)
+            matched = list(SKILL_FLAG_RE.finditer(cmd_str))
+            if matched:
+                skills = []
+                for m in matched:
+                    for part in m.group(1).split(","):
+                        _append_skill(skills, part)
     return skills
 
 

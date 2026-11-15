@@ -5,13 +5,11 @@ import os
 import sys
 
 from .lane_catalog import (
-    DEEP_COMPLEXITIES,
     DEFAULT_AGY_OPUS_MODEL,
     DEFAULT_FUSION_MODEL,
     DURATION_RE,
     PROVIDER_ORDER,
     RESET_TS_RE,
-    REVIEW_MODEL,
 )
 from .locate_cli import format_local_iso, parse_iso_utc
 
@@ -99,6 +97,22 @@ MUSE_VALID_EFFORTS = frozenset(
 _DURATION_MULT = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
 
 
+def parse_lanes(raw_lane, allow_auto=True):
+    """Map 'auto' or comma-separated lane preferences to deduped canonical names."""
+    text = str(raw_lane or "auto").strip()
+    if not text or "," not in text:
+        return [normalize_lane(text or "auto", allow_auto=allow_auto)]
+    seen, lanes = set(), []
+    for part in text.split(","):
+        if not part.strip():
+            continue
+        canon = normalize_lane(part, allow_auto=False)
+        if canon not in seen:
+            seen.add(canon)
+            lanes.append(canon)
+    return lanes if lanes else [normalize_lane("", allow_auto=False)]
+
+
 def normalize_lane(raw_lane, allow_auto=True):
     """Map user-facing lane or model aliases to canonical provider names (exit 2 if unknown)."""
     key = (raw_lane or "auto").strip().lower()
@@ -113,32 +127,30 @@ def normalize_lane(raw_lane, allow_auto=True):
 
 
 def normalize_model_for_provider(provider_name, model):
-    """Normalize shorthand model aliases for any provider (mcode defaults to REVIEW_MODEL)."""
-    if provider_name == "mcode" and not model:
-        return REVIEW_MODEL
+    """Normalize shorthand model aliases; return None when deferring to CLI default."""
     if not model:
-        return model
-    key = model.strip().lower()
+        return None
+    raw = str(model).strip()
+    key = raw.lower()
+    if key in ("", "auto", "default", "cli-default"):
+        return None
     table = {
         "agy-opus": AGY_MODEL_ALIASES,
         "mcode": MCODE_MODEL_ALIASES,
         "devin-fusion": DEVIN_MODEL_ALIASES,
         "mistral": MISTRAL_MODEL_ALIASES,
     }.get(provider_name)
-    return table.get(key, model) if table else model
+    return table.get(key, raw) if table else raw
 
 
 def resolve_effort(provider_name, info, explicit_effort, task_complexity):
-    """Resolve effective reasoning effort: explicit, AGENT_/OODA_EFFORT env, then defaults."""
+    """Resolve effort from explicit override, env, quota config, or None (CLI default)."""
     env_effort = os.environ.get("AGENT_EFFORT") or os.environ.get("OODA_EFFORT") or None
-    chosen = explicit_effort or env_effort
+    chosen = explicit_effort or env_effort or (info or {}).get("effort")
     if not chosen:
-        comp = str(task_complexity or "").strip().lower()
-        if provider_name in ("muse", "grok") and comp in DEEP_COMPLEXITIES:
-            chosen = "xhigh"
-        else:
-            chosen = (info or {}).get("effort") or "high"
-    return str(chosen).strip().lower()
+        return None
+    key = str(chosen).strip().lower()
+    return None if key in ("", "auto", "default", "cli-default") else key
 
 
 def parse_timeout(value):
