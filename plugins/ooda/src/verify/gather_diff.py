@@ -33,13 +33,15 @@ def _synthetic_file_diff(target_dir, rel):
         except OSError:
             dest = "?"
         return head + f"new file mode 120000\n<untracked symlink -> {dest}>\n"
-    head += "new file mode 100644\n"
     try:
-        size = path.stat().st_size
+        st = path.stat()
+        size = st.st_size
+        mode = "100755" if (st.st_mode & 0o100) else "100644"
         with open(path, "rb") as fh:
             raw = fh.read(MAX_UNTRACKED_BYTES + 1)
     except OSError as exc:
-        return head + f"<untracked file unreadable: {exc.strerror or exc}>\n"
+        return head + f"new file mode 100644\n<untracked file unreadable: {exc.strerror or exc}>\n"
+    head += f"new file mode {mode}\n"
     if b"\0" in raw[:SNIFF_BYTES]:
         return head + f"Binary files /dev/null and b/{rel} differ ({size} bytes)\n"
     if len(raw) > MAX_UNTRACKED_BYTES:

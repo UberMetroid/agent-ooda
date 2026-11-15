@@ -1,7 +1,8 @@
 """Manifest loading, CLI list parsing, and workspace-relative path normalization."""
 
 import json
-import os
+import ntpath
+import posixpath
 from pathlib import Path
 import sys
 
@@ -15,16 +16,19 @@ _TASK_SHAPE_ERROR = (
 
 
 def normalize_rel_path(path_str):
-    """Normalize a workspace-relative path without stripping leading dots from dotfiles."""
-    p = str(path_str).strip().replace("\\", "/")
+    """Normalize a workspace-relative path; exit 2 on root, drive, NUL, or '..' escapes."""
+    raw = str(path_str).strip()
+    p = raw.replace("\\", "/")
+    if "\x00" in raw or p.startswith("/") or ntpath.splitdrive(p)[0]:
+        sys.stderr.write(f"error: path {path_str!r} escapes the workspace\n")
+        sys.exit(2)
     while p.startswith("./"):
         p = p[2:]
-    norm = os.path.normpath(p).replace("\\", "/")
-    if norm == ".":
-        return ""
-    while norm.startswith("./"):
-        norm = norm[2:]
-    return norm
+    norm = posixpath.normpath(p) if p else "."
+    if norm.startswith("/") or norm == ".." or norm.startswith("../") or ntpath.splitdrive(norm)[0]:
+        sys.stderr.write(f"error: path {path_str!r} escapes the workspace\n")
+        sys.exit(2)
+    return "" if norm == "." else norm
 
 
 def is_ignored_worktree_artifact(rel_path):
@@ -79,6 +83,9 @@ def _validate_task(t, seen_ids, file_owners):
         normalize_lane(item, allow_auto=False)
     for f in t.get("files") or []:
         norm = normalize_rel_path(f)
+        if not norm:
+            sys.stderr.write(f"error: task {tid} file path {f!r} must point to a file or subdir\n")
+            sys.exit(2)
         prev = file_owners.get(norm)
         if prev and prev != tid:
             sys.stderr.write(

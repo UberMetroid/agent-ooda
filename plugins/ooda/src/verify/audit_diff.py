@@ -1,13 +1,18 @@
-"""Cross-model read-only diff review: lightweight mcode M3.1-Flash first, family-rotated fallback."""
+"""Calibrated cross-model read-only diff review with off-family fallback.
 
-import os
-import subprocess
+Small working-tree diffs (<= NATIVE_REVIEW_MAX_BYTES) run mcode M3.1-Flash's native
+``mcode exec review`` (15 steps); larger or committed diffs run a single-pass inline
+patch review (``--mode lightweight --permission off --max-steps 4``). Timeouts,
+non-zero exits, or UNKNOWN verdicts cascade across off-family backup reviewers;
+[P0-3] findings and REJECT verdicts always fail closed.
+"""
+
+import re
 import sys
 import time
 
 from envelope import model_family, select_provider
 from fleet import (
-    PROVIDER_ORDER,
     REVIEW_MODEL,
     REVIEW_TIMEOUT,
     VERDICT_RE,
@@ -19,20 +24,45 @@ from fleet import (
     now_iso,
     record_usage,
     release_parallel_lease,
-    router_depth,
-    run,
 )
 
-OUTPUT_TAIL = 20000
-LIGHTWEIGHT_ARGS = ["--mode", "lightweight", "--max-steps", "8"]
+NATIVE_REVIEW_MAX_BYTES = 8192
+ACCEPT_LINE_RE = re.compile(
+    r"^\s*(?:\*\*|__)?VERDICT(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*ACCEPT\s*(?:\*\*|__)?\.?\s*$",
+    re.IGNORECASE,
+)
+_PTAG = r"\[P[0-3](?:-[0-3])?\]"
+MCODE_FINDING_RE = re.compile(_PTAG, re.IGNORECASE)
+MCODE_CLEAN_TAG_RE = re.compile(
+    rf"\b(?:none\s+of\s+(?:the\s+)?{_PTAG}\s+(?:(?:categories|levels|tags)\s+)?appl(?:y|ies)"
+    rf"|(?:no|zero|without|0)\s+"
+    rf"(?:(?:new|other|remaining|additional|qualifying|reportable|actionable)\s+)*"
+    rf"(?:\*\*|__)?(?:{_PTAG}(?:\s*(?:,\s*(?:or|and)|[-/,]|or|and)\s*|\s+))+"
+    rf"(?:\*\*|__)?(?:issues?|findings?|bugs?|defects?|problems?|regressions?|violations?))\b",
+    re.IGNORECASE,
+)
+MCODE_CLEAN_RE = re.compile(
+    r"^\s*no (?:(?:reportable|actionable|qualifying) )?issues(?: were)? found\.?\s*$",
+    re.IGNORECASE,
+)
 
 
 def parse_review_verdict(text):
-    """Extract ACCEPT/REJECT verdict from the end of reviewer output."""
-    for line in reversed((text or "").splitlines()):
-        m = VERDICT_RE.match(line)
-        if m:
-            return m.group(1).upper()
+    """Fail-closed verdict: REJECT/[P0-3] findings win; ACCEPT requires final verdict or clean note."""
+    lines = (text or "").splitlines()
+    verdicts = [m.group(1).upper() for ln in lines if (m := VERDICT_RE.match(ln))]
+    has_finding = any(
+        MCODE_FINDING_RE.search(MCODE_CLEAN_TAG_RE.sub("", ln)) for ln in lines
+    )
+    if "REJECT" in verdicts or has_finding:
+        return "REJECT"
+    nonempty = [ln for ln in lines if ln.strip()]
+    if not nonempty:
+        return "UNKNOWN"
+    if ACCEPT_LINE_RE.match(nonempty[-1]):
+        return "ACCEPT"
+    if len(nonempty) <= 3 and any(MCODE_CLEAN_RE.match(ln) for ln in nonempty):
+        return "ACCEPT"
     return "UNKNOWN"
 
 
@@ -42,7 +72,9 @@ def build_review_prompt(target_dir, diff_ctx, scope_violations=None, declared_fi
     viol_note = ", ".join(scope_violations) if scope_violations else "none"
     return (
         f"Read-only independent code review of {diff_ctx['source']} changes in {target_dir}. "
-        "Do NOT modify, create, or delete any files.\n\n"
+        "The complete git status, diff stat, and patch are provided inline below. "
+        "Do NOT modify, create, or delete any files, and do NOT execute shell commands "
+        "or crawl unrelated repository files.\n\n"
         f"Declared files in scope: {scope_note}\n"
         f"Detected scope violations: {viol_note}\n"
         f"git status --short:\n{diff_ctx['status']}\n\n"
@@ -53,6 +85,26 @@ def build_review_prompt(target_dir, diff_ctx, scope_violations=None, declared_fi
         "2. Scope or unintended file modifications\n"
         "3. Missing error handling or fail-open paths\n"
         "4. Final line MUST be exactly: VERDICT: ACCEPT  or  VERDICT: REJECT - <reason>"
+    )
+
+
+def build_native_review_note(target_dir, diff_ctx, scope_violations=None, declared_files=None):
+    """Build explicit read-only contract + assembled patch (<= 8 KiB) for native review."""
+    scope = ", ".join(declared_files) if declared_files else "(unspecified)"
+    viol = ", ".join(scope_violations) if scope_violations else "none"
+    return (
+        f"Read-only independent code review of {diff_ctx['source']} changes in {target_dir}. "
+        "The assembled patch below includes untracked files as synthetic hunks. You may read "
+        "surrounding lines of touched files if needed, but do NOT modify, create, or delete "
+        "any files; do NOT run state-mutating or arbitrary shell commands; and do NOT crawl "
+        "unrelated repository files.\n\n"
+        f"Declared files in scope: {scope}\n"
+        f"Detected scope violations: {viol}\n"
+        f"git status --short:\n{diff_ctx.get('status') or '(clean)'}\n\n"
+        f"git diff --stat:\n{diff_ctx.get('diff_stat') or '(no tracked diff)'}\n\n"
+        f"Patch:\n{diff_ctx.get('diff') or '(empty)'}\n\n"
+        "Tag any findings with [P0], [P1], [P2], or [P3] concisely. "
+        "Final line MUST be exactly: VERDICT: ACCEPT  or  VERDICT: REJECT - <reason>"
     )
 
 
@@ -88,24 +140,6 @@ def _acquire_review_lease(provider_name, info, quota, tried, avoid, timeout, log
     return lease, False
 
 
-def _direct_mcode(cli_path, model, prompt, target_dir, timeout):
-    """Runner-less fallback: lightweight read-only mcode exec returning an execute_once-shaped dict."""
-    env = dict(os.environ)
-    env["ROUTER_DEPTH"] = str(router_depth() + 1)
-    cmd = [cli_path, "exec", "--cwd", str(target_dir), "--model", model, "--effort", "high",
-           "--permission", "smart", "--prompt-mode", "coding", "--output-format", "text",
-           ] + LIGHTWEIGHT_ARGS + [prompt]
-    try:
-        p = run(cmd, cwd=target_dir, env=env, timeout=timeout)
-    except subprocess.TimeoutExpired as e:
-        raw = getattr(e, "stdout", None)
-        out = raw.decode(errors="replace") if isinstance(raw, bytes) else (raw or "")
-        return {"exit_code": -1, "output": (out + f"\n<REVIEW TIMEOUT after {timeout}s>")[-OUTPUT_TAIL:],
-                "timed_out": True, "export_info": None}
-    return {"exit_code": p.returncode, "output": (p.stdout or "")[-OUTPUT_TAIL:],
-            "timed_out": False, "export_info": None}
-
-
 def _invoke_reviewer(ctx, provider_name, info, cli_path, lease):
     """Run one review attempt with banner + HUD hooks; always releases the lease."""
     model = REVIEW_MODEL if provider_name == "mcode" else info["model"]
@@ -123,13 +157,12 @@ def _invoke_reviewer(ctx, provider_name, info, cli_path, lease):
         if callable(ctx["on_start"]):
             marker = ctx["on_start"]("act:verify", task_id, provider_name, info["cli"], model,
                                      effort, [], target_dir)
-        runner = ctx["runner"]
-        if callable(runner):
-            out = runner(provider_name, info, cli_path, model, effort, ctx["prompt"], [], target_dir,
-                         slot, task_id, timeout, read_only=True, review_mode=True)
-            res = out[0] if isinstance(out, tuple) else out
-        else:
-            res = _direct_mcode(cli_path, model, ctx["prompt"], target_dir, timeout)
+        native = provider_name == "mcode" and bool(ctx.get("native_eligible"))
+        rmode = "native" if native else True
+        call_prompt = ctx["scope_note"] if native else ctx["prompt"]
+        out = ctx["runner"](provider_name, info, cli_path, model, effort, call_prompt, [],
+                            target_dir, slot, task_id, timeout, read_only=True, review_mode=rmode)
+        res = out[0] if isinstance(out, tuple) else out
         rev_exit = res.get("exit_code")
         return res, model, effort
     finally:
@@ -140,27 +173,24 @@ def _invoke_reviewer(ctx, provider_name, info, cli_path, lease):
 
 
 def run_mcode_review(
-    target_dir,
-    slot,
-    diff_ctx,
-    scope_violations=None,
-    declared_files=None,
-    timeout=REVIEW_TIMEOUT,
-    log_stream=sys.stdout,
-    on_start=None,
-    on_finish=None,
-    author_lane=None,
-    exclude_lanes=None,
-    runner=None,
+    target_dir, slot, diff_ctx, scope_violations=None, declared_files=None,
+    timeout=REVIEW_TIMEOUT, log_stream=sys.stdout, on_start=None, on_finish=None,
+    author_lane=None, exclude_lanes=None, runner=None,
 ):
-    """Read-only cross-model review: mcode lightweight first, then fallback reviewers off-family."""
+    """Read-only cross-model review: calibrated mcode first, then off-family fallback reviewers."""
+    if runner is None:
+        from dispatch.build_cmd import execute_once as runner
     avoid = {model_family(author_lane)} if author_lane else set()
     tried = set(exclude_lanes or ())
-    if not callable(runner):
-        tried |= {name for name in PROVIDER_ORDER if name != "mcode"}
     prompt = build_review_prompt(target_dir, diff_ctx, scope_violations, declared_files)
+    scope_note = build_native_review_note(target_dir, diff_ctx, scope_violations, declared_files)
+    native_eligible = (
+        diff_ctx.get("source") == "working-tree"
+        and len((diff_ctx.get("diff") or "").encode("utf-8")) <= NATIVE_REVIEW_MAX_BYTES
+    )
     ctx = {"slot": slot, "target_dir": target_dir, "timeout": timeout, "log_stream": log_stream,
-           "on_start": on_start, "on_finish": on_finish, "runner": runner, "prompt": prompt}
+           "on_start": on_start, "on_finish": on_finish, "runner": runner, "prompt": prompt,
+           "native_eligible": native_eligible, "scope_note": scope_note}
     while True:
         quota = load_quota()
         provider_name, info, cli_path, skipped = select_provider(
@@ -181,12 +211,20 @@ def run_mcode_review(
                                    is_quota=quota_hit, output_text=out)
             tried.add(provider_name)
             continue
-        if res.get("timed_out") and len(tried) == 0:
-            tried.add(provider_name)
-            avoid.add(model_family(provider_name))
-            continue
+        verdict = parse_review_verdict(out)
+        if code != 0 and verdict == "ACCEPT":
+            verdict = "UNKNOWN"
+        if verdict != "REJECT" and (res.get("timed_out") or code != 0 or verdict == "UNKNOWN"):
+            nxt = select_provider("auto", "review", quota, exclude=tried | {provider_name},
+                                  avoid_families=avoid)[0]
+            if nxt and model_family(nxt) not in avoid:
+                tried.add(provider_name)
+                avoid.add(model_family(provider_name))
+                continue
+        if scope_violations:
+            verdict = "REJECT"
         return {"ran": True, "lane": provider_name, "model": model,
-                "verdict": parse_review_verdict(out), "exit_code": code, "output": out}
+                "verdict": verdict, "exit_code": code, "output": out}
 
 
 run_review = run_mcode_review

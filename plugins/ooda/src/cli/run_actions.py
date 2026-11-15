@@ -36,7 +36,9 @@ def do_standalone_review(target_arg):
         return 2
     print(res["output"])
     print(f"\n[review verdict: {res['verdict']} | lane={res.get('lane')} model={res.get('model')}]")
-    return 0 if res.get("exit_code") == 0 else (res.get("exit_code") or 1)
+    if res.get("exit_code") == 0 and res.get("verdict") == "ACCEPT":
+        return 0
+    return res.get("exit_code") or 1
 
 
 def do_recon(args):

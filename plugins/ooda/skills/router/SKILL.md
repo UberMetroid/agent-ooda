@@ -30,10 +30,14 @@ Antigravity Claude pool via `router` (`~/.local/bin/router` ->
 - **Parallel multi-module work (`.worktrees/tasks.json`):** Stripe concurrent
   subtasks across isolated git worktrees with per-task `--skill` guidance and
   automatic cross-model diff review (lightweight `mcode` M3.1-Flash first).
-- **Independent code review (`--review`):** Run read-only lightweight `mcode`
-  (`minimax/MiniMax-M3.1-Flash`, `--mode lightweight --max-steps 8`) over diffs
-  instead of spending orchestrator tokens on line-by-line review; busy, capped,
-  or failing reviewers fall back to another model family automatically.
+- **Independent code review (`--review`):** Run read-only `mcode`
+  (`minimax/MiniMax-M3.1-Flash`) over diffs instead of spending orchestrator
+  tokens on line-by-line review. Targeted working-tree diffs (`<= 8 KiB`) invoke
+  native `mcode exec review` (`--permission smart --max-steps 15`), while larger
+  (`> 8 KiB`) or committed diffs run a single-pass inline patch review
+  (`--mode lightweight --permission off --max-steps 4`), falling back
+  automatically to off-family backup lanes on cooldown, non-zero exit, or
+  `UNKNOWN` verdicts.
 
 ## Configured Agent Fleet, Models & Effort Standards
 
@@ -47,7 +51,7 @@ Live quota state and cycle telemetry live outside git in
 | `devin-pro` | `devin` | `swe-2-max` | `max` | `unlimited` | `1h` |
 | `devin-fast` | `devin` | `swe-2-flash-max` | `max` | `unlimited` | `1h` · max `4` parallel |
 | `muse` | `muse` | `muse-ember-1.0` | `high` (`xhigh` on `deep`) | `capped` | `5h` |
-| `mcode` | `mcode` | `minimax/MiniMax-M3.1-Flash` | `high` (review: `lightweight`, `8` steps) | `high-cap` | `5h` · max `4` parallel |
+| `mcode` | `mcode` | `minimax/MiniMax-M3.1-Flash` | `high` (review: native `15` steps ≤ 8 KiB, else `lightweight` `4` steps) | `high-cap` | `5h` · max `4` parallel |
 | `grok` | `grok` | `grok-4.7` | `high` (`xhigh` on `deep`) | `capped` | `5h` |
 | `mistral` | `vibe` | `glm-5-3` (`zai-glm-5-3`; `--model ml4` for `Mistral Large 4`) | `high` | `capped` | `5h` |
 
@@ -66,19 +70,22 @@ Live quota state and cycle telemetry live outside git in
      (`devin-fusion`) and defers all `capped` lanes behind free `devin-fast` ->
      `mcode` -> `devin-pro`.
    - `review` (cross-model backup order): `mcode` (`MiniMax-M3.1-Flash`,
-     lightweight mode) -> `devin-fast` -> `devin-pro` -> `grok` -> `mistral` ->
-     `muse` -> `agy-opus`. The author lane's model family is pushed to the back
+     native ≤ 8 KiB / single-pass inline otherwise) -> `devin-fast` ->
+     `devin-pro` -> `grok` -> `mistral` -> `muse` -> `agy-opus`. The author
+     lane's model family is pushed to the back
      so a model never grades its own diff, and `devin-fusion` credits are never
-     spent on review. Busy (all slots leased), quota-/auth-failed, or timed-out
-     reviewers hand off to the next candidate automatically.
+     spent on review. Busy (all slots leased), quota-/auth-failed, timed-out,
+     non-zero-exit, or `UNKNOWN`-verdict reviewers hand off to the next
+     off-family candidate automatically; `[P0-3]` findings always fail closed.
 3. **Max-4 Parallel Caps on `devin-fast` and `mcode`:**
    Parallel manifests support up to `--jobs 8`, while cross-process `flock`
    leases cap both `devin-fast` (`swe-2-flash-max`) and `mcode`
    (`MiniMax-M3.1-Flash`) at `4` concurrent workers each (`max_parallel: 4`).
    In `auto` mode, a 5th concurrent task or review automatically spills to
    another free lane (or queues cleanly until a slot frees when the lane is
-   forced). Lightweight `mcode` reviews (`--mode lightweight --max-steps 8`)
-   keep the verify stage fast even with 4 parallel worktrees.
+   forced). Single-pass inline `mcode` reviews (`--mode lightweight
+   --permission off --max-steps 4`) keep the verify stage fast even with 4
+   parallel worktrees.
 4. **Fast-Transient Timeouts & Cross-Model Mismatch Pivoting:**
    - Default timeouts scale by OODA regime (`3m` `observe`, `5m` `fast`, `8m`
      `act`, `10m` `heavy`, `15m` `deep`, `4m` `verify`; override via `--timeout`).

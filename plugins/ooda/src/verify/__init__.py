@@ -1,4 +1,4 @@
-"""Verify stage: diff gathering and cross-model read-only review (no dispatch/hud imports)."""
+"""Verify stage: diff gathering and cross-model review (lazy dispatch fallback, no hud imports)."""
 
 from .gather_diff import collect_diff_context
 from .audit_diff import build_review_prompt, parse_review_verdict, run_mcode_review, run_review

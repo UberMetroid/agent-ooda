@@ -46,16 +46,26 @@ def _devin_cmd(cli, model, effort, ctx):
 
 
 def _mcode_cmd(cli, model, effort, ctx):
-    """mcode: exec in worktree with scoped --file args; env untouched (MINIMAX_DATA_DIR kept)."""
+    """mcode: native exec review, single-pass inline patch review, or scoped --file exec run."""
     mcode_effort = MCODE_EFFORT_MAP.get(str(effort or "high").lower(), "high")
+    if ctx.get("review_mode") == "native":
+        # mcode exec review requires --permission smart to inspect local git diff/status;
+        # the appended system prompt forbids edits, state-mutating commands, and broad crawling.
+        extra = ["--append-system-prompt", ctx["prompt"]] if ctx["prompt"] else []
+        return [cli, "exec", "review", "--cwd", str(ctx["worktree"]), "--model", model,
+                "--effort", mcode_effort, "--permission", "smart", "--max-steps", "15",
+                "--output-format", "text"] + extra
+    if ctx.get("review_mode"):
+        return [cli, "exec", "--cwd", str(ctx["worktree"]), "--model", model,
+                "--effort", mcode_effort, "--mode", "lightweight", "--permission", "off",
+                "--max-steps", "4", "--output-format", "text", ctx["prompt"]]
     file_args = []
     for path_str in safe_worktree_files(ctx["files"], ctx["worktree"]):
         file_args += ["--file", path_str]
     perm = "smart" if ctx["read_only"] else "full"
-    review_args = ["--mode", "lightweight", "--max-steps", "8"] if ctx.get("review_mode") is True else []
     return [cli, "exec", "--cwd", str(ctx["worktree"]), "--model", model, "--effort", mcode_effort,
             "--permission", perm, "--prompt-mode", "coding", "--output-format", "text",
-            ] + review_args + file_args + [ctx["prompt"]]
+            ] + file_args + [ctx["prompt"]]
 
 
 def _grok_cmd(cli, model, effort, ctx):
