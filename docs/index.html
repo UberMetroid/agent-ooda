@@ -462,14 +462,14 @@
   <main id="top">
     <section class="hero">
       <div class="wrap">
-        <span class="eyebrow">agent-ooda v1.0 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Multi-Host Agent Suite</span>
+        <span class="eyebrow">agent-ooda v1.1.0 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Multi-Window E-M Router (v8)</span>
         <h1>Turn one session into a<br><span>token-routed agent fleet.</span></h1>
         <p class="lead">
           <strong>UberMetroid/agent-ooda</strong> ships one zero-dependency static Go OODA engine
           (<code>ooda</code>, <code>router</code>, <code>ooda-hud</code>, <code>ooda-hook</code>) paired with
           host plugin adapters (<code>plugins/ooda</code> for Antigravity <code>agy</code> today, structured to extend
-          directly to <code>mcode</code> next): Energy-Maneuverability scheduling, cross-model verification, and a live
-          <code>~tok/s</code> Bubble-Canopy HUD with one-line SHA-256 web install.
+          directly to <code>mcode</code> next): v8 multi-window E-M scheduling, UTC off-peak tariffs, live quota kill,
+          cross-model verification, and a <code>~tok/s</code> Bubble-Canopy HUD with one-line SHA-256 web install.
         </p>
         <div class="install-bar" role="region" aria-label="One-line web installer">
           <code id="install-cmd">curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash</code>
@@ -483,7 +483,7 @@
         <div class="telemetry-strip">
           <div class="stat">
             <div class="stat-k">Agent Fleet</div>
-            <div class="stat-v green">8 Lanes &bull; 5 Families</div>
+            <div class="stat-v green">8 Lanes &bull; 6 Families</div>
           </div>
           <div class="stat">
             <div class="stat-k">Static Binary</div>
@@ -510,7 +510,7 @@
         <p class="sec-sub">
           Like an F-16 bubble canopy, <code>bin/ooda-hud</code> renders live OODA phase transitions, sliding-window
           <code>~tok/s</code> or exact <code>tok/s</code> stream speed, active <code>tool Xs</code> waits, injected
-          skills, parallel bursts, and next 5h wake countdowns right inside Antigravity&apos;s status bar.
+          skills, parallel bursts, and multi-window wake countdowns &amp; Muse PAYG exclusion right inside Antigravity&apos;s status bar.
         </p>
         <div class="terminal" role="region" aria-label="Bubble-Canopy HUD status states">
           <div class="term-bar">
@@ -548,11 +548,11 @@
         <div class="grid-3" style="margin-top: 18px;">
           <div class="card">
             <span class="badge b-green">Live Meter</span>
-            <h3>Zero-Trust <code>tok/s</code> Telemetry</h3>
+            <h3>Zero-Trust <code>tok/s</code> &amp; Quota Kill</h3>
             <p>
               <code>stream_pump.go</code> reads unbuffered NDJSON chunks over <code>io.Pipe()</code> to separate
-              <code>wait</code> TTFB, active token throughput (exact <code>tok/s</code> or <code>~tok/s</code> delta),
-              and silent <code>tool Xs</code> stalls without misleading lifetime averages.
+              <code>wait</code> TTFB, active token throughput (<code>~tok/s</code>/exact), silent <code>tool Xs</code>
+              stalls, and fires mid-stream PGID <code>SIGKILL</code> (&lt;100ms failover) on unambiguous quota errors.
             </p>
           </div>
           <div class="card">
@@ -664,7 +664,7 @@
           <div class="card">
             <span class="badge b-green">CORNER</span>
             <h3>Drain Expiring</h3>
-            <p>Prioritizes renewable 5h cycles closest to reset so expiring tokens are never wasted.</p>
+            <p>Prioritizes expiring windows (90m on 5h, 2h on 24h, 12h on 7d, 36h on 30d) and 0.5x UTC off-peak tariffs so renewable capacity is never wasted.</p>
           </div>
           <div class="card">
             <span class="badge b-cyan">CRUISE</span>
@@ -684,7 +684,7 @@
           <div class="card">
             <span class="badge b-red">REGEN</span>
             <h3>Cooldown &amp; Wake</h3>
-            <p>HTTP 429 or server reset timestamps park a lane cleanly and auto-wake it when its timer expires.</p>
+            <p>Parses ISO and relative resets (resets in 2d 5h, Retry-After), caps transient 429 backoffs, and auto-wakes lanes when timers expire.</p>
           </div>
         </div>
       </div>
@@ -694,12 +694,15 @@
       <div class="wrap">
         <div class="sec-head">
           <h2>The 8-Lane Fleet &amp; Binary Guardrails</h2>
-          <span class="sec-tag">router --status &bull; --discover</span>
+          <span class="sec-tag">router --status &bull; --discover &bull; --probe</span>
         </div>
         <p class="sec-sub">
           <code>router --status</code> and <code>router --discover</code> probe installed CLIs dynamically for active
-          models, effort controls, and injectable skills. Gemini quota is protected exclusively for the top-level
-          Antigravity orchestrator while worker execution dispatches across eight specialized lanes.
+          models, effort controls, UTC off-peak/peak-jam tariffs, and injectable skills. <code>router --probe</code>
+          runs minimal 1-token prompt canaries (skipping credits), while omitted <code>--complexity</code> and
+          <code>--skill</code> infer automatically (opt out via <code>--skill none</code> or
+          <code>OODA_NO_AUTO_SKILL=1</code>). Gemini quota is shielded exclusively for the top-level Antigravity
+          orchestrator.
         </p>
 
         <div class="table-wrap" style="margin-bottom: 18px;">
@@ -709,7 +712,7 @@
                 <th>Lane</th>
                 <th>CLI</th>
                 <th>Model &amp; Effort Discovery</th>
-                <th>Tier &amp; Cycle</th>
+                <th>Tier &amp; Window</th>
                 <th>Parallelism &amp; Role</th>
               </tr>
             </thead>
@@ -718,57 +721,57 @@
                 <td><code>agy-opus</code></td>
                 <td><code>agy</code></td>
                 <td><code>--effort</code> + non-Gemini Claude model</td>
-                <td>capped &bull; 5h renewable</td>
+                <td>capped &bull; 5h + 7d</td>
                 <td>Default capped coding lane &bull; Gemini-blocked safeguard</td>
               </tr>
               <tr>
                 <td><code>muse</code></td>
                 <td><code>muse</code></td>
-                <td><code>--reasoning-effort</code> + user CLI default</td>
-                <td>capped &bull; 5h renewable</td>
-                <td>2nd capped slot &amp; parallel stripe member</td>
+                <td><code>muse-ember-1.0</code> (<code>muse-wonder-1.0</code> on <code>deep</code>)</td>
+                <td>capped &bull; 5h + 7d</td>
+                <td>Muse Power lane &bull; auto-skips PAYG <code>api_key</code></td>
               </tr>
               <tr>
                 <td><code>grok</code></td>
                 <td><code>grok</code></td>
                 <td><code>--reasoning-effort</code> + user CLI default</td>
-                <td>capped &bull; 5h renewable</td>
-                <td>3rd capped slot &amp; off-family backup reviewer</td>
+                <td>capped &bull; 7d rolling weekly</td>
+                <td>Shared weekly SuperGrok pool &amp; off-family reviewer</td>
               </tr>
               <tr>
                 <td><code>mistral</code></td>
                 <td><code>vibe</code></td>
                 <td><code>via-model</code> tier + user CLI default</td>
-                <td>capped &bull; 5h renewable</td>
-                <td>4th capped stripe &amp; off-family reviewer</td>
+                <td>capped &bull; 30d monthly</td>
+                <td><code>0.5x</code> UTC off-peak aware (Z.ai / DeepSeek)</td>
               </tr>
               <tr>
                 <td><code>mcode</code></td>
                 <td><code>mcode</code></td>
                 <td><code>--effort</code> + MiniMax user default</td>
-                <td>high-cap &bull; 5h renewable</td>
-                <td>Primary diff reviewer &bull; <strong>max 4 parallel</strong> (<code>flock</code>)</td>
+                <td>high-cap &bull; 5h + 7d</td>
+                <td>Primary diff reviewer &bull; <strong>max 4 parallel</strong> &bull; weekday peak-jam aware</td>
               </tr>
               <tr>
                 <td><code>devin-fast</code></td>
                 <td><code>devin</code></td>
                 <td><code>swe-2-flash</code> pool (<code>via-model</code>)</td>
-                <td>unlimited</td>
-                <td>Read-only recon (Observe) &bull; <strong>max 4 parallel</strong></td>
+                <td>unlimited &bull; 24h + 7d ($20/mo Pro)</td>
+                <td>Read-only recon &amp; fast sweeps &bull; <strong>max 4 parallel</strong></td>
               </tr>
               <tr>
                 <td><code>devin-pro</code></td>
                 <td><code>devin</code></td>
                 <td><code>swe-2</code> pool (<code>via-model</code>)</td>
-                <td>unlimited</td>
-                <td>Conserve-mode coder &amp; off-family backup reviewer</td>
+                <td>unlimited &bull; 24h + 7d ($20/mo Pro)</td>
+                <td>Conserve-mode coder &amp; heavy refactors</td>
               </tr>
               <tr>
                 <td><code>devin-fusion</code></td>
                 <td><code>devin</code></td>
                 <td><code>fusion</code> pool (<code>via-model</code>)</td>
                 <td>paid credits (reserve)</td>
-                <td>Protected reserve when renewable/free lanes deplete</td>
+                <td>Protected reserve (never touched by <code>--probe</code>)</td>
               </tr>
             </tbody>
           </table>
@@ -779,7 +782,7 @@
             <h3>Stage Routing Priority</h3>
             <p>
               <strong>Observe (recon):</strong> <code>devin-fast &rarr; mcode &rarr; devin-pro</code><br>
-              <strong>Act (default):</strong> Soonest-expiring capped lane &rarr; remaining capped &rarr; free lanes<br>
+              <strong>Act (default):</strong> Expiring clocks &rarr; <code>0.5x</code> off-peak &rarr; short windows &rarr; free lanes<br>
               <strong>Parallel stripe:</strong> <code>agy-opus &rarr; muse &rarr; grok &rarr; mistral &rarr; devin-fast &rarr; devin-pro &rarr; mcode &rarr; devin-fusion</code><br>
               <strong>Fallback chain:</strong> <code>agy-opus &rarr; muse &rarr; grok &rarr; mistral &rarr; devin-fusion &rarr; devin-fast &rarr; devin-pro &rarr; mcode</code>
             </p>
@@ -788,8 +791,9 @@
             <h3>Hard Binary Guardrails</h3>
             <p>
               Workers run with <code>ROUTER_DEPTH=1</code> (or higher). The Go CLI blocks recursive dispatch,
-              <code>--cleanup</code>, and quota mutations with exit <code>2</code> whenever <code>ROUTER_DEPTH&gt;=1</code>,
-              and hard-rejects <code>gemini*</code> or <code>orchestrator*</code> models on any worker or review lane.
+              <code>--probe</code>, <code>--cleanup</code>, and quota mutations with exit <code>2</code> whenever
+              <code>ROUTER_DEPTH&gt;=1</code>, and hard-rejects <code>gemini*</code> or <code>orchestrator*</code>
+              models on any worker or review lane.
             </p>
           </div>
         </div>
@@ -856,7 +860,8 @@ cd agent-ooda &amp;&amp; ./install.sh
 agy plugin list       # confirm "ooda" is enabled
 router --status       # fleet tiers, resets, capabilities &amp; skills
 router --discover     # refresh live CLI model probes
-router --usage        # per-lane 5h cycle telemetry
+router --probe        # minimal 1-token prompt canaries &amp; muse PAYG check
+router --usage        # per-lane 5h/24h/7d/30d windows &amp; UTC tariffs
 router --recon "Map auth flow and callers"
 router --review .     # cross-model diff gate
 make all              # full House-Law + race test + dogfood suite
