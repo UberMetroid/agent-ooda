@@ -12,20 +12,20 @@ import (
 
 // CLIOpts holds parsed command-line options for the ooda / router CLI.
 type CLIOpts struct {
-	Manifest, Complexity, Lane, Model, Effort, Timeout string
-	Enable, Disable, SetCycle, Reason                  string
-	Recon, Task, Review                                *string
-	Files, Skills, ExcludeLanes                        []string
-	Jobs                                               int
-	Hours, CostBudget                                  *float64
-	TokenBudget, MaxParallel                           *int
-	NoStripe, NoPivot, NoReview, Status                bool
-	Discover, Usage, AutoWake, ResetNow, Cleanup, Help bool
+	Manifest, Complexity, Lane, Model, Effort, Timeout        string
+	Enable, Disable, SetCycle, Reason                         string
+	Recon, Task, Review                                       *string
+	Files, Skills, ExcludeLanes                               []string
+	Jobs                                                      int
+	Hours, CostBudget                                         *float64
+	TokenBudget, MaxParallel                                  *int
+	NoStripe, NoPivot, NoReview, Status                       bool
+	Discover, Usage, Probe, AutoWake, ResetNow, Cleanup, Help bool
 }
 
 func usageText(prog string) string {
 	return fmt.Sprintf(
-		"usage: %s [--status | --discover | --usage | --recon PROMPT | --task PROMPT |\n"+
+		"usage: %s [--status | --discover | --usage | --probe | --recon PROMPT | --task PROMPT |\n"+
 			"             --review [PATH] | --cleanup | --enable P | --disable P | --set-cycle P | manifest]\n\n"+
 			"options:\n"+
 			"  -h, --help             show this help message and exit\n"+
@@ -38,7 +38,7 @@ func usageText(prog string) string {
 			"  --timeout DUR          per-task timeout (e.g. 120s, 8m)\n"+
 			"  -j, --jobs, --slots N  max parallel workers for manifest mode (default %d, max %d)\n"+
 			"  --no-stripe/--no-pivot/--no-review  control striping, family pivot, post-task verify\n"+
-			"  --status/--discover/--usage  fleet readiness, CLI probe cache, cycle telemetry\n"+
+			"  --status/--discover/--usage/--probe  fleet readiness, CLI cache, telemetry, canary\n"+
 			"  --enable/--disable/--set-cycle P  quota/cycle admin (--auto-wake, --reason, --hours,\n"+
 			"                         --token-budget, --cost-budget, --max-parallel, --reset-now)\n"+
 			"  --cleanup              remove .worktrees and ooda/* branches\n",
@@ -143,6 +143,8 @@ func applyBoolFlag(opts *CLIOpts, name string) bool {
 		opts.Discover = true
 	case "--usage":
 		opts.Usage = true
+	case "--probe":
+		opts.Probe = true
 	case "--auto-wake":
 		opts.AutoWake = true
 	case "--reset-now":
@@ -180,12 +182,10 @@ func consumeFlag(opts *CLIOpts, argv []string, i *int) error {
 		return nil
 	}
 	knownVal := map[string]bool{
-		"--lane": true, "--exclude-lane": true, "--model": true, "--effort": true,
-		"--timeout": true, "--recon": true, "--task": true, "--files": true,
-		"--skill": true, "--skills": true, "--complexity": true, "--jobs": true,
-		"-j": true, "--slots": true, "--enable": true, "--disable": true,
-		"--reason": true, "--hours": true, "--set-cycle": true,
-		"--token-budget": true, "--cost-budget": true, "--max-parallel": true,
+		"--lane": true, "--exclude-lane": true, "--model": true, "--effort": true, "--timeout": true,
+		"--recon": true, "--task": true, "--files": true, "--skill": true, "--skills": true, "--complexity": true,
+		"--jobs": true, "-j": true, "--slots": true, "--enable": true, "--disable": true, "--reason": true,
+		"--hours": true, "--set-cycle": true, "--token-budget": true, "--cost-budget": true, "--max-parallel": true,
 	}
 	if !knownVal[name] {
 		return fleet.UsageErr("error: unrecognized arguments: %s", arg)
@@ -204,7 +204,7 @@ func validateModes(opts CLIOpts) error {
 	quotaAdmin := opts.Enable != "" || opts.Disable != "" || opts.SetCycle != ""
 	modes := 0
 	for _, on := range []bool{
-		opts.Status, opts.Discover, opts.Usage, quotaAdmin,
+		opts.Status, opts.Discover, opts.Usage, opts.Probe, quotaAdmin,
 		opts.Cleanup, opts.Recon != nil, opts.Task != nil, opts.Review != nil,
 	} {
 		if on {

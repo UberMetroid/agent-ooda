@@ -205,6 +205,9 @@ func LoadFleetSummary(nowUTC time.Time) FleetSummary {
 			soonest = fleet.Ptr(rem)
 		}
 	}
+	if active["muse"] && fleet.CachedMuseProbe(0).PayAsYouGo {
+		delete(active, "muse")
+	}
 	wakeCD := ""
 	if soonest != nil {
 		wakeCD = FormatCD(*soonest)

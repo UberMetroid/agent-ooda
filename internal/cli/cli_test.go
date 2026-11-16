@@ -82,6 +82,13 @@ func TestParseArgsPermutations(t *testing.T) {
 	if _, err := ParseArgs("ooda", []string{"--bogus-flag"}, nil); err == nil {
 		t.Fatal("expected error for unknown flag")
 	}
+	oProbe, err := ParseArgs("router", []string{"--probe"}, nil)
+	if err != nil || !oProbe.Probe {
+		t.Fatalf("expected --probe flag parsed, got %+v err=%v", oProbe, err)
+	}
+	if _, err := ParseArgs("router", []string{"--probe", "--status"}, nil); err == nil {
+		t.Fatal("expected conflicting --probe --status error")
+	}
 }
 
 func TestStatusUsageAndQuotaAdmin(t *testing.T) {
@@ -136,7 +143,7 @@ func TestRouterDepthGuard(t *testing.T) {
 	}
 	t.Setenv("ROUTER_DEPTH", "1")
 	blocked := [][]string{
-		{"--recon", "hi"}, {"--task", "hi"}, {"--review", "."},
+		{"--recon", "hi"}, {"--task", "hi"}, {"--review", "."}, {"--probe"},
 		{"--enable", "grok"}, {"--disable", "grok"}, {"--set-cycle", "grok"}, {"--cleanup"},
 	}
 	for _, argv := range blocked {

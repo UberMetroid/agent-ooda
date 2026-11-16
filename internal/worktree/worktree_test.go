@@ -105,3 +105,43 @@ func TestDirtyStateAndScope(t *testing.T) {
 		t.Fatalf("expected scope violation, got %v", viols)
 	}
 }
+
+func TestInferComplexityAndSkills(t *testing.T) {
+	if c := InferComplexity("Check layout", []string{"a.go"}, true); c != "recon" {
+		t.Fatalf("expected recon for readOnly, got %q", c)
+	}
+	if c := InferComplexity("Fix typo in readme", []string{"README.md"}, false); c != "fast" {
+		t.Fatalf("expected fast for doc typo, got %q", c)
+	}
+	if c := InferComplexity("Redesign security protocol", []string{"a.go"}, false); c != "deep" {
+		t.Fatalf("expected deep for security protocol, got %q", c)
+	}
+	if c := InferComplexity("Edit files", []string{"a.go", "b.go", "c.go", "d.go"}, false); c != "deep" {
+		t.Fatalf("expected deep for 4+ files, got %q", c)
+	}
+	if c := InferComplexity("Add helper", []string{"a.go"}, false); c != "act" {
+		t.Fatalf("expected act default, got %q", c)
+	}
+	t.Setenv("HOME", t.TempDir())
+	ws := t.TempDir()
+	for name, desc := range map[string]string{
+		"sql-tuning": "Optimize database SQL indexes and query plans.",
+		"devin":      "Run devin wrapper on database SQL indexes.",
+	} {
+		dir := filepath.Join(ws, ".agents", "skills", name)
+		_ = os.MkdirAll(dir, 0o755)
+		md := "---\nname: " + name + "\ndescription: " + desc + "\n---\nBody.\n"
+		_ = os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(md), 0o644)
+	}
+	got := AutoMatchSkills("Optimize database SQL indexes on orders table", []string{"db.sql"}, ws)
+	if len(got) != 1 || got[0] != "sql-tuning" {
+		t.Fatalf("expected [sql-tuning] without wrapper skill, got %v", got)
+	}
+	if none := AutoMatchSkills("Say hello world", []string{"foo.txt"}, ws); len(none) != 0 {
+		t.Fatalf("expected no matched skills, got %v", none)
+	}
+	off := ResolveTaskSkills([]string{"none"}, "Optimize database SQL indexes", []string{"db.sql"}, ws)
+	if len(off) != 0 {
+		t.Fatalf("expected --skill none to opt out of auto-matching, got %v", off)
+	}
+}

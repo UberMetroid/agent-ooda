@@ -21,7 +21,7 @@ All runtime roles compile into one static binary (`plugins/ooda/bin/ooda`) dispa
 
 | Binary / Symlink | Entrypoint (`cmd/ooda`) | Responsibility |
 | --- | --- | --- |
-| `ooda` / `router` | CLI dispatcher & fleet admin | `--recon`, `--task`, parallel worktree manifests, `--review`, `--status`, `--discover`, `--usage` |
+| `ooda` / `router` | CLI dispatcher & fleet admin | `--recon`, `--task`, parallel worktree manifests, `--review`, `--status`, `--discover`, `--usage`, `--probe` |
 | `ooda-hud` / `statusline.py` | Bubble-Canopy HUD | Renders live ANSI statusBar telemetry from NDJSON worker markers + `quota.json` |
 | `ooda-hook` | Antigravity lifecycle hook | Tracks injected skills per session and garbage-collects dead worker markers |
 | `__setup` / `__wire` | Installer helpers | Safe JSON validation and idempotent `settings.json` `statusLine` wiring |
@@ -30,9 +30,9 @@ All runtime roles compile into one static binary (`plugins/ooda/bin/ooda`) dispa
 agent-ooda/
 ├── cmd/ooda/            # multi-call entrypoint (router / ooda-hud / ooda-hook)
 ├── internal/
-│   ├── fleet/           # quota store, 5h cycles, model aliases, atomic flock slot leases
-│   ├── envelope/        # E-M regime selection, live CLI capability discovery, mismatch pivot
-│   ├── dispatch/        # io.Pipe NDJSON stream pump, tok/s rate meter, parallel worktrees
+│   ├── fleet/           # quota store (v8), multi-window cycles, model aliases, flock slot leases
+│   ├── envelope/        # E-M regime selection, UTC tariffs, CLI discovery, mismatch pivot
+│   ├── dispatch/        # io.Pipe NDJSON stream pump, tok/s rate meter, live quota kill, worktrees
 │   ├── verify/          # HeadRef/unborn diff gathering, untracked hunks, off-family review
 │   ├── worktree/        # isolated ooda/<id> git worktrees, scope rules, skill loader
 │   ├── hud/             # ANSI Bubble-Canopy line renderer & hook event recorder
@@ -60,23 +60,25 @@ The scheduler borrows two principles from fighter tactician **Col. John Boyd**:
 
 | Lane | Engine / CLI | Tier / clock |
 | --- | --- | --- |
-| `agy-opus` | Antigravity CLI (`agy`) | capped, 5h renewable |
-| `muse` | Muse CLI (`muse`) | capped, 5h renewable |
-| `grok` | xAI Grok CLI (`grok`) | capped, 5h renewable |
-| `mistral` | Mistral Vibe CLI (`vibe`) | capped, 5h renewable |
-| `mcode` | MiniMax mcode CLI (primary reviewer) | high-cap 5h, **max 4 parallel** |
-| `devin-fast` | Devin Fast pool (`devin`) | unlimited, **max 4 parallel** |
-| `devin-pro` | Devin Pro pool (`devin`) | unlimited / free pool |
+| `agy-opus` | Antigravity CLI (`agy`) | capped, `5h + 7d` |
+| `muse` | Muse CLI (`muse`, `muse-ember-1.0` / `muse-wonder-1.0` on `deep`) | capped, `5h + 7d` (auto-skips PAYG `api_key`) |
+| `grok` | xAI Grok CLI (`grok`) | capped, `7d` rolling weekly |
+| `mistral` | Mistral Vibe CLI (`vibe`) | capped, `30d` monthly (`0.5x` off-peak Z.ai) |
+| `mcode` | MiniMax mcode CLI (primary reviewer) | high-cap `5h + 7d`, **max 4 parallel** |
+| `devin-fast` | Devin Fast pool (`devin`) | unlimited `$20/mo` Pro, `24h + 7d`, **max 4 parallel** |
+| `devin-pro` | Devin Pro pool (`devin`) | unlimited `$20/mo` Pro, `24h + 7d` |
 | `devin-fusion` | Devin Fusion pool (`devin`) | paid credits (reserve) |
 
 Model IDs and efforts are **discovered dynamically, not hardcoded**: `router --status` and
 `router --discover` inspect non-secret local CLI configs, cached CLI model lists, effort flags
-(`--effort`/`--reasoning-effort` vs `via-model`), and installed `--skill` definitions. Single-pool
-CLIs keep their own user defaults unless overridden via `--model`/`--effort`/`--set-cycle`, while
-shared `devin` pools map to their configured `fusion` / `swe-2` / `swe-2-flash` tiers. Hard binary
-guardrails exit `2` on any `gemini*`/`orchestrator*` worker model and block recursive execution
-(`router --recon`, `--task`, `--review`, `--cleanup`, `--enable`, `--disable`, `--set-cycle`)
-whenever `ROUTER_DEPTH>=1`.
+(`--effort`/`--reasoning-effort` vs `via-model`), live UTC off-peak tariffs (`Z.ai` / `DeepSeek`
+`0.5x` off-peak, `mcode` weekday peak-jam avoidance), and installed `--skill` definitions. When
+`--complexity` or `--skill` are omitted, `router` infers the task regime and matches up to 2
+non-core domain skills automatically, tuning model tier and `--effort`. `router --probe` runs
+minimal 1-token prompt canaries (never probing `credits`; updates local `quota.json`). Hard binary guardrails exit `2`
+on any `gemini*`/`orchestrator*` worker model and block recursive execution (`router --recon`,
+`--task`, `--review`, `--probe`, `--cleanup`, `--enable`, `--disable`, `--set-cycle`) whenever
+`ROUTER_DEPTH>=1`.
 
 **Stage clocks:**
 
@@ -118,7 +120,8 @@ renders OODA phase (`○ ooda`, `◐ orient/decide`, `⠋ observe`, `⠋ act`, `
 ```bash
 router --status                 # live fleet regimes, models, effort modes, skills & next wake
 router --discover               # refresh live CLI capability probe cache
-router --usage                  # per-lane 5h cycle tokens, cost & E-M regime telemetry
+router --probe                  # minimal 1-token prompt canary & muse PAYG check
+router --usage                  # per-lane 5h/24h/7d/30d windows, UTC tariffs & E-M regime telemetry
 router --recon "Map auth flow"  # read-only Observe recon (free lanes first)
 router --task "Fix parser bug" --files internal/cli/parse_args.go --skill devin
 router .worktrees/tasks.json -j 4

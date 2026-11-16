@@ -12,6 +12,12 @@ import (
 
 var safeIDSubRe = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 
+// ExportUsage captures exact provider-reported tokens and USD cost.
+type ExportUsage struct {
+	Tokens  *int
+	CostUSD *float64
+}
+
 // PluginRootPath resolves the plugins/ooda directory dynamically at call time.
 func PluginRootPath() string {
 	if env := os.Getenv("OODA_PLUGIN_ROOT"); env != "" {
@@ -171,4 +177,13 @@ func AtomicWriteJSON(path string, v any, compact bool, priv bool) error {
 	}
 	cleanup = false
 	return nil
+}
+
+// CyclePatch specifies updates for ConfigureCycle.
+type CyclePatch struct {
+	Provider, QuotaPath      string
+	Hours, CostBudget        *float64
+	TokenBudget, MaxParallel *int
+	ResetNow                 bool
+	Effort, Model            *string
 }

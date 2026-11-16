@@ -43,7 +43,9 @@ func formatCommas(n int) string {
 	return s + out
 }
 
-func statusRow(name string, info *fleet.ProviderConfig, nowUTC time.Time, lc envelope.LaneCap) string {
+func statusRow(
+	name string, info *fleet.ProviderConfig, nowUTC time.Time, lc envelope.LaneCap, musePayg bool,
+) string {
 	binNote := nonEmptyOr(fleet.ResolveCLI(info.CLI), "MISSING")
 	eff, mod := lc.EffectiveEffort, lc.EffectiveModel
 	if info.Effort != nil && *info.Effort != "" {
@@ -70,6 +72,12 @@ func statusRow(name string, info *fleet.ProviderConfig, nowUTC time.Time, lc env
 	} else if resetCD != "" {
 		detail = fmt.Sprintf("%s | cycle resets in %s", binNote, resetCD)
 	}
+	if name == "muse" && musePayg {
+		detail += " | [PAYG api_key — skipped in auto]"
+	}
+	if _, badge := envelope.LaneTariff(name, info, mod, nowUTC); badge != "" {
+		detail += " | [" + badge + "]"
+	}
 	if lc.AgyUnsafe {
 		detail += " | [GEMINI GUARD: run --discover]"
 	}
@@ -79,46 +87,6 @@ func statusRow(name string, info *fleet.ProviderConfig, nowUTC time.Time, lc env
 	}
 	return fmt.Sprintf("%-13s %-9s %-10s %-9s %-9s %-28s %s",
 		name, info.Status, info.Tier, clipStr(eff, 9), info.CLI, clipStr(dispatch.ShortModel(mod), 28), detail)
-}
-
-func printDiscoveryFooter(
-	w io.Writer, caps map[string]envelope.LaneCap, skills []worktree.SkillMeta, verbose bool,
-) {
-	fmt.Fprintln(w, "\nDiscovered CLI Capabilities (effort control & available models):")
-	groups := [][2]string{
-		{"agy", "agy-opus"}, {"devin", "devin-pro"}, {"muse", "muse"},
-		{"mcode", "mcode"}, {"grok", "grok"}, {"vibe", "mistral"},
-	}
-	limit, moreLbl := 6, "more; run --discover"
-	if verbose {
-		limit, moreLbl = 20, "in discovery.json"
-	}
-	for _, g := range groups {
-		lc := caps[g[1]]
-		shown, extra, guard := "(run router --discover)", "", ""
-		if len(lc.Models) > 0 {
-			shown = strings.Join(lc.Models[:min(len(lc.Models), limit)], ", ")
-		}
-		if len(lc.Models) > limit {
-			extra = fmt.Sprintf(" (+%d %s)", len(lc.Models)-limit, moreLbl)
-		}
-		if lc.GeminiGuard != "" {
-			guard = " [" + lc.GeminiGuard + "]"
-		}
-		fmt.Fprintf(w, "  %-7s %-37s models: %s%s%s\n", g[0], nonEmptyOr(lc.EffortMode, "default"), shown, extra, guard)
-	}
-	fmt.Fprintln(w, "\nInjectable Worker Skills (--skill <name>):")
-	if len(skills) == 0 {
-		fmt.Fprintln(w, "  (none discovered)")
-		return
-	}
-	for _, s := range skills {
-		tag := ""
-		if s.Core {
-			tag = " [built-in]"
-		}
-		fmt.Fprintf(w, "  %-10s : %s%s\n", s.Name, nonEmptyOr(s.Desc, "(no description)"), tag)
-	}
 }
 
 // ReportStatus prints fleet readiness or refreshes CLI capability discovery caches.
@@ -145,16 +113,18 @@ func ReportStatus(w io.Writer, refresh bool) int {
 		}
 		fmt.Fprintf(w, "Quota state        : %s (v%d, updated: %s)\n",
 			fleet.QuotaFilePath(""), q.Version, derefOr(q.UpdatedAt, ""))
-		fmt.Fprintf(w, "Drain capped first : %t (soonest expiring cycle prioritized)\n", q.DrainCappedFirst)
+		fmt.Fprintf(w, "Drain capped first : %t (expiring clocks, 0.5x off-peak & short windows first)\n",
+			q.DrainCappedFirst)
 		fmt.Fprintf(w, "Parallel stripe    : %s\nFallback chain     : %s\n\n",
 			strings.Join(pool, " -> "), strings.Join(chain, " -> "))
 	}
 	fmt.Fprintf(w, "%-13s %-9s %-10s %-9s %-9s %-28s %s\n",
 		"LANE", "STATUS", "TIER", "EFFORT", "CLI", "MODEL", "RESET / BINARY")
 	fmt.Fprintln(w, strings.Repeat("-", 119))
+	musePayg := fleet.CachedMuseProbe(900).PayAsYouGo
 	for _, name := range fleet.ProviderOrder {
 		if info := q.Providers[name]; info != nil {
-			fmt.Fprintln(w, statusRow(name, info, nowUTC, caps[name]))
+			fmt.Fprintln(w, statusRow(name, info, nowUTC, caps[name], musePayg))
 		}
 	}
 	if !refresh {
@@ -174,9 +144,13 @@ func ReportStatus(w io.Writer, refresh bool) int {
 	return 0
 }
 
-func usageRow(name string, info *fleet.ProviderConfig, regimes map[string]string, nowUTC time.Time) string {
+func usageRow(
+	name string, info *fleet.ProviderConfig, regimes map[string]string, nowUTC time.Time, activeMod string, musePayg bool,
+) string {
 	cycStr, pref := "creds", "~"
-	if info.CycleHours != nil {
+	if len(info.Windows) > 0 {
+		cycStr = strings.Join(info.Windows, "+")
+	} else if info.CycleHours != nil {
 		cycStr = fmt.Sprintf("%gh", *info.CycleHours)
 	}
 	if info.CycleTokensExact || info.CycleTokens == 0 {
@@ -204,16 +178,25 @@ func usageRow(name string, info *fleet.ProviderConfig, regimes map[string]string
 			resetCD = "manual"
 		}
 	}
+	reg := nonEmptyOr(regimes[name], "-")
 	note := ""
-	if info.Reason != nil && *info.Reason != "" {
+	if info.Model != nil && *info.Model != "" {
+		activeMod = *info.Model
+	}
+	if name == "muse" && musePayg {
+		reg, note = "PAYG", "api_key active (skipped in auto)"
+	} else if info.Reason != nil && *info.Reason != "" {
 		note = *info.Reason
 	} else if info.CycleRuns == 0 && info.Status == "active" {
 		note = "fresh"
 	} else if info.Model != nil {
 		note = dispatch.ShortModel(*info.Model)
 	}
-	return fmt.Sprintf("%-13s %-9s %-9s %-6s %-5d %-14s %-9s %-12s %s",
-		name, info.Status, nonEmptyOr(regimes[name], "-"), cycStr, info.CycleRuns, tokStr, costStr, resetCD, note)
+	if _, badge := envelope.LaneTariff(name, info, activeMod, nowUTC); badge != "" {
+		note = strings.TrimSpace("[" + badge + "] " + note)
+	}
+	return fmt.Sprintf("%-13s %-9s %-9s %-7s %-5d %-14s %-9s %-12s %s",
+		name, info.Status, reg, cycStr, info.CycleRuns, tokStr, costStr, resetCD, note)
 }
 
 // DoUsage prints cycle token/cost telemetry, E-M regimes, and live muse usage probe.
@@ -227,15 +210,16 @@ func DoUsage(w io.Writer) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	caps := envelope.DiscoverFleetCaps(envelope.DiscoverOpts{Quota: q})
 	nowUTC := time.Now().UTC()
 	em := envelope.ComputeEMEnvelope(q, nowUTC)
 	fmt.Fprintf(w, "Cycle Usage Telemetry (%s, v%d)\n\n", fleet.QuotaFilePath(""), q.Version)
-	fmt.Fprintf(w, "%-13s %-9s %-9s %-6s %-5s %-14s %-9s %-12s %s\n",
-		"LANE", "STATUS", "E-M", "CYCLE", "RUNS", "TOKENS", "COST", "RESETS IN", "NOTE")
+	fmt.Fprintf(w, "%-13s %-9s %-9s %-7s %-5s %-14s %-9s %-12s %s\n",
+		"LANE", "STATUS", "E-M", "WINDOW", "RUNS", "TOKENS", "COST", "RESETS IN", "NOTE")
 	fmt.Fprintln(w, strings.Repeat("-", 116))
 	for _, name := range fleet.ProviderOrder {
 		if info := q.Providers[name]; info != nil {
-			fmt.Fprintln(w, usageRow(name, info, em.Regimes, nowUTC))
+			fmt.Fprintln(w, usageRow(name, info, em.Regimes, nowUTC, caps[name].EffectiveModel, museProbe.PayAsYouGo))
 		}
 	}
 	fastCap := fleet.DevinFastMaxPar

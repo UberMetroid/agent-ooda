@@ -106,11 +106,7 @@ func DoRecon(opts CLIOpts, outW, errW io.Writer) int {
 	if comp == "" {
 		comp = "recon"
 	}
-	task := worktree.TaskSpec{
-		ID: "recon", Prompt: fleet.ReconPrefix + *opts.Recon, Files: files,
-		Skills: worktree.ParseCSVArg(opts.Skills), Lane: opts.Lane,
-		Complexity: comp, Model: opts.Model, ReadOnly: true,
-	}
+	task := buildTaskSpec("recon", *opts.Recon, comp, files, opts, cwd, true)
 	res, err := dispatch.RunTaskWithFallback(dispatch.TaskReq{
 		Task: task, Worktree: cwd, SlotDir: slot, Lane: opts.Lane, Model: opts.Model,
 		Effort: opts.Effort, TimeoutRaw: opts.Timeout,
@@ -219,11 +215,11 @@ func DoSingleTask(opts CLIOpts, outW, errW io.Writer) int {
 				mm.Lane, mm.Family, mm.Reason)
 		}
 	}
-	task := worktree.TaskSpec{
-		ID: "task", Prompt: *opts.Task, Files: files,
-		Skills: worktree.ParseCSVArg(opts.Skills), Lane: opts.Lane,
-		Complexity: opts.Complexity, Model: opts.Model,
+	comp := opts.Complexity
+	if comp == "" {
+		comp = worktree.InferComplexity(*opts.Task, files, false)
 	}
+	task := buildTaskSpec("task", *opts.Task, comp, files, opts, cwd, false)
 	res, err := dispatch.RunTaskWithFallback(dispatch.TaskReq{
 		Task: task, Worktree: cwd, SlotDir: slot, Lane: opts.Lane,
 		Model: opts.Model, Effort: opts.Effort, TimeoutRaw: opts.Timeout,

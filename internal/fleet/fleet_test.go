@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -157,5 +158,74 @@ func TestParallelLeasesAndTimeout(t *testing.T) {
 	}
 	if CountActiveLeases("devin-fast", 4) != 0 {
 		t.Fatalf("expected 0 leases after cleanup")
+	}
+}
+
+func TestV8WindowsResetAndEscalate(t *testing.T) {
+	qPath, _ := setupFleetEnv(t)
+	dq := DefaultQuotaData()
+	if dq.Version != QuotaSchemaVersion || strings.Join(dq.Providers["grok"].Windows, "+") != "7d" ||
+		strings.Join(dq.Providers["devin-pro"].Windows, "+") != "24h+7d" ||
+		strings.Join(dq.Providers["mcode"].Windows, "+") != "5h+7d" {
+		t.Fatalf("unexpected v8 defaults: v=%d grok=%+v", dq.Version, dq.Providers["grok"])
+	}
+	_ = AtomicWriteJSON(qPath, dq, false, true)
+	now := time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC)
+	rel := ParseRelativeReset("rate limit exceeded, resets in 2d 5h", now)
+	if rel == nil {
+		t.Fatal("expected ParseRelativeReset to match 2d 5h")
+	}
+	if dt, ok := ParseISOUTC(*rel); !ok || dt.Sub(now) != 53*time.Hour {
+		t.Fatalf("expected 53h delta, got %s (%v)", *rel, dt.Sub(now))
+	}
+	if bad := ParseRelativeReset("ordinary completion message", now); bad != nil {
+		t.Fatalf("expected nil for non-reset message, got %q", *bad)
+	}
+	if prose := ExtractResetTS("Please retry in 5 minutes after starting the server"); prose != nil {
+		t.Fatalf("expected nil for prose without quota context, got %q", *prose)
+	}
+	if HasErrorPattern("test failed at line 429", 1, QuotaErrorPats) ||
+		!HasErrorPattern("HTTP 429 Too Many Requests", 1, QuotaErrorPats) {
+		t.Fatalf("unexpected QuotaErrorPats match on bare 429 vs HTTP 429")
+	}
+	if _, err := MarkProviderCooldown("grok", "burst", true, "HTTP 429 Too Many Requests", qPath); err != nil {
+		t.Fatalf("grok cooldown failed: %v", err)
+	}
+	q, _ := LoadQuota(qPath)
+	if gr := q.Providers["grok"]; gr.NextResetAt != nil || gr.CooldownUntil == nil {
+		t.Fatalf("expected grok transient cooldown without NextResetAt overwrite: %+v", gr)
+	} else if dt, ok := ParseISOUTC(*gr.CooldownUntil); !ok || dt.Sub(time.Now()) > 2*time.Hour {
+		t.Fatalf("expected <=2h transient grok cooldown, got %s", *gr.CooldownUntil)
+	}
+	if _, err := MarkProviderCooldown("mcode", "limit", true, "weekly usage limit hit", qPath); err != nil {
+		t.Fatalf("MarkProviderCooldown failed: %v", err)
+	}
+	q, _ = LoadQuota(qPath)
+	mc := q.Providers["mcode"]
+	if mc.Status != "cooldown" || mc.Reason == nil || !strings.Contains(*mc.Reason, "outer window") {
+		t.Fatalf("expected outer-window cooldown escalation, got %+v", mc)
+	}
+}
+
+func TestParseMuseUsagePaygAndSub(t *testing.T) {
+	payg := ParseMuseUsageJSON(`{"allowance":null,"hint":null,"reason":"api_key","schemaVersion":1}`, 0, false)
+	if !payg.PayAsYouGo || payg.Fresh || !payg.Installed {
+		t.Fatalf("expected PayAsYouGo=true on api_key payload, got %+v", payg)
+	}
+	sub := ParseMuseUsageJSON(`{"allowance":{"resetsAt":"2030-01-01T00:00:00Z"},"hint":"Power","reason":"sub"}`, 0, false)
+	if sub.PayAsYouGo || !sub.Fresh || sub.ResetAt == nil {
+		t.Fatalf("expected subscription active probe, got %+v", sub)
+	}
+	if stale := ParseMuseUsageJSON(`{"allowance":{"resetsAt":"2030-01-01T00:00:00Z"}}`, 1, false); stale.Fresh {
+		t.Fatalf("expected Fresh=false on non-zero muse exit, got %+v", stale)
+	}
+	if got, err := NormalizeModel("muse", "ember"); err != nil || got != "muse-ember-1.0" {
+		t.Fatalf("expected muse-ember-1.0, got %q (%v)", got, err)
+	}
+	if got, err := NormalizeModel("muse", "wonder"); err != nil || got != "muse-wonder-1.0" {
+		t.Fatalf("expected muse-wonder-1.0, got %q (%v)", got, err)
+	}
+	if _, err := NormalizeModel("muse", "gemini-4-carbon-low"); err == nil {
+		t.Fatal("expected Gemini guardrail refusal on NormalizeModel")
 	}
 }

@@ -1,7 +1,7 @@
 {
   "name": "ooda",
   "displayName": "OODA — Multi-Agent Router & HUD",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Observe-Orient-Decide-Act engineering discipline, Energy-Maneuverability multi-agent CLI router, cross-model diff verification, and minimal statusLine HUD for Antigravity.",
   "author": "UberMetroid",
   "homepage": "https://ubermetroid.github.io/agent-ooda/",

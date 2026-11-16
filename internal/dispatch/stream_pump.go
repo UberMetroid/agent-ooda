@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -57,27 +58,39 @@ func tailRunes(s string, limit int) string {
 	return string(r[len(r)-limit:])
 }
 
-func hasFlag(argv []string, flag string) bool {
-	for _, a := range argv {
-		if a == flag || strings.HasPrefix(a, flag+"=") {
-			return true
-		}
+func safeKillGroup(mu *sync.Mutex, reaped *bool, p *os.Process) error {
+	mu.Lock()
+	defer mu.Unlock()
+	if !*reaped && p != nil {
+		*reaped = true
+		return syscall.Kill(-p.Pid, syscall.SIGKILL)
 	}
-	return false
+	return nil
 }
 
-func pumpStream(r io.Reader, ndjson bool, mu *sync.Mutex, st *streamTracker) {
-	if !ndjson {
-		_, _ = io.Copy(&st.rawBuf, r)
-		return
-	}
+func pumpStream(r io.Reader, ndjson, checkStderrQuota bool, mu *sync.Mutex, st *streamTracker, onAbort func()) {
 	br := bufio.NewReaderSize(r, 16*1024)
 	for {
 		line, err := br.ReadString('\n')
 		if line != "" {
 			mu.Lock()
-			st.consumeLine(line, nowFloatSec())
+			if ndjson {
+				st.consumeLine(line, nowFloatSec())
+			} else {
+				st.rawBuf.addStr(line)
+				trimmed := strings.TrimSpace(line)
+				low := strings.ToLower(trimmed)
+				errFrame := checkStderrQuota || strings.HasPrefix(low, "error:") ||
+					strings.HasPrefix(low, "api error") || strings.HasPrefix(low, "fatal:") || strings.HasPrefix(low, "{")
+				if errFrame && IsLiveQuotaLine(trimmed) {
+					st.isError, st.errText, st.qAbort = true, trimmed, true
+				}
+			}
+			abort := st.qAbort
 			mu.Unlock()
+			if abort && onAbort != nil {
+				onAbort()
+			}
 		}
 		if err != nil {
 			break
@@ -104,32 +117,25 @@ func runHudTicker(ctx context.Context, stop chan struct{}, req ExecReq, mu *sync
 			rate, exact := st.currentRate(now)
 			phase := st.phase
 			mu.Unlock()
-			elapsed := max(0, int(now-req.Marker.StartedAt))
-			sig := fmt.Sprintf("%s|%.0f|%d", phase, rate, elapsed)
+			sig := fmt.Sprintf("%s|%.0f|%d", phase, rate, max(0, int(now-req.Marker.StartedAt)))
 			if sig == lastSig {
 				continue
 			}
 			lastSig = sig
-			m := req.Marker
-			m.Phase, m.TokS, m.TokExact, m.UpdatedAt = phase, rate, exact, now
-			HudWorkerUpdate(req.MarkerPath, m)
+			req.Marker.Phase, req.Marker.TokS, req.Marker.TokExact, req.Marker.UpdatedAt = phase, rate, exact, now
+			HudWorkerUpdate(req.MarkerPath, req.Marker)
 		}
 	}
 }
 
-func finalizeOutput(
-	built BuiltCmd, st *streamTracker, errText string,
-	code int, timedOut bool, timeoutSec int,
-) (string, int, *fleet.ExportUsage) {
+func finalizeOutput(built BuiltCmd, st *streamTracker, errText string,
+	code int, timedOut bool, timeoutSec int) (string, int, *fleet.ExportUsage) {
 	var exp *fleet.ExportUsage
 	if st.usage.Tokens != nil || st.usage.CostUSD != nil {
-		u := st.usage
-		exp = &u
+		exp = &st.usage
 	}
-	if built.VibeExportDir != "" {
-		if vibeExp := ParseVibeExport(built.VibeExportDir); vibeExp != nil {
-			exp = vibeExp
-		}
+	if vibeExp := ParseVibeExport(built.VibeExportDir); vibeExp != nil {
+		exp = vibeExp
 	}
 	out := st.rawBuf.str()
 	if built.StreamFmt == "ndjson" {
@@ -164,10 +170,11 @@ func runStreamProcess(req ExecReq, built BuiltCmd, timeoutSec int) ExecRes {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, built.Argv[0], built.Argv[1:]...)
-	cmd.Dir, cmd.Env = req.Worktree, built.Env
-	cmd.WaitDelay = 2 * time.Second
+	cmd.Dir, cmd.Env, cmd.WaitDelay = req.Worktree, built.Env, 2*time.Second
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	var mu sync.Mutex
+	var reaped bool
+	cmd.Cancel = func() error { return safeKillGroup(&mu, &reaped, cmd.Process) }
 	prOut, pwOut := io.Pipe()
 	prErr, pwErr := io.Pipe()
 	defer prOut.Close()
@@ -178,60 +185,57 @@ func runStreamProcess(req ExecReq, built BuiltCmd, timeoutSec int) ExecRes {
 		_ = pwErr.Close()
 		return ExecRes{ExitCode: 1, Output: serr.Error(), DurationS: time.Since(start).Seconds()}
 	}
-	var mu sync.Mutex
-	st := &streamTracker{phase: "wait"}
+	onAbort := func() { _ = safeKillGroup(&mu, &reaped, cmd.Process) }
+	st, errSt := &streamTracker{phase: "wait"}, &streamTracker{}
 	if built.StreamFmt == "ndjson" && req.MarkerPath != "" {
-		m := req.Marker
-		m.Phase, m.UpdatedAt = "wait", nowFloatSec()
-		HudWorkerUpdate(req.MarkerPath, m)
+		req.Marker.Phase, req.Marker.UpdatedAt = "wait", nowFloatSec()
+		HudWorkerUpdate(req.MarkerPath, req.Marker)
 	}
-	var errBuf tailBuf
-	var wg, tickWg sync.WaitGroup
-	wg.Add(2)
+	var wg sync.WaitGroup
+	wg.Add(3)
 	go func() {
 		defer wg.Done()
-		pumpStream(prOut, built.StreamFmt == "ndjson", &mu, st)
+		pumpStream(prOut, built.StreamFmt == "ndjson", false, &mu, st, onAbort)
 	}()
 	go func() {
 		defer wg.Done()
-		_, _ = io.Copy(&errBuf, prErr)
+		pumpStream(prErr, false, true, &mu, errSt, onAbort)
 	}()
 	stopTick := make(chan struct{})
-	tickWg.Add(1)
 	go func() {
-		defer tickWg.Done()
+		defer wg.Done()
 		runHudTicker(ctx, stopTick, req, &mu, st)
 	}()
 	werr := cmd.Wait()
+	mu.Lock()
+	reaped = true
+	mu.Unlock()
 	_ = pwOut.Close()
 	_ = pwErr.Close()
-	wg.Wait()
 	close(stopTick)
-	tickWg.Wait()
-	timedOut := errors.Is(ctx.Err(), context.DeadlineExceeded)
-	code := 0
+	wg.Wait()
+	mu.Lock()
+	qAborted, errText := st.qAbort || errSt.qAbort, strings.TrimSpace(errSt.rawBuf.str())
+	mu.Unlock()
+	timedOut := errors.Is(ctx.Err(), context.DeadlineExceeded) && !qAborted
+	code := 1
 	if timedOut {
 		code = -1
-	} else if werr != nil {
-		code = 1
-		if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
-			code = cmd.ProcessState.ExitCode()
-		}
+	} else if !qAborted && werr == nil {
+		code = 0
+	} else if !qAborted && cmd.ProcessState != nil && cmd.ProcessState.Exited() {
+		code = cmd.ProcessState.ExitCode()
 	}
-	out, finalCode, exp := finalizeOutput(built, st, strings.TrimSpace(errBuf.str()), code, timedOut, timeoutSec)
-	return ExecRes{
-		ExitCode: finalCode, Output: out, TimedOut: timedOut, DurationS: time.Since(start).Seconds(), ExportInfo: exp,
-	}
+	out, finalCode, exp := finalizeOutput(built, st, errText, code, timedOut, timeoutSec)
+	return ExecRes{ExitCode: finalCode, Output: out, TimedOut: timedOut,
+		DurationS: time.Since(start).Seconds(), ExportInfo: exp}
 }
 
 // ExecuteOnce spawns one bounded worker process, streams live HUD telemetry, and returns output.
 func ExecuteOnce(req ExecReq) ExecRes {
-	timeoutSec := max(1, req.TimeoutSec)
-	built, err := BuildWorkerCommand(CmdReq{
-		Provider: req.Provider, CLIPath: req.CLIPath, Model: req.Model, Effort: req.Effort,
-		Prompt: req.Prompt, Files: req.Files, Worktree: req.Worktree,
-		SlotDir: req.SlotDir, TaskID: req.TaskID, ReadOnly: req.ReadOnly, ReviewMode: req.ReviewMode,
-	})
+	built, err := BuildWorkerCommand(CmdReq{Provider: req.Provider, CLIPath: req.CLIPath,
+		Model: req.Model, Effort: req.Effort, Prompt: req.Prompt, Files: req.Files, Worktree: req.Worktree,
+		SlotDir: req.SlotDir, TaskID: req.TaskID, ReadOnly: req.ReadOnly, ReviewMode: req.ReviewMode})
 	if err != nil {
 		return ExecRes{ExitCode: 2, Output: err.Error()}
 	}
@@ -241,12 +245,11 @@ func ExecuteOnce(req ExecReq) ExecRes {
 	if built.VibeExportDir != "" {
 		defer os.RemoveAll(built.VibeExportDir)
 	}
-	if req.Provider == "agy-opus" && !hasFlag(built.Argv, "--model") {
+	if req.Provider == "agy-opus" && !slices.Contains(built.Argv, "--model") {
 		if agyCfg := envelope.ProbeAgySettings(""); agyCfg.GeminiBlocked {
-			return ExecRes{ExitCode: 2, Output: fmt.Sprintf("error: Gemini guardrail blocked agy-opus — "+
-				"settings.json model %q is Gemini/Orchestrator; pass --model claude-opus-5-5-high "+
-				"or run `router --discover`.", agyCfg.SettingsModel)}
+			return ExecRes{ExitCode: 2, Output: fmt.Sprintf("error: Gemini guardrail blocked agy-opus (%q) — "+
+				"pass --model claude-opus-5-5-high or run `router --discover`.", agyCfg.SettingsModel)}
 		}
 	}
-	return runStreamProcess(req, built, timeoutSec)
+	return runStreamProcess(req, built, max(1, req.TimeoutSec))
 }

@@ -218,6 +218,9 @@ func RunCLI(prog string, argv []string, outW, errW io.Writer) int {
 				"with your native tools instead of invoking router.")
 		return 2
 	}
+	if opts.Probe {
+		return DoProbe(outW, errW)
+	}
 	if rc, handled := handleQuotaFlags(opts, outW, errW); handled {
 		return rc
 	}
@@ -233,7 +236,7 @@ func RunCLI(prog string, argv []string, outW, errW io.Writer) int {
 	if opts.Recon == nil && opts.Task == nil && opts.Review == nil && opts.Manifest == "" {
 		fmt.Fprintln(errW,
 			"error: manifest path is required (or pass --recon, --task, --review, "+
-				"--status, --discover, --usage, --set-cycle, --enable, --disable, --cleanup)")
+				"--status, --discover, --usage, --probe, --set-cycle, --enable, --disable, --cleanup)")
 		return 2
 	}
 	return runDispatchMode(opts, outW, errW)

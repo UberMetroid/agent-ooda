@@ -46,33 +46,25 @@ func runTaskAttempt(st *taskState, sel envelope.SelectRes, lease *os.File) (Exec
 		fmt.Fprintf(req.LogWriter, "▸ [%s] agent=%s (%s:%s) | effort=%s%s\n",
 			stage, sel.Lane, sel.Info.CLI, ShortModel(spec.DisplayModel), spec.DisplayEffort, skSuf)
 	}
-	marker := WorkerMarker{
-		PID: os.Getpid(), TaskID: req.Task.ID, Mode: modeTag, Lane: sel.Lane,
-		CLI: sel.Info.CLI, Model: spec.DisplayModel, Effort: spec.DisplayEffort,
-		Skills: extra, Cwd: req.Worktree, StartedAt: nowFloatSec(),
-	}
+	marker := WorkerMarker{PID: os.Getpid(), TaskID: req.Task.ID, Mode: modeTag, Lane: sel.Lane,
+		CLI: sel.Info.CLI, Model: spec.DisplayModel, Effort: spec.DisplayEffort, Skills: extra,
+		Cwd: req.Worktree, StartedAt: nowFloatSec()}
 	mPath := HudWorkerStart(marker)
 	runner := req.Runner
 	if runner == nil {
 		runner = ExecuteOnce
 	}
-	res := runner(ExecReq{
-		Provider: sel.Lane, Info: sel.Info, CLIPath: sel.CLIPath,
-		Model: spec.ArgvModel, Effort: spec.ArgvEffort, Prompt: st.prompt,
-		Files: req.Task.Files, Worktree: req.Worktree, SlotDir: req.SlotDir,
-		TaskID: req.Task.ID, TimeoutSec: st.timeout, ReadOnly: req.Task.ReadOnly,
-		MarkerPath: mPath, Marker: marker,
-	})
+	res := runner(ExecReq{Provider: sel.Lane, Info: sel.Info, CLIPath: sel.CLIPath, Model: spec.ArgvModel,
+		Effort: spec.ArgvEffort, Prompt: st.prompt, Files: req.Task.Files, Worktree: req.Worktree,
+		SlotDir: req.SlotDir, TaskID: req.Task.ID, TimeoutSec: st.timeout, ReadOnly: req.Task.ReadOnly,
+		MarkerPath: mPath, Marker: marker})
 	fleet.ReleaseParallelLease(lease)
-	HudWorkerFinish(mPath, LastRunMarker{
-		Mode: modeTag, Lane: sel.Lane, Model: spec.DisplayModel, Effort: spec.DisplayEffort,
-		Skills: extra, ExitCode: res.ExitCode, DurationS: res.DurationS,
-	})
+	HudWorkerFinish(mPath, LastRunMarker{Mode: modeTag, Lane: sel.Lane, Model: spec.DisplayModel,
+		Effort: spec.DisplayEffort, Skills: extra, ExitCode: res.ExitCode, DurationS: res.DurationS})
 	_, _ = fleet.RecordUsage(sel.Lane, st.prompt, res.Output, res.ExportInfo, req.QuotaPath)
-	st.attempts = append(st.attempts, TaskAttempt{
-		Lane: sel.Lane, Model: spec.DisplayModel, Effort: spec.DisplayEffort,
-		ExitCode: res.ExitCode, TimedOut: res.TimedOut, DurationS: math.Round(res.DurationS*10) / 10,
-	})
+	st.attempts = append(st.attempts, TaskAttempt{Lane: sel.Lane, Model: spec.DisplayModel,
+		Effort: spec.DisplayEffort, ExitCode: res.ExitCode, TimedOut: res.TimedOut,
+		DurationS: math.Round(res.DurationS*10) / 10})
 	return res, spec.DisplayModel, spec.DisplayEffort
 }
 
@@ -102,11 +94,9 @@ func handleTaskOutcome(st *taskState, prov string, res ExecRes) bool {
 		if qerr != nil {
 			return false
 		}
-		probe, _ := envelope.SelectProvider(envelope.SelectReq{
-			RequestedLane: st.canonReq, Complexity: st.req.Task.Complexity, Quota: q,
-			Exclude: ex, StripeIndex: st.req.StripeIdx, AvoidFamilies: av,
-			DeferAtCap: true, ResolveCLI: st.req.ResolveCLI,
-		})
+		probe, _ := envelope.SelectProvider(envelope.SelectReq{RequestedLane: st.canonReq,
+			Complexity: st.req.Task.Complexity, Quota: q, Exclude: ex, StripeIndex: st.req.StripeIdx,
+			AvoidFamilies: av, DeferAtCap: true, ResolveCLI: st.req.ResolveCLI})
 		if probe.Lane == "" {
 			return false
 		}
@@ -136,11 +126,9 @@ func RunTaskWithFallback(req TaskReq) (TaskRes, error) {
 		if qerr != nil {
 			return TaskRes{}, qerr
 		}
-		sel, serr := envelope.SelectProvider(envelope.SelectReq{
-			RequestedLane: st.canonReq, Complexity: req.Task.Complexity, Quota: q,
-			Exclude: st.tried, StripeIndex: req.StripeIdx, AvoidFamilies: st.avoid,
-			DeferAtCap: true, ResolveCLI: req.ResolveCLI,
-		})
+		sel, serr := envelope.SelectProvider(envelope.SelectReq{RequestedLane: st.canonReq,
+			Complexity: req.Task.Complexity, Quota: q, Exclude: st.tried, StripeIndex: req.StripeIdx,
+			AvoidFamilies: st.avoid, DeferAtCap: true, ResolveCLI: req.ResolveCLI})
 		if serr != nil {
 			return TaskRes{}, serr
 		}
@@ -150,10 +138,8 @@ func RunTaskWithFallback(req TaskReq) (TaskRes, error) {
 		}
 		if sel.Lane == "" {
 			msg := fmt.Sprintf("error: no available provider for task %s (%s)", req.Task.ID, st.skipped)
-			return TaskRes{
-				RequestedLane: st.canonReq, FallbackFrom: strings.Join(st.notes, "; "),
-				Attempts: st.attempts, ExitCode: 2, Output: msg,
-			}, nil
+			return TaskRes{RequestedLane: st.canonReq, FallbackFrom: strings.Join(st.notes, "; "),
+				Attempts: st.attempts, ExitCode: 2, Output: msg}, nil
 		}
 		lease, outcome, early := acquireTaskLease(st, sel, q)
 		if outcome == "retry" {
@@ -171,12 +157,10 @@ func RunTaskWithFallback(req TaskReq) (TaskRes, error) {
 		for _, a := range st.attempts {
 			tot += a.DurationS
 		}
-		return TaskRes{
-			RequestedLane: st.canonReq, Lane: sel.Lane, CLI: sel.Info.CLI,
+		return TaskRes{RequestedLane: st.canonReq, Lane: sel.Lane, CLI: sel.Info.CLI,
 			Model: model, Effort: effort, FallbackFrom: strings.Join(st.notes, "; "),
 			Attempts: st.attempts, ExitCode: res.ExitCode, TimedOut: res.TimedOut,
-			Output: res.Output, DurationS: math.Round(tot*10) / 10,
-		}, nil
+			Output: res.Output, DurationS: math.Round(tot*10) / 10}, nil
 	}
 }
 
@@ -184,42 +168,87 @@ func RunTaskWithFallback(req TaskReq) (TaskRes, error) {
 func ExecReview(req verify.ReviewReq) verify.ReviewResult {
 	if req.OnStart == nil {
 		req.OnStart = func(mode, tid, lane, cli, mod, eff string, sk []string, cwd string) string {
-			return HudWorkerStart(WorkerMarker{
-				PID: os.Getpid(), TaskID: tid, Mode: mode, Lane: lane, CLI: cli,
-				Model: mod, Effort: eff, Skills: sk, Cwd: cwd, StartedAt: nowFloatSec(),
-			})
+			return HudWorkerStart(WorkerMarker{PID: os.Getpid(), TaskID: tid, Mode: mode, Lane: lane,
+				CLI: cli, Model: mod, Effort: eff, Skills: sk, Cwd: cwd, StartedAt: nowFloatSec()})
 		}
 	}
 	if req.OnFinish == nil {
 		req.OnFinish = func(mark, mode, lane, mod, eff string, sk []string, rc int, dur float64) {
-			HudWorkerFinish(mark, LastRunMarker{
-				Mode: mode, Lane: lane, Model: mod, Effort: eff,
-				Skills: sk, ExitCode: rc, DurationS: dur,
-			})
+			HudWorkerFinish(mark, LastRunMarker{Mode: mode, Lane: lane, Model: mod,
+				Effort: eff, Skills: sk, ExitCode: rc, DurationS: dur})
 		}
 	}
 	if req.Runner == nil {
 		req.Runner = func(r verify.ReviewExecReq) verify.ReviewExecRes {
-			m := WorkerMarker{
-				PID: os.Getpid(), TaskID: r.TaskID, Mode: "act:verify",
-				Lane: r.Provider, CLI: r.Info.CLI, Model: r.Model, Effort: r.Effort,
-				Cwd: r.TargetDir, StartedAt: nowFloatSec(),
-			}
+			m := WorkerMarker{PID: os.Getpid(), TaskID: r.TaskID, Mode: "act:verify", Lane: r.Provider,
+				CLI: r.Info.CLI, Model: r.Model, Effort: r.Effort, Cwd: r.TargetDir, StartedAt: nowFloatSec()}
 			if raw, rerr := os.ReadFile(r.MarkerPath); rerr == nil {
 				_ = json.Unmarshal(raw, &m)
 			}
-			res := ExecuteOnce(ExecReq{
-				Provider: r.Provider, Info: r.Info, CLIPath: r.CLIPath,
-				Model: r.Model, Effort: r.Effort, Prompt: r.Prompt,
-				Worktree: r.TargetDir, SlotDir: r.SlotDir, TaskID: r.TaskID,
-				TimeoutSec: r.TimeoutSec, ReadOnly: true, ReviewMode: r.ReviewMode,
-				MarkerPath: r.MarkerPath, Marker: m,
-			})
-			return verify.ReviewExecRes{
-				ExitCode: res.ExitCode, Output: res.Output,
-				TimedOut: res.TimedOut, ExportInfo: res.ExportInfo,
-			}
+			res := ExecuteOnce(ExecReq{Provider: r.Provider, Info: r.Info, CLIPath: r.CLIPath,
+				Model: r.Model, Effort: r.Effort, Prompt: r.Prompt, Worktree: r.TargetDir, SlotDir: r.SlotDir,
+				TaskID: r.TaskID, TimeoutSec: r.TimeoutSec, ReadOnly: true, ReviewMode: r.ReviewMode,
+				MarkerPath: r.MarkerPath, Marker: m})
+			return verify.ReviewExecRes{ExitCode: res.ExitCode, Output: res.Output,
+				TimedOut: res.TimedOut, ExportInfo: res.ExportInfo}
 		}
 	}
 	return verify.RunReview(req)
+}
+
+func extractJSONErr(ev, resMap map[string]any) (string, bool, bool) {
+	status, _ := ev["status"].(string)
+	if status == "" {
+		status, _ = resMap["status"].(string)
+	}
+	typ, _ := ev["type"].(string)
+	code, hasCode := jsonNum(ev["status"])
+	if !hasCode {
+		code, hasCode = jsonNum(ev["status_code"])
+	}
+	errSet := (ev["error"] != nil && ev["error"] != "" && ev["error"] != false && ev["error"] != 0.0 && ev["error"] != 0) ||
+		(resMap["error"] != nil && resMap["error"] != "" && resMap["error"] != false &&
+			resMap["error"] != 0.0 && resMap["error"] != 0)
+	topType := typ == "" || strings.EqualFold(typ, "error") || typ == "result" || typ == "end" ||
+		strings.HasSuffix(typ, ".failed") || strings.HasSuffix(typ, ".error") || strings.HasSuffix(typ, ".completed")
+	isErr := strings.EqualFold(status, "error") || strings.EqualFold(status, "failed") ||
+		strings.EqualFold(typ, "error") || ev["is_error"] == true || (topType && errSet) || (hasCode && code >= 400)
+	if !isErr {
+		return "", false, false
+	}
+	errObj, _ := ev["error"].(map[string]any)
+	msg := ""
+	for _, v := range []any{ev["error"], errObj["message"], errObj["type"],
+		ev["message"], ev["response"], ev["result"], resMap["error"]} {
+		if s, ok := v.(string); ok && s != "" {
+			msg = s
+			break
+		}
+	}
+	if msg == "" && hasCode {
+		msg = fmt.Sprintf("HTTP status %d", int(code))
+	}
+	qKill := code == 429 || code == 402 || IsLiveQuotaLine(msg) || fleet.HasErrorPattern(msg, 1, fleet.AuthErrorPats)
+	return msg, true, qKill
+}
+
+// IsLiveQuotaLine detects unambiguous quota/rate-limit lines without false-positive bare "429" matches.
+func IsLiveQuotaLine(raw string) bool {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	if s == "" {
+		return false
+	}
+	if strings.HasPrefix(s, "{") {
+		jsonPats := []string{"insufficient_quota", "quota_exceeded", "rate_limit_exceeded",
+			"budget_exhausted", `"status":429`, `"status_code":429`, `"code":429`}
+		return fleet.HasErrorPattern(s, 1, jsonPats)
+	}
+	if !fleet.HasErrorPattern(s, 1, []string{"error", "fatal", "429", "402",
+		"exceeded", "exhausted", "insufficient_quota"}) {
+		return false
+	}
+	pats := []string{"insufficient_quota", "quota exceeded", "quota_exceeded", "quota exhausted",
+		"rate_limit_exceeded", "rate limit exceeded", "rate limit reached", "credits exhausted",
+		"out of credits", "budget_exhausted", "http 429", "status 429", "error 429", "429 too many requests"}
+	return fleet.HasErrorPattern(s, 1, pats)
 }

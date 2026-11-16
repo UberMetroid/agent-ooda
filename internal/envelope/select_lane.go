@@ -29,7 +29,7 @@ type SelectRes struct {
 }
 
 func checkCandidate(
-	name string, req SelectReq, depth int, resolver func(string) string,
+	name string, req SelectReq, depth int, isAuto bool, resolver func(string) string,
 ) (SelectRes, string, bool) {
 	if req.Exclude != nil && req.Exclude[name] {
 		return SelectRes{}, name + ": already attempted", false
@@ -39,6 +39,9 @@ func checkCandidate(
 	}
 	if req.StrictAvoid && req.AvoidFamilies != nil && req.AvoidFamilies[ModelFamily(name)] {
 		return SelectRes{}, name + ": excluded family (" + ModelFamily(name) + ")", false
+	}
+	if isAuto && name == "muse" && fleet.CachedMuseProbe(900).PayAsYouGo {
+		return SelectRes{}, "muse: skipped (pay-as-you-go api_key active; Power subscription inactive)", false
 	}
 	var info *fleet.ProviderConfig
 	if req.Quota != nil && req.Quota.Providers != nil {
@@ -87,7 +90,7 @@ func SelectProvider(req SelectReq) (SelectRes, error) {
 	var skipped []string
 	var atCap []SelectRes
 	for _, name := range cands {
-		cand, skipMsg, ok := checkCandidate(name, req, depth, resolver)
+		cand, skipMsg, ok := checkCandidate(name, req, depth, isAuto, resolver)
 		if !ok {
 			skipped = append(skipped, skipMsg)
 			continue
@@ -110,4 +113,73 @@ func SelectProvider(req SelectReq) (SelectRes, error) {
 		return pick, nil
 	}
 	return SelectRes{SkippedNote: orStr(strings.Join(skipped, "; "), "no configured providers")}, nil
+}
+
+func pickCleanModel(models []string, prefs ...string) string {
+	for _, want := range prefs {
+		if want == "" {
+			continue
+		}
+		for _, m := range models {
+			base := strings.SplitN(m, "[", 2)[0]
+			if base == want {
+				return base
+			}
+		}
+	}
+	return ""
+}
+
+func pickFastVibeAlias(aliases map[string]string) string {
+	for alias, think := range aliases {
+		if think == "off" || think == "low" || think == "medium" {
+			return alias
+		}
+	}
+	return ""
+}
+
+// ResolveRegimeSpec selects model and effort matching the task complexity regime.
+func ResolveRegimeSpec(provider, complexity string, cap LaneCap) (string, string) {
+	comp := strings.ToLower(strings.TrimSpace(complexity))
+	eff := ""
+	if fleet.FastComplexities[comp] {
+		eff = "medium"
+	} else if comp == "review" && provider == "mcode" {
+		eff = "max"
+	} else if comp != "review" && (fleet.DeepComplexities[comp] || comp == "heavy") {
+		if provider == "muse" || provider == "grok" {
+			eff = "xhigh"
+		} else if provider == "mcode" {
+			eff = "max"
+		}
+	}
+	var mod string
+	switch provider {
+	case "muse":
+		if (fleet.DeepComplexities[comp] && comp != "ember") || comp == "heavy" {
+			mod = pickCleanModel(cap.Models, "muse-wonder-1.0", "muse-ember-1.0")
+		} else if comp != "" && comp != "review" {
+			mod = pickCleanModel(cap.Models, "muse-ember-1.0")
+		}
+	case "agy-opus":
+		if fleet.FastComplexities[comp] {
+			mod = pickCleanModel(cap.Models, "claude-sonnet-5-5-medium", "claude-sonnet-5-5-high")
+		} else if fleet.DeepComplexities[comp] || comp == "heavy" {
+			mod = pickCleanModel(cap.Models, "claude-opus-5-5-high")
+		}
+	case "devin-fast":
+		if fleet.FastComplexities[comp] {
+			mod = pickCleanModel(cap.Models, "swe-2-flash-high")
+		}
+	case "devin-pro":
+		if fleet.FastComplexities[comp] {
+			mod = pickCleanModel(cap.Models, "swe-2-high")
+		}
+	case "mistral":
+		if fleet.FastComplexities[comp] {
+			mod = pickFastVibeAlias(cap.AliasEfforts)
+		}
+	}
+	return mod, eff
 }

@@ -11,10 +11,10 @@ import (
 var (
 	// QuotaErrorPats detects rate-limit or credit errors on non-zero worker exits.
 	QuotaErrorPats = []string{
-		"429", "rate limit", "rate_limit", "quota exceeded", "insufficient_quota",
-		"usage limit", "too many requests", "credit balance", "insufficient credits",
-		"out of credits", "credits exhausted", "limit reached", "resource_exhausted",
-		"out of quota", "model quota", "quota exhausted", "limit exceeded",
+		"http 429", "status 429", "error 429", "code 429", "429 too many", `"status":429`, `"code":429`,
+		"rate limit", "rate_limit", "quota exceeded", "insufficient_quota", "usage limit", "too many requests",
+		"credit balance", "insufficient credits", "out of credits", "credits exhausted", "limit reached",
+		"resource_exhausted", "out of quota", "model quota", "quota exhausted", "limit exceeded",
 		"status 402", "status_code\":402", "budget exhausted", "budget_exhausted",
 	}
 	// AuthErrorPats detects expired or missing CLI auth on non-zero exits.
@@ -47,17 +47,18 @@ var (
 		"sonnet-medium": "claude-sonnet-5-5-medium", "sonnet-low": "claude-sonnet-5-5-low",
 	}
 	McodeModelAliases = map[string]string{
-		"minimax/m3.1-flash": "minimax/MiniMax-M3.1-Flash",
-		"m3.1-flash":         "minimax/MiniMax-M3.1-Flash",
-		"m3.1":               "minimax/MiniMax-M3.1-Flash",
-		"flash":              "minimax/MiniMax-M3.1-Flash",
-		"minimax/m3":         "minimax/MiniMax-M3",
-		"m3":                 "minimax/MiniMax-M3",
+		"minimax/m3.1-flash": "minimax/MiniMax-M3.1-Flash", "m3.1-flash": "minimax/MiniMax-M3.1-Flash",
+		"m3.1": "minimax/MiniMax-M3.1-Flash", "flash": "minimax/MiniMax-M3.1-Flash",
+		"minimax/m3": "minimax/MiniMax-M3", "m3": "minimax/MiniMax-M3",
 	}
 	DevinModelAliases = map[string]string{
-		"fusion":        DefaultFusionModel,
-		"fusion-opus":   DefaultFusionModel,
+		"fusion": DefaultFusionModel, "fusion-opus": DefaultFusionModel,
 		"fusion-sonnet": "fusion-claude-sonnet-5-5-high-sidekick-swe-2-medium",
+	}
+	MuseModelAliases = map[string]string{
+		"ember": "muse-ember-1.0", "muse-ember": "muse-ember-1.0",
+		"wonder": "muse-wonder-1.0", "wonder-full": "muse-wonder-full-1.0",
+		"spark": "muse-spark-1.3", "spark-1.3": "muse-spark-1.3",
 	}
 	MistralModelAliases = map[string]string{
 		"glm": "glm-5-3", "glm-5.3": "glm-5-3", "glm5.3": "glm-5-3",
@@ -168,6 +169,8 @@ func NormalizeModel(provider, model string) (string, error) {
 		table = McodeModelAliases
 	case "devin-fusion":
 		table = DevinModelAliases
+	case "muse":
+		table = MuseModelAliases
 	case "mistral":
 		table = MistralModelAliases
 	}
@@ -234,7 +237,7 @@ func HasErrorPattern(out string, code int, pats []string) bool {
 	return false
 }
 
-// ExtractResetTS extracts a future ISO reset timestamp formatted locally.
+// ExtractResetTS extracts a future ISO or relative reset timestamp formatted locally.
 func ExtractResetTS(out string) *string {
 	if out == "" {
 		return nil
@@ -249,5 +252,5 @@ func ExtractResetTS(out string) *string {
 			return &s
 		}
 	}
-	return nil
+	return ParseRelativeReset(out, time.Now())
 }

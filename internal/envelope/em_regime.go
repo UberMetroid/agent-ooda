@@ -2,7 +2,9 @@
 package envelope
 
 import (
+	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/UberMetroid/agent-ooda/internal/fleet"
@@ -32,6 +34,77 @@ func ModelFamily(provider string) string {
 	return provider
 }
 
+func baseURLHas(hosts ...string) bool {
+	for _, k := range []string{"ZAI_BASE_URL", "OPENAI_BASE_URL", "DEEPSEEK_BASE_URL"} {
+		v := strings.ToLower(os.Getenv(k))
+		if v == "" {
+			continue
+		}
+		for _, h := range hosts {
+			if strings.Contains(v, h) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// LaneTariff computes the time-of-day cost/congestion multiplier and badge at nowUTC.
+func LaneTariff(lane string, info *fleet.ProviderConfig, activeModel string, nowUTC time.Time) (float64, string) {
+	if nowUTC.IsZero() {
+		nowUTC = time.Now().UTC()
+	}
+	lowMod := strings.ToLower(activeModel)
+	if lowMod == "" && info != nil && info.Model != nil {
+		lowMod = strings.ToLower(*info.Model)
+	}
+	wd := nowUTC.Weekday()
+	weekend := wd == time.Saturday || wd == time.Sunday
+	mins := nowUTC.Hour()*60 + nowUTC.Minute()
+	useEnvURL := lane == "mistral" && lowMod == ""
+	isZai := (lane == "mistral" && strings.Contains(lowMod, "glm") && os.Getenv("ZAI_API_KEY") != "") ||
+		strings.Contains(lowMod, "zai") || (useEnvURL && baseURLHas("z.ai", "bigmodel.cn"))
+	if isZai {
+		if !weekend && mins >= 360 && mins < 600 {
+			return 2.0, "PEAK 2x"
+		}
+		return 0.5, "0.5x off-peak"
+	}
+	if strings.Contains(lowMod, "deepseek") || (useEnvURL && baseURLHas("deepseek.com")) {
+		if !weekend && ((mins >= 60 && mins < 240) || (mins >= 360 && mins < 600)) {
+			return 1.0, "peak"
+		}
+		return 0.5, "0.5x off-peak"
+	}
+	if lane == "mcode" && !weekend && mins >= 900 && mins < 1050 {
+		return 1.25, "peak-jam"
+	}
+	return 1.0, ""
+}
+
+func cornerWindowFor(info *fleet.ProviderConfig, nowUTC time.Time) float64 {
+	if info == nil || info.CycleHours == nil {
+		return fleet.CornerWindowSecs
+	}
+	ch := *info.CycleHours
+	if ch <= 6.0 {
+		if info.OuterHours != nil && info.OuterResetAt != nil {
+			rem := remainingSec(info.OuterResetAt, nil, nowUTC)
+			if rem != nil && *rem > 64800 {
+				return 0
+			}
+		}
+		return fleet.CornerWindowSecs
+	}
+	if ch <= 24.0 {
+		return 7200
+	}
+	if ch <= 168.0 {
+		return 43200
+	}
+	return 129600
+}
+
 func scanProviders(
 	providers map[string]*fleet.ProviderConfig, nowUTC time.Time,
 ) ([]string, []string, *float64) {
@@ -51,7 +124,8 @@ func scanProviders(
 		if info.Tier == "capped" && info.Status == "active" {
 			activeCapped = append(activeCapped, name)
 			rem := remainingSec(info.NextResetAt, info.CooldownUntil, nowUTC)
-			if rem != nil && *rem > 0 && *rem <= fleet.CornerWindowSecs {
+			cw := cornerWindowFor(info, nowUTC)
+			if rem != nil && *rem > 0 && cw > 0 && *rem <= cw {
 				corners = append(corners, cornerItem{remS: *rem, idx: idx, name: name})
 			}
 			continue
@@ -132,11 +206,8 @@ func ComputeEMEnvelope(q *fleet.QuotaState, nowUTC time.Time) EMEnvelope {
 		cset[c] = true
 	}
 	return EMEnvelope{
-		NowUTC:         nowUTC,
-		ActiveCapped:   activeCapped,
-		CornerLanes:    corners,
-		SoonestRegenS:  soonest,
-		ConserveCapped: conserve,
-		Regimes:        assignRegimes(q.Providers, cset, conserve),
+		NowUTC: nowUTC, ActiveCapped: activeCapped, CornerLanes: corners,
+		SoonestRegenS: soonest, ConserveCapped: conserve,
+		Regimes: assignRegimes(q.Providers, cset, conserve),
 	}
 }

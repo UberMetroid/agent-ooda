@@ -3,6 +3,7 @@ package envelope
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -127,5 +128,75 @@ func TestDiscoveryCacheAndSpec(t *testing.T) {
 	ClearMismatch(home, []string{"a.go"})
 	if LoadRecentMismatch(home, []string{"a.go"}) != nil {
 		t.Fatal("expected cleared mismatch")
+	}
+}
+
+func TestTariffsAndMusePaygSkip(t *testing.T) {
+	t.Setenv("ZAI_API_KEY", "zai-test-token")
+	t.Setenv("ZAI_BASE_URL", "")
+	t.Setenv("OPENAI_BASE_URL", "")
+	t.Setenv("DEEPSEEK_BASE_URL", "")
+	monPeak := time.Date(2026, 3, 2, 7, 0, 0, 0, time.UTC)
+	monOff := time.Date(2026, 3, 2, 12, 0, 0, 0, time.UTC)
+	monJam := time.Date(2026, 3, 2, 16, 0, 0, 0, time.UTC)
+	if mult, badge := LaneTariff("mistral", nil, "glm-5", monPeak); mult != 2.0 || badge != "PEAK 2x" {
+		t.Fatalf("expected Z.ai peak 2.0x, got %.2f %q", mult, badge)
+	}
+	if mult, badge := LaneTariff("mistral", nil, "glm-5", monOff); mult != 0.5 || badge != "0.5x off-peak" {
+		t.Fatalf("expected Z.ai off-peak 0.5x, got %.2f %q", mult, badge)
+	}
+	if mult, badge := LaneTariff("mcode", nil, "MiniMax-M3.1", monJam); mult != 1.25 || badge != "peak-jam" {
+		t.Fatalf("expected mcode peak-jam 1.25x, got %.2f %q", mult, badge)
+	}
+	t.Setenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+	if mult, _ := LaneTariff("mistral", nil, "", monOff); mult != 0.5 {
+		t.Fatalf("expected mistral DEEPSEEK_BASE_URL 0.5x off-peak, got %.2f", mult)
+	}
+	if mult, _ := LaneTariff("agy-opus", nil, "", monOff); mult != 1.0 {
+		t.Fatalf("expected DEEPSEEK_BASE_URL not to leak onto agy-opus, got %.2f", mult)
+	}
+	hudDir := t.TempDir()
+	t.Setenv("ROUTER_HUD_DIR", hudDir)
+	t.Setenv("OODA_NO_AUTO_PROBE", "1")
+	t.Setenv("ROUTER_DEPTH", "0")
+	_ = fleet.AtomicWriteJSON(filepath.Join(hudDir, "muse_usage.json"), fleet.MuseProbe{
+		Installed: true, PayAsYouGo: true, CheckedAt: float64(time.Now().Unix()),
+	}, false, false)
+	dq := fleet.DefaultQuotaData()
+	fakeCLI := func(string) string { return "/opt/fake/cli" }
+	excl := map[string]bool{"agy-opus": true, "mcode": true, "grok": true, "mistral": true}
+	autoSel, err := SelectProvider(SelectReq{
+		RequestedLane: "auto", Complexity: "act", Quota: dq, Exclude: excl, ResolveCLI: fakeCLI,
+	})
+	if err != nil || autoSel.Lane == "muse" || !strings.Contains(autoSel.SkippedNote, "muse") {
+		t.Fatalf("expected auto to skip PAYG muse, got %+v (%v)", autoSel, err)
+	}
+	expSel, err := SelectProvider(SelectReq{RequestedLane: "muse", Complexity: "act", Quota: dq, ResolveCLI: fakeCLI})
+	if err != nil || expSel.Lane != "muse" {
+		t.Fatalf("expected explicit --lane muse to work despite PAYG, got %+v (%v)", expSel, err)
+	}
+}
+
+func TestRegimeModelAndEffort(t *testing.T) {
+	museCap := LaneCap{Models: []string{"muse-ember-1.0", "muse-wonder-1.0", "muse-spark-1.3-contributor"}}
+	if m, eff := ResolveRegimeSpec("muse", "act", museCap); m != "muse-ember-1.0" || eff != "" {
+		t.Fatalf("expected muse-ember-1.0 default eff on act, got %q %q", m, eff)
+	}
+	if m, eff := ResolveRegimeSpec("muse", "deep", museCap); m != "muse-wonder-1.0" || eff != "xhigh" {
+		t.Fatalf("expected muse-wonder-1.0 xhigh on deep, got %q %q", m, eff)
+	}
+	if _, eff := ResolveRegimeSpec("mcode", "review", LaneCap{}); eff != "max" {
+		t.Fatalf("expected mcode review max effort, got %q", eff)
+	}
+	agyCap := LaneCap{Models: []string{"claude-sonnet-5-5-medium", "claude-opus-5-5-high"}}
+	if m, eff := ResolveRegimeSpec("agy-opus", "fast", agyCap); m != "claude-sonnet-5-5-medium" || eff != "medium" {
+		t.Fatalf("expected agy fast sonnet medium, got %q %q", m, eff)
+	}
+	home := t.TempDir()
+	t.Setenv("OODA_DISCOVERY_FILE", filepath.Join(home, "disc.json"))
+	t.Setenv("OODA_NO_AUTO_PROBE", "1")
+	spec, err := EffectiveLaneSpec("agy-opus", fleet.DefaultQuotaData().Providers["agy-opus"], "", "", "deep", home)
+	if err != nil || spec.ArgvEffort != "" {
+		t.Fatalf("expected agy-opus deep not to emit redundant --effort flag, got %+v (%v)", spec, err)
 	}
 }

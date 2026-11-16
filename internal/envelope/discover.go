@@ -169,7 +169,7 @@ func DiscoverFleetCaps(opts DiscoverOpts) map[string]LaneCap {
 
 // EffectiveLaneSpec resolves argv and display model/effort with Gemini guardrail.
 func EffectiveLaneSpec(
-	provider string, info *fleet.ProviderConfig, expModel, expEffort, _, home string,
+	provider string, info *fleet.ProviderConfig, expModel, expEffort, complexity, home string,
 ) (LaneSpec, error) {
 	rawModel := orStr(expModel, orStr(os.Getenv("AGENT_MODEL"), os.Getenv("OODA_MODEL")))
 	if rawModel == "" && info != nil && info.Model != nil {
@@ -179,13 +179,15 @@ func EffectiveLaneSpec(
 	if err != nil {
 		return LaneSpec{}, err
 	}
-	normEff := fleet.ResolveEffort(info, expEffort)
+	explicitEff := fleet.ResolveEffort(info, expEffort)
 	needAgy := provider == "agy-opus" && normModel == ""
 	cap := DiscoverFleetCaps(DiscoverOpts{Home: home, ProbeAgy: needAgy})[provider]
-	argvModel := orStr(normModel, cap.DispatchModel)
-	if needAgy && normEff != "" {
+	regMod, regEff := ResolveRegimeSpec(provider, complexity, cap)
+	argvModel := orStr(normModel, orStr(regMod, cap.DispatchModel))
+	effChoice := orStr(explicitEff, regEff)
+	if needAgy && effChoice != "" && normModel == "" && regMod == "" {
 		for _, m := range cap.Models {
-			if strings.HasPrefix(m, "claude-opus-") && strings.HasSuffix(m, "-"+normEff) {
+			if strings.HasPrefix(m, "claude-opus-") && strings.HasSuffix(m, "-"+effChoice) {
 				argvModel = m
 				break
 			}
@@ -198,9 +200,14 @@ func EffectiveLaneSpec(
 			inferred = em[1]
 		}
 	}
-	dispEff := orStr(normEff, orStr(cap.AliasEfforts[dispModel], orStr(inferred, orStr(cap.EffectiveEffort, "default"))))
+	argvEff := explicitEff
+	if argvEff == "" && (provider == "mcode" || provider == "grok" || provider == "muse") {
+		argvEff = regEff
+	}
+	effFb := orStr(inferred, orStr(regEff, orStr(cap.EffectiveEffort, "default")))
+	dispEff := orStr(explicitEff, orStr(cap.AliasEfforts[dispModel], effFb))
 	return LaneSpec{
 		ArgvModel: argvModel, DisplayModel: dispModel,
-		ArgvEffort: normEff, DisplayEffort: dispEff,
+		ArgvEffort: argvEff, DisplayEffort: dispEff,
 	}, nil
 }

@@ -25,7 +25,7 @@ func UsageErr(format string, args ...any) error {
 }
 
 const (
-	QuotaSchemaVersion  = 7
+	QuotaSchemaVersion  = 8
 	CornerWindowSecs    = 5400
 	SoonWakeSecs        = 2700
 	DevinFastMaxPar     = 4
@@ -46,7 +46,7 @@ var (
 	SafeIDRe      = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 	DurationRe    = regexp.MustCompile(`(?i)^(\d+(?:\.\d+)?)\s*([smhd]?)$`)
 	ResetTSRe     = regexp.MustCompile(
-		`(?i)(?:resets?\s+at|try\s+again\s+at|available\s+at|until)\s+` +
+		`(?i)(?:resets?[\s_-]*at|try\s+again\s+at|available\s+at|until)(?:["']?\s*:\s*["']?|\s+)` +
 			`(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2}))`,
 	)
 	VerdictRe = regexp.MustCompile(
@@ -104,11 +104,11 @@ var (
 
 // ProviderSpec captures static baseline defaults for a fleet lane.
 type ProviderSpec struct {
-	CLI         string
-	Tier        string
-	Role        string
-	CycleHours  *float64
-	MaxParallel *int
+	CLI, Tier, Role string
+	Windows         []string
+	CycleHours      *float64
+	OuterHours      *float64
+	MaxParallel     *int
 }
 
 // ProviderConfig mirrors one provider entry in quota.json.
@@ -119,6 +119,7 @@ type ProviderConfig struct {
 	Tier             string   `json:"tier"`
 	Role             string   `json:"role"`
 	Status           string   `json:"status"`
+	Windows          []string `json:"windows,omitempty"`
 	CooldownUntil    *string  `json:"cooldown_until"`
 	Reason           *string  `json:"reason"`
 	ManualDisable    bool     `json:"manual_disable"`
@@ -126,12 +127,18 @@ type ProviderConfig struct {
 	CycleHours       *float64 `json:"cycle_hours"`
 	CycleStartedAt   *string  `json:"cycle_started_at"`
 	NextResetAt      *string  `json:"next_reset_at"`
+	OuterHours       *float64 `json:"outer_hours,omitempty"`
+	OuterStartedAt   *string  `json:"outer_started_at,omitempty"`
+	OuterResetAt     *string  `json:"outer_reset_at,omitempty"`
 	CycleRuns        int      `json:"cycle_runs"`
 	CycleTokens      int      `json:"cycle_tokens"`
+	OuterTokens      int      `json:"outer_tokens,omitempty"`
 	CycleTokensExact bool     `json:"cycle_tokens_exact"`
 	CycleCostUSD     float64  `json:"cycle_cost_usd"`
 	CycleTokenBudget *int     `json:"cycle_token_budget"`
 	CycleCostBudget  *float64 `json:"cycle_cost_budget_usd"`
+	ConsecCooldowns  int      `json:"consec_cooldowns,omitempty"`
+	LastProbedAt     *string  `json:"last_probed_at,omitempty"`
 }
 
 // QuotaState mirrors the top-level quota.json state schema.
@@ -184,38 +191,38 @@ func Ptr[T any](v T) *T {
 
 // ProviderSpecs returns static defaults keyed by canonical provider name.
 func ProviderSpecs() map[string]ProviderSpec {
+	w57, w247 := []string{"5h", "7d"}, []string{"24h", "7d"}
 	return map[string]ProviderSpec{
 		"agy-opus": {
-			CLI: "agy", Tier: "capped", CycleHours: Ptr(5.0),
-			Role: "Antigravity agent pool (separate 5h quota pool; uses CLI default unless overridden)",
+			CLI: "agy", Tier: "capped", CycleHours: Ptr(5.0), OuterHours: Ptr(168.0), Windows: w57,
+			Role: "Antigravity Claude pool (5h rolling + 7d fixed weekly)",
 		},
-		"devin-fusion": {
-			CLI: "devin", Tier: "credits",
-			Role: "Devin Fusion pool (paid credits; uses CLI default unless overridden)",
-		},
+		"devin-fusion": {CLI: "devin", Tier: "credits", Role: "Devin Fusion pool (paid credits; reserve)"},
 		"devin-pro": {
-			CLI: "devin", Tier: "unlimited", CycleHours: Ptr(1.0),
-			Role: "Heavy multi-file implementation, complex bugs, refactors (Devin Pro pool)",
+			CLI: "devin", Tier: "unlimited", CycleHours: Ptr(24.0), OuterHours: Ptr(168.0), Windows: w247,
+			Role: "Heavy implementation & refactors (Devin Pro 24h daily + 7d weekly)",
 		},
 		"devin-fast": {
-			CLI: "devin", Tier: "unlimited", CycleHours: Ptr(1.0), MaxParallel: Ptr(DevinFastMaxPar),
-			Role: "Fast mechanical sweeps, tests, boilerplate, read-only recon (max 4 parallel)",
+			CLI: "devin", Tier: "unlimited", CycleHours: Ptr(24.0), OuterHours: Ptr(168.0), Windows: w247,
+			MaxParallel: Ptr(DevinFastMaxPar),
+			Role:        "Fast mechanical sweeps, tests, recon (Devin Pro 24h + 7d, max 4 parallel)",
 		},
 		"muse": {
-			CLI: "muse", Tier: "capped", CycleHours: Ptr(5.0),
-			Role: "Deep reasoning, architecture, second-opinion implementation (Muse pool)",
+			CLI: "muse", Tier: "capped", CycleHours: Ptr(5.0), OuterHours: Ptr(168.0), Windows: w57,
+			Role: "Meta Muse Power (muse-ember/wonder; 5h + 7d; skips PAYG api_key)",
 		},
 		"mcode": {
-			CLI: "mcode", Tier: "high-cap", CycleHours: Ptr(5.0), MaxParallel: Ptr(McodeMaxPar),
-			Role: "Primary code review + fast parallel coding & recon (5h cap, max 4 parallel)",
+			CLI: "mcode", Tier: "high-cap", CycleHours: Ptr(5.0), OuterHours: Ptr(168.0), Windows: w57,
+			MaxParallel: Ptr(McodeMaxPar),
+			Role:        "Primary review + parallel coding & recon (5h + 7d, max 4 parallel)",
 		},
 		"grok": {
-			CLI: "grok", Tier: "capped", CycleHours: Ptr(5.0),
-			Role: "xAI Grok Build coding agent (Grok pool)",
+			CLI: "grok", Tier: "capped", CycleHours: Ptr(168.0), Windows: []string{"7d"},
+			Role: "xAI SuperGrok coding agent (shared 7d rolling weekly pool)",
 		},
 		"mistral": {
-			CLI: "vibe", Tier: "capped", CycleHours: Ptr(5.0),
-			Role: "Mistral Vibe coding agent (Mistral pool)",
+			CLI: "vibe", Tier: "capped", CycleHours: Ptr(720.0), Windows: []string{"30d"},
+			Role: "Mistral Vibe / GLM agent (30d monthly pool; off-peak aware for Z.ai)",
 		},
 	}
 }
@@ -227,24 +234,19 @@ func DefaultProviders() map[string]*ProviderConfig {
 	for _, name := range ProviderOrder {
 		sp := specs[name]
 		out[name] = &ProviderConfig{
-			CLI:         sp.CLI,
-			Tier:        sp.Tier,
-			Role:        sp.Role,
-			Status:      "active",
-			MaxParallel: sp.MaxParallel,
-			CycleHours:  sp.CycleHours,
+			CLI: sp.CLI, Tier: sp.Tier, Role: sp.Role, Status: "active",
+			Windows: append([]string(nil), sp.Windows...), MaxParallel: sp.MaxParallel,
+			CycleHours: sp.CycleHours, OuterHours: sp.OuterHours,
 		}
 	}
 	return out
 }
 
-// DefaultQuotaData returns baseline schema-v7 quota state.
+// DefaultQuotaData returns baseline schema-v8 quota state.
 func DefaultQuotaData() *QuotaState {
 	now := time.Now().Format(time.RFC3339)
 	return &QuotaState{
-		Version:              QuotaSchemaVersion,
-		UpdatedAt:            &now,
-		DrainCappedFirst:     true,
+		Version: QuotaSchemaVersion, UpdatedAt: &now, DrainCappedFirst: true,
 		ParallelStripePool:   append([]string(nil), StripePool...),
 		DefaultFallbackChain: append([]string(nil), DefaultPool...),
 		Providers:            DefaultProviders(),

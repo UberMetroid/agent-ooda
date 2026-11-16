@@ -119,7 +119,11 @@ func processBatchTask(slotPool chan int, job batchJob, opts BatchOpts) BatchReco
 			Review: BatchReview{Model: fleet.ReviewModelEnv(), Verdict: "SKIPPED", Reason: "slot error"}}
 	}
 	tCopy := job.task
-	tCopy.Skills = dedupMerge(job.task.Skills, worktree.ParseCSVArg(opts.Skills))
+	if tCopy.Complexity == "" {
+		tCopy.Complexity = worktree.InferComplexity(tCopy.Prompt, tCopy.Files, tCopy.ReadOnly)
+	}
+	rawSkills := dedupMerge(job.task.Skills, worktree.ParseCSVArg(opts.Skills))
+	tCopy.Skills = worktree.ResolveTaskSkills(rawSkills, tCopy.Prompt, tCopy.Files, job.root)
 	excl := dedupMerge(job.task.ExcludeLanes, worktree.ParseCSVArg(opts.ExcludeLanes))
 	stripe := &job.idx
 	if opts.NoStripe {
@@ -155,10 +159,7 @@ func processBatchTask(slotPool chan int, job batchJob, opts BatchOpts) BatchReco
 		Output: res.Output, Review: rev}
 }
 
-func runBatchWorkers(
-	root string, tasks []worktree.TaskSpec, opts BatchOpts,
-	jobs int, outW io.Writer,
-) []BatchRecord {
+func runBatchWorkers(root string, tasks []worktree.TaskSpec, opts BatchOpts, jobs int, outW io.Writer) []BatchRecord {
 	slotPool := make(chan int, jobs)
 	for n := 0; n < jobs; n++ {
 		_, _ = worktree.EnsureSlot(strconv.Itoa(n))
@@ -226,11 +227,10 @@ func RunManifestBatch(root string, tasks []worktree.TaskSpec, opts BatchOpts) in
 		}
 	}
 	jobs := min(max(1, opts.Jobs), max(1, len(tasks)))
-	wtDir := filepath.Join(root, ".worktrees")
-	_ = os.MkdirAll(wtDir, 0o755)
+	_ = os.MkdirAll(filepath.Join(root, ".worktrees"), 0o755)
 	results := runBatchWorkers(root, tasks, opts, jobs, opts.LogWriter)
 	sort.Slice(results, func(i, j int) bool { return results[i].ID < results[j].ID })
-	outPath := filepath.Join(wtDir, "results.json")
+	outPath := filepath.Join(root, ".worktrees", "results.json")
 	if werr := fleet.AtomicWriteJSON(outPath, results, false, false); werr != nil {
 		fmt.Fprintf(opts.LogWriter, "error: write %s: %v\n", outPath, werr)
 		return 1

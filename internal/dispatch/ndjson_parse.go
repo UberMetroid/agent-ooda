@@ -21,12 +21,12 @@ type streamSample struct {
 }
 
 type streamTracker struct {
-	phase, finalResp, errText   string
-	sawDelta, hasFinal, isError bool
-	cleanBuf, turnBuf, rawBuf   tailBuf
-	usage                       fleet.ExportUsage
-	samples                     []streamSample
-	lastDelta                   float64
+	phase, finalResp, errText           string
+	sawDelta, hasFinal, isError, qAbort bool
+	cleanBuf, turnBuf, rawBuf           tailBuf
+	usage                               fleet.ExportUsage
+	samples                             []streamSample
+	lastDelta                           float64
 }
 
 func (st *streamTracker) addRateBytes(now float64, n int, isDelta bool) {
@@ -176,22 +176,21 @@ func (st *streamTracker) consumeMeta(ev map[string]any) {
 			break
 		}
 	}
-	status, _ := ev["status"].(string)
-	if status == "" {
-		status, _ = resMap["status"].(string)
-	}
-	if strings.EqualFold(status, "error") || strings.EqualFold(status, "failed") || ev["is_error"] == true {
-		st.isError = true
-		for _, v := range []any{ev["error"], ev["message"], ev["response"], ev["result"], resMap["error"]} {
-			if s, ok := v.(string); ok && s != "" {
-				st.errText = s
-				break
-			}
-		}
+	if errMsg, isErr, qKill := extractJSONErr(ev, resMap); isErr {
+		st.isError, st.errText, st.qAbort = true, errMsg, st.qAbort || qKill
+		return
 	}
 	for _, v := range []any{resMap["output"], ev["response"], ev["result"]} {
 		if s, ok := v.(string); ok && s != "" {
 			st.finalResp, st.hasFinal = s, true
+			status, _ := ev["status"].(string)
+			if status == "" {
+				status, _ = resMap["status"].(string)
+			}
+			lowSt := strings.ToLower(status)
+			if !st.qAbort && (lowSt == "success" || lowSt == "succeeded" || lowSt == "completed") {
+				st.isError, st.errText = false, ""
+			}
 			break
 		}
 	}
@@ -218,15 +217,17 @@ func (st *streamTracker) consumeLine(line string, now float64) {
 	}
 	var ev map[string]any
 	if !strings.HasPrefix(trimmed, "{") || json.Unmarshal([]byte(trimmed), &ev) != nil || ev == nil {
-		st.rawBuf.addStr(line)
-		st.rawBuf.addStr("\n")
+		st.rawBuf.addStr(line + "\n")
+		if !st.sawDelta && IsLiveQuotaLine(trimmed) {
+			st.isError, st.errText, st.qAbort = true, trimmed, true
+		}
 		return
 	}
-	st.consumeMeta(ev)
 	if isToolEvent(ev) {
 		st.phase = "tool"
 		return
 	}
+	st.consumeMeta(ev)
 	if st.consumeDelta(ev, now) {
 		return
 	}

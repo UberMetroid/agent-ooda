@@ -30,39 +30,58 @@ func rotateSlice(s []string, offset int) []string {
 	return append(append([]string(nil), s[k:]...), s[:k]...)
 }
 
-func cappedActiveSorted(q *fleet.QuotaState) []string {
+func cappedActiveSorted(q *fleet.QuotaState, nowUTC time.Time) []string {
 	if !q.DrainCappedFirst {
 		return nil
 	}
 	type item struct {
-		hasClock int
-		dt       time.Time
-		cycleH   float64
-		idx      int
-		name     string
+		urgent, tariff, hasClock, idx int
+		cycleH                        float64
+		dt                            time.Time
+		name                          string
 	}
+	caps := DiscoverFleetCaps(DiscoverOpts{Quota: q, ProbeAgy: false})
 	var list []item
 	for idx, name := range fleet.ProviderOrder {
 		info := q.Providers[name]
 		if info == nil || info.Tier != "capped" || info.Status != "active" {
 			continue
 		}
-		hasClock, dtVal, ch := 1, time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC), 9999.0
+		urgent, hasClock, dtVal, ch := 1, 1, time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC), 9999.0
 		ts := orStr(ptrVal(info.NextResetAt), ptrVal(info.CooldownUntil))
 		if parsed, ok := fleet.ParseISOUTC(ts); ok {
 			hasClock, dtVal = 0, parsed
+			if dtVal.After(nowUTC) && dtVal.Sub(nowUTC) <= 6*time.Hour {
+				urgent = 0
+			}
 		}
 		if info.CycleHours != nil {
 			ch = *info.CycleHours
 		}
-		list = append(list, item{hasClock, dtVal, ch, idx, name})
+		tb, mult := 0, 1.0
+		mult, _ = LaneTariff(name, info, caps[name].EffectiveModel, nowUTC)
+		if mult < 1.0 {
+			tb = -1
+		} else if mult > 1.0 {
+			tb = 1
+		}
+		list = append(list, item{urgent, tb, hasClock, idx, ch, dtVal, name})
 	}
 	sort.Slice(list, func(i, j int) bool {
 		a, b := list[i], list[j]
+		if a.urgent != b.urgent {
+			return a.urgent < b.urgent
+		}
+		if a.urgent == 0 && !a.dt.Equal(b.dt) {
+			return a.dt.Before(b.dt)
+		}
+		if a.tariff != b.tariff {
+			return a.tariff < b.tariff
+		}
 		if a.hasClock != b.hasClock {
 			return a.hasClock < b.hasClock
 		}
-		if !a.dt.Equal(b.dt) {
+		if a.hasClock == 0 && !a.dt.Equal(b.dt) {
 			return a.dt.Before(b.dt)
 		}
 		if a.cycleH != b.cycleH {
@@ -177,13 +196,14 @@ func BuildCandidateOrder(
 	if len(lanes) != 1 || lanes[0] != "auto" {
 		return dedupStrings(append(append([]string(nil), lanes...), chain...)), nil
 	}
-	em := ComputeEMEnvelope(q, time.Now().UTC())
+	nowUTC := time.Now().UTC()
+	em := ComputeEMEnvelope(q, nowUTC)
 	comp := strings.ToLower(strings.TrimSpace(complexity))
 	var ordered []string
 	if fleet.FastComplexities[comp] {
 		ordered = fastOrder(q, chain, em)
 	} else {
-		ordered = normalOrder(comp, q, chain, pool, em, cappedActiveSorted(q), stripeIdx)
+		ordered = normalOrder(comp, q, chain, pool, em, cappedActiveSorted(q, nowUTC), stripeIdx)
 	}
 	if len(avoidFamilies) == 0 {
 		return ordered, nil

@@ -7,14 +7,16 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/UberMetroid/agent-ooda/internal/fleet"
 )
 
 var (
-	skillAliases = map[string]string{"agent-router": "router"}
-	fmNameRe     = regexp.MustCompile(`^\s*name\s*:\s*(.+)$`)
-	fmDescRe     = regexp.MustCompile(`^\s*description\s*:\s*(.*)$`)
+	skillAliases  = map[string]string{"agent-router": "router"}
+	fmNameRe      = regexp.MustCompile(`^\s*name\s*:\s*(.+)$`)
+	fmDescRe      = regexp.MustCompile(`^\s*description\s*:\s*(.*)$`)
+	discoverCache sync.Map
 )
 
 // SkillMeta describes a discoverable SKILL.md entry for reports and --skill.
@@ -124,6 +126,10 @@ func parseFrontmatter(fm []string, fallback string) (string, string) {
 // DiscoverSkills lists all SKILL.md packages sorted domain-first then core.
 func DiscoverSkills(cwd string) []SkillMeta {
 	roots := SkillRoots(cwd)
+	cacheKey := strings.Join(roots, "\x00")
+	if cached, ok := discoverCache.Load(cacheKey); ok {
+		return append([]SkillMeta(nil), cached.([]SkillMeta)...)
+	}
 	seen := make(map[string]bool)
 	var out []SkillMeta
 	for _, root := range roots {
@@ -153,6 +159,7 @@ func DiscoverSkills(cwd string) []SkillMeta {
 		}
 		return out[i].Name < out[j].Name
 	})
+	discoverCache.Store(cacheKey, append([]SkillMeta(nil), out...))
 	return out
 }
 
