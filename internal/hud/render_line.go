@@ -23,6 +23,8 @@ func stepStyle(mode string) (string, string, string) {
 	switch mode {
 	case "observe", "recon":
 		return "observe", CObserve, CObserveModel
+	case "orient":
+		return "orient", COrient, "\033[38;5;222m"
 	case "act:verify", "review":
 		return "verify", CVerify, CVerifyModel
 	default:
@@ -30,27 +32,28 @@ func stepStyle(mode string) (string, string, string) {
 	}
 }
 
-func formatWorkerMetric(w dispatch.WorkerMarker, now float64) string {
+func formatWorkerMetric(w dispatch.WorkerMarker, now float64, useColor bool) string {
 	if w.Phase == "" {
 		return ""
 	}
 	elapsed := max(0, int(now-w.StartedAt))
 	if w.Phase == "stream" && (now-w.UpdatedAt) <= 3.0 && w.TokS >= 1 {
+		txt := fmt.Sprintf("~%d tok/s", int(math.Round(w.TokS)))
 		if w.TokExact {
-			return fmt.Sprintf("%d tok/s", int(math.Round(w.TokS)))
+			txt = fmt.Sprintf("%d tok/s", int(math.Round(w.TokS)))
 		}
-		return fmt.Sprintf("~%d tok/s", int(math.Round(w.TokS)))
+		return Colorize(txt, TokRateColor(w.TokS), useColor)
 	}
 	if w.Phase == "tool" {
-		return fmt.Sprintf("tool %ds", elapsed)
+		return Colorize(fmt.Sprintf("tool %ds", elapsed), CMuted, useColor)
 	}
 	if elapsed >= 1 {
-		return fmt.Sprintf("%ds", elapsed)
+		return Colorize(fmt.Sprintf("%ds", elapsed), CMuted, useColor)
 	}
 	return ""
 }
 
-func aggregateRateMetric(workers []dispatch.WorkerMarker, now float64) string {
+func aggregateRateMetric(workers []dispatch.WorkerMarker, now float64, useColor bool) string {
 	var sum float64
 	active := false
 	for _, w := range workers {
@@ -60,7 +63,7 @@ func aggregateRateMetric(workers []dispatch.WorkerMarker, now float64) string {
 		}
 	}
 	if active && sum >= 1 {
-		return fmt.Sprintf("~%d tok/s", int(math.Round(sum)))
+		return Colorize(fmt.Sprintf("~%d tok/s", int(math.Round(sum))), TokRateColor(sum), useColor)
 	}
 	return ""
 }
@@ -75,8 +78,8 @@ func buildLeftSegment(
 		step, stepCol, modCol := stepStyle(w.Mode)
 		out := Colorize(spin+" "+step, stepCol, useColor) + dot +
 			Colorize(HudShortModel(w.Model), modCol, useColor)
-		if metric := formatWorkerMetric(w, now); metric != "" {
-			out += dot + Colorize(metric, CMuted, useColor)
+		if metric := formatWorkerMetric(w, now, useColor); metric != "" {
+			out += dot + metric
 		}
 		return out
 	}
@@ -103,8 +106,8 @@ func buildLeftSegment(
 			modStr += ", …"
 		}
 		out := Colorize(spin+" "+step, stepCol, useColor) + dot + Colorize(modStr, modCol, useColor)
-		if agg := aggregateRateMetric(workers, now); agg != "" {
-			out += dot + Colorize(agg, CMuted, useColor)
+		if agg := aggregateRateMetric(workers, now, useColor); agg != "" {
+			out += dot + agg
 		}
 		return out
 	}
@@ -133,12 +136,16 @@ func buildLine(
 	} else if len(skills) > 1 {
 		skSeg = sep + Colorize("skills "+strings.Join(skills, ", "), CMuted, useColor)
 	}
+	pinSeg := ""
+	if len(workers) == 0 && !thinking && sum.Pins != "" {
+		pinSeg = sep + Colorize("pin "+sum.Pins, CMuted, useColor)
+	}
 	fleetSeg := Colorize(fmt.Sprintf("fleet %d/%d", sum.Active, sum.Total), fCol, useColor)
 	if includeWake && sum.WakeCD != "" {
 		fleetSeg += Colorize(" (next "+sum.WakeCD+")", CMuted, useColor)
 	}
 	left := buildLeftSegment(workers, thinking, frameIdx, useColor, dot, now)
-	return left + skSeg + sep + fleetSeg
+	return left + skSeg + pinSeg + sep + fleetSeg
 }
 
 func agentThinking(data map[string]any) bool {
@@ -183,13 +190,23 @@ func RenderStatusLine(
 	hudBase := fleet.HudDirPath()
 	workers := LoadActiveWorkers(hudBase)
 	skills := CollectSkills(hudBase, data, workers, now)
-	sum := LoadFleetSummary(time.Now().UTC())
+	var sum FleetSummary
 	if sumOverride != nil {
 		sum = *sumOverride
+	} else {
+		hudCwd, _ := data["cwd"].(string)
+		if hudCwd == "" && len(workers) > 0 {
+			hudCwd = workers[0].Cwd
+		}
+		sum = LoadFleetSummary(time.Now().UTC(), hudCwd)
 	}
 	thinking := agentThinking(data)
 	frame := int(now * 4)
 	line := buildLine(workers, skills, sum, thinking, frame, useColor, true, now)
+	if VisibleLen(line) > maxWidth && sum.Pins != "" {
+		sum.Pins = ""
+		line = buildLine(workers, skills, sum, thinking, frame, useColor, true, now)
+	}
 	if VisibleLen(line) > maxWidth && sum.WakeCD != "" {
 		line = buildLine(workers, skills, sum, thinking, frame, useColor, false, now)
 	}

@@ -3,6 +3,7 @@ package envelope
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -55,6 +56,18 @@ func TestEMRegimesAndOrder(t *testing.T) {
 	})
 	if err != nil || sel.Lane != "grok" {
 		t.Fatalf("expected grok selection, got %+v (%v)", sel, err)
+	}
+	pinFast, err := BuildCandidateOrder("devin-fast", "fast", dq, nil, nil)
+	if err != nil || len(pinFast) < 3 || pinFast[0] != "devin-fast" ||
+		slices.Contains(pinFast, "devin-fusion") || slices.Index(pinFast, "mcode") > slices.Index(pinFast, "agy-opus") {
+		t.Fatalf("expected pinned fast E-M fallback without credits, got %v err=%v", pinFast, err)
+	}
+	pinPivot, _ := BuildCandidateOrder("grok", "act", dq, nil, map[string]bool{ModelFamily("grok"): true})
+	if len(pinPivot) < 2 || pinPivot[0] == "grok" {
+		t.Fatalf("expected mismatch pivot to rotate grok behind off-family lane, got %v", pinPivot)
+	}
+	if !HasLaneFamily("devin-fast,mcode", "minimax") || HasLaneFamily("devin-fast,grok", "minimax") {
+		t.Fatal("HasLaneFamily CSV check failed")
 	}
 }
 

@@ -1,7 +1,13 @@
 {
-  "version": 8,
+  "version": 9,
   "updated_at": null,
   "drain_capped_first": true,
+  "stages": {
+    "observe": { "lane": "auto" },
+    "orient": { "lane": "auto" },
+    "act": { "lane": "auto" },
+    "verify": { "lane": "auto" }
+  },
   "parallel_stripe_pool": [
     "agy-opus",
     "muse",

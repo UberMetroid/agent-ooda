@@ -54,6 +54,10 @@ func TestStatusLineModes(t *testing.T) {
 			"⠋ observe · swe-2-flash-max",
 		},
 		{
+			[]dispatch.WorkerMarker{{Mode: "orient", Model: "grok-4.7"}},
+			"⠋ orient · grok-4.7",
+		},
+		{
 			[]dispatch.WorkerMarker{{Mode: "act", Model: "claude-opus-5-5-high"}},
 			"⠋ act · claude-opus-5-5-high",
 		},
@@ -146,6 +150,35 @@ func TestStatusLineTelemetryANSI(t *testing.T) {
 	if !strings.Contains(ansi, CVerify+"⠋ verify"+Reset) ||
 		!strings.Contains(ansi, CVerifyModel+"MiniMax-M3.1-Flash"+Reset) {
 		t.Fatalf("unexpected ANSI output: %q", ansi)
+	}
+}
+
+func TestThermalTokSAndIdlePins(t *testing.T) {
+	tmp := t.TempDir()
+	hudDir := filepath.Join(tmp, "hud")
+	t.Setenv("ROUTER_HUD_DIR", hudDir)
+	t.Setenv("NO_COLOR", "")
+	sum, now := FleetSummary{Active: 5, Total: 8, WakeCD: "1h05m"}, 1000.0
+	thermalCases := []struct {
+		tokS float64
+		col  string
+	}{
+		{18, CTokCold}, {42, CTokCruise}, {85, CTokWarm}, {140, CTokHot}, {210, CTokRedHot},
+	}
+	for _, tc := range thermalCases {
+		setTestWorkers(t, hudDir, []dispatch.WorkerMarker{{
+			Mode: "act", Model: "grok-4.7", Phase: "stream", TokS: tc.tokS, UpdatedAt: 999.0, StartedAt: 995.0,
+		}})
+		got := RenderStatusLine("{}", true, &now, &sum)
+		if !strings.Contains(got, tc.col+"~") {
+			t.Fatalf("expected thermal color %q for %.0f tok/s, got %q", tc.col, tc.tokS, got)
+		}
+	}
+	setTestWorkers(t, hudDir, nil)
+	t.Setenv("NO_COLOR", "1")
+	sum.Pins = "act:devin-pro"
+	if got := RenderStatusLine("{}", true, &now, &sum); got != "○ agent-ooda │ pin act:devin-pro │ fleet 5/8 (next 1h05m)" {
+		t.Fatalf("expected idle pin summary, got %q", got)
 	}
 }
 

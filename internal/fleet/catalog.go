@@ -25,8 +25,8 @@ func UsageErr(format string, args ...any) error {
 }
 
 const (
-	Version             = "2.0.0"
-	QuotaSchemaVersion  = 8
+	Version             = "2.1.0"
+	QuotaSchemaVersion  = 9
 	CornerWindowSecs    = 5400
 	SoonWakeSecs        = 2700
 	DevinFastMaxPar     = 4
@@ -39,6 +39,8 @@ const (
 	DefaultFusionModel  = "fusion-claude-opus-5-5-high-sidekick-swe-2-medium"
 	ReconPrefix         = "READ-ONLY RECONNAISSANCE: Do NOT modify, create, or delete any files. " +
 		"Answer concisely with exact file paths, line numbers, and findings:\n\n"
+	OrientPrefix = "READ-ONLY ORIENT & ARCHITECTURE: Do NOT modify, create, or delete any files. " +
+		"Analyze root causes, invariants, coupling, trade-offs, and propose a concrete step-by-step plan:\n\n"
 )
 
 var (
@@ -57,12 +59,12 @@ var (
 
 var (
 	CoreHiddenSkills = map[string]bool{
-		"agent-ooda": true, "agent-ooda:agent-ooda": true,
-		"router": true, "agent-router": true, "ooda": true,
-		"ooda:ooda": true, "ooda:router": true,
+		"agent-ooda": true, "agent-ooda:agent-ooda": true, "lane": true, "agent-ooda:lane": true,
+		"router": true, "agent-router": true, "ooda": true, "ooda:ooda": true, "ooda:router": true,
 		"agy-customizations": true, "antigravity-guide": true, "antigravity_guide": true,
 		"run-workflow": true, "swarm": true, "swarm_monitor": true,
 	}
+	StageNames  = []string{"observe", "orient", "act", "verify"}
 	DefaultPool = []string{
 		"agy-opus", "muse", "grok", "mistral",
 		"devin-fusion", "devin-fast", "devin-pro", "mcode",
@@ -142,6 +144,14 @@ type ProviderConfig struct {
 	LastProbedAt     *string  `json:"last_probed_at,omitempty"`
 }
 
+// StageRoute pins or defaults one OODA stage (observe, orient, act, verify).
+type StageRoute struct {
+	Lane      string  `json:"lane"`
+	Model     *string `json:"model,omitempty"`
+	Effort    *string `json:"effort,omitempty"`
+	ExpiresAt *string `json:"expires_at,omitempty"`
+}
+
 // QuotaState mirrors the top-level quota.json state schema.
 type QuotaState struct {
 	Version              int                        `json:"version"`
@@ -149,6 +159,7 @@ type QuotaState struct {
 	DrainCappedFirst     bool                       `json:"drain_capped_first"`
 	ParallelStripePool   []string                   `json:"parallel_stripe_pool"`
 	DefaultFallbackChain []string                   `json:"default_fallback_chain"`
+	Stages               map[string]StageRoute      `json:"stages,omitempty"`
 	Providers            map[string]*ProviderConfig `json:"providers"`
 }
 
@@ -171,16 +182,12 @@ func CLIFallbackPaths(cliName string) []string {
 		return []string{filepath.Join(localBin, cliName)}
 	}
 	table := map[string][]string{
-		"devin": {
-			filepath.Join(localBin, "devin"),
-			filepath.Join(home, ".local", "share", "devin", "cli", "_versions", "current", "bin", "devin"),
-		},
+		"devin": {filepath.Join(localBin, "devin"),
+			filepath.Join(home, ".local", "share", "devin", "cli", "_versions", "current", "bin", "devin")},
 		"mcode": {filepath.Join(home, ".minimax-code", "bin", "mcode"), filepath.Join(localBin, "mcode")},
 		"grok":  {filepath.Join(localBin, "grok"), filepath.Join(home, ".grok", "bin", "grok")},
-		"vibe": {
-			filepath.Join(localBin, "vibe"),
-			filepath.Join(home, ".local", "share", "uv", "tools", "mistral-vibe", "bin", "vibe"),
-		},
+		"vibe": {filepath.Join(localBin, "vibe"),
+			filepath.Join(home, ".local", "share", "uv", "tools", "mistral-vibe", "bin", "vibe")},
 	}
 	return table[cliName]
 }
@@ -194,37 +201,23 @@ func Ptr[T any](v T) *T {
 func ProviderSpecs() map[string]ProviderSpec {
 	w57, w247 := []string{"5h", "7d"}, []string{"24h", "7d"}
 	return map[string]ProviderSpec{
-		"agy-opus": {
-			CLI: "agy", Tier: "capped", CycleHours: Ptr(5.0), OuterHours: Ptr(168.0), Windows: w57,
-			Role: "Antigravity Claude pool (5h rolling + 7d fixed weekly)",
-		},
+		"agy-opus": {CLI: "agy", Tier: "capped", CycleHours: Ptr(5.0), OuterHours: Ptr(168.0),
+			Windows: w57, Role: "Antigravity Claude pool (5h rolling + 7d fixed weekly)"},
 		"devin-fusion": {CLI: "devin", Tier: "credits", Role: "Devin Fusion pool (paid credits; reserve)"},
-		"devin-pro": {
-			CLI: "devin", Tier: "unlimited", CycleHours: Ptr(24.0), OuterHours: Ptr(168.0), Windows: w247,
-			Role: "Heavy implementation & refactors (Devin Pro 24h daily + 7d weekly)",
-		},
-		"devin-fast": {
-			CLI: "devin", Tier: "unlimited", CycleHours: Ptr(24.0), OuterHours: Ptr(168.0), Windows: w247,
-			MaxParallel: Ptr(DevinFastMaxPar),
-			Role:        "Fast mechanical sweeps, tests, recon (Devin Pro 24h + 7d, max 4 parallel)",
-		},
-		"muse": {
-			CLI: "muse", Tier: "capped", CycleHours: Ptr(5.0), OuterHours: Ptr(168.0), Windows: w57,
-			Role: "Meta Muse Power (muse-ember/wonder; 5h + 7d; skips PAYG api_key)",
-		},
-		"mcode": {
-			CLI: "mcode", Tier: "high-cap", CycleHours: Ptr(5.0), OuterHours: Ptr(168.0), Windows: w57,
-			MaxParallel: Ptr(McodeMaxPar),
-			Role:        "Primary review + parallel coding & recon (5h + 7d, max 4 parallel)",
-		},
-		"grok": {
-			CLI: "grok", Tier: "capped", CycleHours: Ptr(168.0), Windows: []string{"7d"},
-			Role: "xAI SuperGrok coding agent (shared 7d rolling weekly pool)",
-		},
-		"mistral": {
-			CLI: "vibe", Tier: "capped", CycleHours: Ptr(720.0), Windows: []string{"30d"},
-			Role: "Mistral Vibe / GLM agent (30d monthly pool; off-peak aware for Z.ai)",
-		},
+		"devin-pro": {CLI: "devin", Tier: "unlimited", CycleHours: Ptr(24.0), OuterHours: Ptr(168.0),
+			Windows: w247, Role: "Heavy implementation & refactors (Devin Pro 24h daily + 7d weekly)"},
+		"devin-fast": {CLI: "devin", Tier: "unlimited", CycleHours: Ptr(24.0), OuterHours: Ptr(168.0),
+			Windows: w247, MaxParallel: Ptr(DevinFastMaxPar),
+			Role: "Fast mechanical sweeps, tests, recon (Devin Pro 24h + 7d, max 4 parallel)"},
+		"muse": {CLI: "muse", Tier: "capped", CycleHours: Ptr(5.0), OuterHours: Ptr(168.0),
+			Windows: w57, Role: "Meta Muse Power (muse-ember/wonder; 5h + 7d; skips PAYG api_key)"},
+		"mcode": {CLI: "mcode", Tier: "high-cap", CycleHours: Ptr(5.0), OuterHours: Ptr(168.0),
+			Windows: w57, MaxParallel: Ptr(McodeMaxPar),
+			Role: "Primary review + parallel coding & recon (5h + 7d, max 4 parallel)"},
+		"grok": {CLI: "grok", Tier: "capped", CycleHours: Ptr(168.0), Windows: []string{"7d"},
+			Role: "xAI SuperGrok coding agent (shared 7d rolling weekly pool)"},
+		"mistral": {CLI: "vibe", Tier: "capped", CycleHours: Ptr(720.0), Windows: []string{"30d"},
+			Role: "Mistral Vibe / GLM agent (30d monthly pool; off-peak aware for Z.ai)"},
 	}
 }
 
@@ -243,13 +236,17 @@ func DefaultProviders() map[string]*ProviderConfig {
 	return out
 }
 
-// DefaultQuotaData returns baseline schema-v8 quota state.
+// DefaultQuotaData returns baseline schema-v9 quota state.
 func DefaultQuotaData() *QuotaState {
 	now := time.Now().Format(time.RFC3339)
+	stages := make(map[string]StageRoute, len(StageNames))
+	for _, st := range StageNames {
+		stages[st] = StageRoute{Lane: "auto"}
+	}
 	return &QuotaState{
 		Version: QuotaSchemaVersion, UpdatedAt: &now, DrainCappedFirst: true,
 		ParallelStripePool:   append([]string(nil), StripePool...),
 		DefaultFallbackChain: append([]string(nil), DefaultPool...),
-		Providers:            DefaultProviders(),
+		Stages:               stages, Providers: DefaultProviders(),
 	}
 }

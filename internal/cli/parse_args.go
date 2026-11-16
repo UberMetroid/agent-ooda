@@ -8,40 +8,46 @@ import (
 	"strings"
 
 	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agent-ooda/internal/worktree"
 )
 
 // CLIOpts holds parsed command-line options for the agent-ooda CLI.
 type CLIOpts struct {
 	Manifest, Complexity, Lane, Model, Effort, Timeout string
 	Enable, Disable, SetCycle, Reason                  string
-	Recon, Task, Review                                *string
+	SetStage, Profile                                  string
+	Recon, Orient, Task, Review                        *string
 	Files, Skills, ExcludeLanes                        []string
 	Jobs                                               int
 	Hours, CostBudget                                  *float64
 	TokenBudget, MaxParallel                           *int
-	NoStripe, NoPivot, NoReview, Status                bool
+	LaneSet, NoStripe, NoPivot, NoReview, Status       bool
 	Discover, Usage, Probe, AutoWake, ResetNow         bool
+	Select, ResetStages, Local, UntilReset             bool
 	Cleanup, Help, Version                             bool
 }
 
 func usageText(prog string) string {
 	return fmt.Sprintf(
-		"usage: %s [--version | --status | --discover | --usage | --probe | --recon PROMPT |\n"+
-			"             --task PROMPT | --review [PATH] | --cleanup | --enable P | --disable P |\n"+
-			"             --set-cycle P | manifest]\n\n"+
+		"usage: %s [--version | --select | --status | --discover | --usage | --probe |\n"+
+			"             --recon P | --orient P | --task P | --review [PATH] | --cleanup |\n"+
+			"             --set-stage S=L | --reset-stages | --enable P | --disable P | --set-cycle P | manifest]\n\n"+
 			"options:\n"+
 			"  -h, --help             show this help message and exit\n"+
 			"  -v, --version          show binary version and exit\n"+
-			"  --recon/--task PROMPT  read-only recon or coding task in CWD\n"+
+			"  -s, --select           interactive arrow-key OODA stage & model selector\n"+
+			"  --recon/--orient PROMPT  read-only Observe recon or Orient architecture analysis\n"+
+			"  --task PROMPT          execute scoped coding task in CWD\n"+
 			"  --review [PATH]        standalone read-only cross-model review (default CWD)\n"+
 			"  --files / --skill CSV  scoped paths / skills to inject (repeatable)\n"+
 			"  --complexity HINT      heavy, deep, architecture, fast, tests, recon, review\n"+
-			"  --lane / --exclude-lane  auto or comma-separated lanes\n"+
+			"  --lane / --exclude-lane / --profile  auto, lane CSV, or preset profile\n"+
 			"  --model / --effort     override worker model id or reasoning effort\n"+
 			"  --timeout DUR          per-task timeout (e.g. 120s, 8m)\n"+
 			"  -j, --jobs, --slots N  max parallel workers for manifest mode (default %d, max %d)\n"+
 			"  --no-stripe/--no-pivot/--no-review  control striping, family pivot, post-task verify\n"+
-			"  --status/--discover/--usage/--probe  fleet readiness, CLI cache, telemetry, canary\n"+
+			"  --status/--discover/--usage/--probe  stage matrix, fleet, CLI cache, telemetry, canary\n"+
+			"  --set-stage S=L / --reset-stages  pin stage (or preset=NAME); modifiers: --local, --until-reset\n"+
 			"  --enable/--disable/--set-cycle P  quota/cycle admin (--auto-wake, --reason, --hours,\n"+
 			"                         --token-budget, --cost-budget, --max-parallel, --reset-now)\n"+
 			"  --cleanup              remove .worktrees and ooda/* branches\n",
@@ -89,35 +95,33 @@ func applyNumFlag(opts *CLIOpts, name, val string) error {
 }
 
 func applyStrFlag(opts *CLIOpts, name, val string) error {
+	if name == "--lane" {
+		opts.Lane, opts.LaneSet = val, true
+		return nil
+	}
+	strMap := map[string]*string{
+		"--model": &opts.Model, "--effort": &opts.Effort, "--timeout": &opts.Timeout,
+		"--complexity": &opts.Complexity, "--enable": &opts.Enable, "--disable": &opts.Disable,
+		"--reason": &opts.Reason, "--set-cycle": &opts.SetCycle,
+		"--set-stage": &opts.SetStage, "--profile": &opts.Profile,
+	}
+	if p, ok := strMap[name]; ok {
+		*p = val
+		return nil
+	}
 	switch name {
-	case "--lane":
-		opts.Lane = val
 	case "--exclude-lane":
 		opts.ExcludeLanes = append(opts.ExcludeLanes, val)
-	case "--model":
-		opts.Model = val
-	case "--effort":
-		opts.Effort = val
-	case "--timeout":
-		opts.Timeout = val
 	case "--recon":
 		opts.Recon = fleet.Ptr(val)
+	case "--orient":
+		opts.Orient = fleet.Ptr(val)
 	case "--task":
 		opts.Task = fleet.Ptr(val)
 	case "--files":
 		opts.Files = append(opts.Files, val)
 	case "--skill", "--skills":
 		opts.Skills = append(opts.Skills, val)
-	case "--complexity":
-		opts.Complexity = val
-	case "--enable":
-		opts.Enable = val
-	case "--disable":
-		opts.Disable = val
-	case "--reason":
-		opts.Reason = val
-	case "--set-cycle":
-		opts.SetCycle = val
 	default:
 		return applyNumFlag(opts, name, val)
 	}
@@ -125,35 +129,19 @@ func applyStrFlag(opts *CLIOpts, name, val string) error {
 }
 
 func applyBoolFlag(opts *CLIOpts, name string) bool {
-	switch name {
-	case "--no-stripe":
-		opts.NoStripe = true
-	case "--no-pivot":
-		opts.NoPivot = true
-	case "--no-review":
-		opts.NoReview = true
-	case "--status":
-		opts.Status = true
-	case "--discover":
-		opts.Discover = true
-	case "--usage":
-		opts.Usage = true
-	case "--probe":
-		opts.Probe = true
-	case "--auto-wake":
-		opts.AutoWake = true
-	case "--reset-now":
-		opts.ResetNow = true
-	case "--cleanup":
-		opts.Cleanup = true
-	case "-v", "--version":
-		opts.Version = true
-	case "-h", "--help":
-		opts.Help = true
-	default:
-		return false
+	m := map[string]*bool{
+		"--no-stripe": &opts.NoStripe, "--no-pivot": &opts.NoPivot, "--no-review": &opts.NoReview,
+		"--status": &opts.Status, "--discover": &opts.Discover, "--usage": &opts.Usage,
+		"--probe": &opts.Probe, "--auto-wake": &opts.AutoWake, "--reset-now": &opts.ResetNow,
+		"--cleanup": &opts.Cleanup, "-s": &opts.Select, "--select": &opts.Select,
+		"--reset-stages": &opts.ResetStages, "--local": &opts.Local, "--until-reset": &opts.UntilReset,
+		"-v": &opts.Version, "--version": &opts.Version, "-h": &opts.Help, "--help": &opts.Help,
 	}
-	return true
+	ptr, ok := m[name]
+	if ok {
+		*ptr = true
+	}
+	return ok
 }
 
 func consumeFlag(opts *CLIOpts, argv []string, i *int) error {
@@ -180,9 +168,10 @@ func consumeFlag(opts *CLIOpts, argv []string, i *int) error {
 	}
 	knownVal := map[string]bool{
 		"--lane": true, "--exclude-lane": true, "--model": true, "--effort": true, "--timeout": true,
-		"--recon": true, "--task": true, "--files": true, "--skill": true, "--skills": true, "--complexity": true,
-		"--jobs": true, "-j": true, "--slots": true, "--enable": true, "--disable": true, "--reason": true,
-		"--hours": true, "--set-cycle": true, "--token-budget": true, "--cost-budget": true, "--max-parallel": true,
+		"--recon": true, "--orient": true, "--task": true, "--files": true, "--skill": true, "--skills": true,
+		"--complexity": true, "--jobs": true, "-j": true, "--slots": true, "--enable": true, "--disable": true,
+		"--reason": true, "--hours": true, "--set-cycle": true, "--set-stage": true, "--profile": true,
+		"--token-budget": true, "--cost-budget": true, "--max-parallel": true,
 	}
 	if !knownVal[name] {
 		return fleet.UsageErr("error: unrecognized arguments: %s", arg)
@@ -195,14 +184,21 @@ func consumeFlag(opts *CLIOpts, argv []string, i *int) error {
 }
 
 func validateModes(opts CLIOpts) error {
-	if opts.Recon != nil && opts.Task != nil {
-		return fleet.UsageErr("error: --recon and --task are mutually exclusive")
+	opCount := 0
+	for _, op := range []bool{opts.Recon != nil, opts.Orient != nil, opts.Task != nil} {
+		if op {
+			opCount++
+		}
+	}
+	if opCount > 1 {
+		return fleet.UsageErr("error: --recon, --orient, and --task are mutually exclusive")
 	}
 	quotaAdmin := opts.Enable != "" || opts.Disable != "" || opts.SetCycle != ""
+	stageAdmin := opts.SetStage != "" || opts.ResetStages
 	modes := 0
 	for _, on := range []bool{
-		opts.Version, opts.Status, opts.Discover, opts.Usage, opts.Probe,
-		quotaAdmin, opts.Cleanup, opts.Recon != nil, opts.Task != nil, opts.Review != nil,
+		opts.Version, opts.Select, opts.Status, opts.Discover, opts.Usage, opts.Probe,
+		quotaAdmin, stageAdmin, opts.Cleanup, opts.Recon != nil, opts.Orient != nil, opts.Task != nil, opts.Review != nil,
 	} {
 		if on {
 			modes++
@@ -213,6 +209,11 @@ func validateModes(opts CLIOpts) error {
 	}
 	if opts.Manifest != "" && modes > 0 && opts.Review == nil {
 		return fleet.UsageErr("error: unexpected positional manifest %q with mode flag", opts.Manifest)
+	}
+	if opts.Profile != "" {
+		if _, ok := worktree.PresetStages(opts.Profile); !ok {
+			return fleet.UsageErr("error: unknown --profile %q", opts.Profile)
+		}
 	}
 	return nil
 }

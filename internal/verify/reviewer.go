@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/UberMetroid/agent-ooda/internal/envelope"
@@ -33,18 +34,18 @@ type ReviewRunner func(req ReviewExecReq) ReviewExecRes
 
 // ReviewReq configures calibrated cross-model diff review with fallback.
 type ReviewReq struct {
-	TargetDir, SlotDir, AuthorLane string
-	ReqLane, Model, Effort         string
-	QuotaPath                      string
-	DiffCtx                        DiffContext
-	ScopeViols, Declared           []string
-	TimeoutSec                     int
-	LogWriter                      io.Writer
-	Exclude                        map[string]bool
-	Runner                         ReviewRunner
-	ResolveCLI                     func(string) string
-	OnStart                        func(mode, tid, lane, cli, mod, eff string, sk []string, cwd string) string
-	OnFinish                       func(mark, mode, lane, mod, eff string, sk []string, rc int, dur float64)
+	TargetDir, SlotDir, AuthorLane    string
+	ReqLane, Model, Effort            string
+	QuotaPath                         string
+	DiffCtx                           DiffContext
+	ScopeViols, Declared, AuthorLanes []string
+	TimeoutSec                        int
+	LogWriter                         io.Writer
+	Exclude                           map[string]bool
+	Runner                            ReviewRunner
+	ResolveCLI                        func(string) string
+	OnStart                           func(mode, tid, lane, cli, mod, eff string, sk []string, cwd string) string
+	OnFinish                          func(mark, mode, lane, mod, eff string, sk []string, rc int, dur float64)
 }
 
 // ReviewResult reports final review verdict, chosen lane, model, and output.
@@ -117,8 +118,19 @@ func invokeReviewer(
 	req ReviewReq, sel envelope.SelectRes, lease *os.File,
 	prompt, scopeNote string, nativeEligible bool,
 ) (ReviewExecRes, string) {
-	rawM := resolveReviewModel(sel.Lane, req)
-	spec, specErr := envelope.EffectiveLaneSpec(sel.Lane, sel.Info, rawM, req.Effort, "review", "")
+	rawM, rawEff := resolveReviewModel(sel.Lane, req), req.Effort
+	if prim := strings.Split(req.ReqLane, ",")[0]; req.ReqLane != "" && req.ReqLane != "auto" {
+		if cp, err := fleet.NormalizeLane(prim, true); err == nil && cp != "" {
+			prim = cp
+		}
+		if sel.Lane != prim {
+			rawM, rawEff = "", ""
+			if req.LogWriter != nil {
+				fmt.Fprintf(req.LogWriter, "[verify] fallback: requested %q -> %q (off-family/cooldown)\n", prim, sel.Lane)
+			}
+		}
+	}
+	spec, specErr := envelope.EffectiveLaneSpec(sel.Lane, sel.Info, rawM, rawEff, "review", "")
 	if specErr != nil {
 		fleet.ReleaseParallelLease(lease)
 		return ReviewExecRes{ExitCode: 2, Output: specErr.Error()}, rawM
@@ -180,14 +192,14 @@ func RunReview(req ReviewReq) ReviewResult {
 	if req.Runner == nil {
 		return ReviewResult{Verdict: "SKIPPED", Reason: "no review runner configured"}
 	}
-	timeout := max(1, req.TimeoutSec)
 	if req.TimeoutSec <= 0 {
-		timeout = fleet.ReviewTimeout
+		req.TimeoutSec = fleet.ReviewTimeout
 	}
-	req.TimeoutSec = timeout
-	avoid := map[string]bool{}
-	if req.AuthorLane != "" {
-		avoid[envelope.ModelFamily(req.AuthorLane)] = true
+	timeout, avoid := req.TimeoutSec, map[string]bool{}
+	for _, a := range append([]string{req.AuthorLane}, req.AuthorLanes...) {
+		if a != "" {
+			avoid[envelope.ModelFamily(a)] = true
+		}
 	}
 	tried := copyBoolMap(req.Exclude)
 	prompt := BuildReviewPrompt(req.TargetDir, req.DiffCtx, req.ScopeViols, req.Declared)
@@ -236,9 +248,7 @@ func RunReview(req ReviewReq) ReviewResult {
 		if len(req.ScopeViols) > 0 {
 			verdict = "REJECT"
 		}
-		return ReviewResult{
-			Ran: true, Lane: sel.Lane, Model: model, Verdict: verdict,
-			ExitCode: res.ExitCode, TimedOut: res.TimedOut, Output: res.Output,
-		}
+		return ReviewResult{Ran: true, Lane: sel.Lane, Model: model, Verdict: verdict,
+			ExitCode: res.ExitCode, TimedOut: res.TimedOut, Output: res.Output}
 	}
 }

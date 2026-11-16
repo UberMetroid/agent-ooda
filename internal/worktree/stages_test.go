@@ -1,0 +1,164 @@
+package worktree
+
+import (
+	"bytes"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/UberMetroid/agent-ooda/internal/fleet"
+)
+
+func TestStagesPrecedenceAndCleanup(t *testing.T) {
+	tmp := t.TempDir()
+	qPath := filepath.Join(tmp, "quota.json")
+	t.Setenv("AGENT_QUOTA_FILE", qPath)
+	t.Setenv("HOME", filepath.Join(tmp, "home"))
+	t.Setenv("AGENT_OODA_PROFILE", "")
+
+	repo := filepath.Join(tmp, "repo")
+	_ = os.MkdirAll(repo, 0o755)
+	res, err := fleet.RunCmd(fleet.CmdSpec{Argv: []string{"git", "init", "-q"}, Cwd: repo})
+	if err != nil || res.ExitCode != 0 {
+		t.Fatalf("git init failed: %v %s", err, res.Combined)
+	}
+	if _, err := ConfigureStage(StagePatch{Stage: "act", Lane: "mcode", Cwd: repo}); err != nil {
+		t.Fatalf("global ConfigureStage failed: %v", err)
+	}
+	q, err := fleet.LoadQuota(qPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sp := ResolveStage("act", "", "", "", "", repo, q); sp.Source != "global" || sp.Primary != "mcode" {
+		t.Fatalf("expected global mcode, got %+v", sp)
+	}
+	if sp := ResolveStage("act", "", "", "", "auto", repo, q); sp.Source != "global" || sp.Primary != "mcode" {
+		t.Fatalf("expected profile=auto to honor global pin, got %+v", sp)
+	}
+	if pins := ActivePinsSummary(repo, "auto", q); !strings.Contains(pins, "act:mcode") {
+		t.Fatalf("expected act:mcode in ActivePinsSummary with auto profile, got %q", pins)
+	}
+	if sp := ResolveStage("act", "", "", "", "devin", repo, q); sp.Source != "profile:devin" || sp.Primary != "devin-pro" {
+		t.Fatalf("expected profile:devin override, got %+v", sp)
+	}
+	if _, err := ConfigureStage(StagePatch{
+		Stage: "act", Lane: "grok", Model: "grok-4.7-build-fast", Effort: "xhigh", Local: true, Cwd: repo,
+	}); err != nil {
+		t.Fatalf("local ConfigureStage failed: %v", err)
+	}
+	if sp := ResolveStage("act", "", "", "", "devin", repo, q); sp.Source != "local" ||
+		sp.Primary != "grok" || sp.Model != "grok-4.7-build-fast" || sp.Effort != "xhigh" {
+		t.Fatalf("expected local grok override, got %+v", sp)
+	}
+	if sp := ResolveStage("act", "mistral", "", "", "devin", repo, q); sp.Source != "cli" || sp.Primary != "mistral" {
+		t.Fatalf("expected CLI override, got %+v", sp)
+	}
+	if sp := ResolveStage("act", "auto", "", "", "devin", repo, q); sp.Source != "cli" || sp.Lane != "auto" {
+		t.Fatalf("expected CLI auto override, got %+v", sp)
+	}
+	if pins := ActivePinsSummary(repo, "", q); !strings.Contains(pins, "act:grok") {
+		t.Fatalf("expected act:grok in ActivePinsSummary, got %q", pins)
+	}
+
+	wt := filepath.Join(repo, ".worktrees", "dummy")
+	_ = os.MkdirAll(wt, 0o755)
+	_ = os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: ..\n"), 0o644)
+	if WorkspaceStagesPath(wt) != WorkspaceStagesPath(repo) {
+		t.Fatalf("linked worktree path mismatch: %s vs %s", WorkspaceStagesPath(wt), WorkspaceStagesPath(repo))
+	}
+	var cleanOut bytes.Buffer
+	Cleanup(repo, &cleanOut)
+	if _, serr := os.Stat(WorkspaceStagesPath(repo)); serr != nil {
+		t.Fatalf("Cleanup must preserve workspace pins outside .worktrees: %v", serr)
+	}
+}
+
+func TestLocalAutoMaskAndReset(t *testing.T) {
+	tmp := t.TempDir()
+	qPath := filepath.Join(tmp, "quota.json")
+	t.Setenv("AGENT_QUOTA_FILE", qPath)
+	t.Setenv("AGENT_OODA_PROFILE", "")
+	if _, err := ConfigureStage(StagePatch{Stage: "act", Lane: "mcode", Cwd: tmp}); err != nil {
+		t.Fatal(err)
+	}
+	q, _ := fleet.LoadQuota(qPath)
+	if _, err := ConfigureStage(StagePatch{Stage: "act", Lane: "auto", Local: true, Cwd: tmp}); err != nil {
+		t.Fatalf("local auto mask failed: %v", err)
+	}
+	if sp := ResolveStage("act", "", "", "", "devin", tmp, q); sp.Source != "local" || sp.Lane != "auto" {
+		t.Fatalf("expected local auto to mask profile/global, got %+v", sp)
+	}
+	if pins := ActivePinsSummary(tmp, "", q); strings.Contains(pins, "act:") {
+		t.Fatalf("expected local auto to suppress HUD pin, got %q", pins)
+	}
+	if _, err := ConfigureStage(StagePatch{Stage: "all", Lane: "auto", Local: true, Cwd: tmp}); err != nil {
+		t.Fatalf("local reset-all failed: %v", err)
+	}
+	if sp := ResolveStage("act", "", "", "", "", tmp, q); sp.Source != "global" || sp.Primary != "mcode" {
+		t.Fatalf("expected reset-all to restore global mcode, got %+v", sp)
+	}
+}
+
+func TestStagesExpiryPresetAndRefusal(t *testing.T) {
+	tmp := t.TempDir()
+	qPath := filepath.Join(tmp, "quota.json")
+	t.Setenv("AGENT_QUOTA_FILE", qPath)
+	t.Setenv("AGENT_OODA_PROFILE", "")
+
+	past := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339)
+	if err := SaveWorkspaceStages(tmp, map[string]fleet.StageRoute{
+		"orient": {Lane: "grok", ExpiresAt: &past},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if ws := LoadWorkspaceStages(tmp); ws["orient"].Lane != "" {
+		t.Fatalf("expected expired workspace pin auto-pruned, got %+v", ws)
+	}
+	if _, err := fleet.LoadQuota(qPath); err != nil {
+		t.Fatal(err)
+	}
+	wake := time.Now().UTC().Add(2 * time.Hour).Format(time.RFC3339)
+	_, _, _ = fleet.SetProviderStatus("grok", "cooldown", "cap", fleet.Ptr(2.0), true, qPath)
+	stMap, err := ConfigureStage(StagePatch{Stage: "orient", Lane: "grok", UntilReset: true, Cwd: tmp})
+	if err != nil || stMap["orient"].ExpiresAt == nil || *stMap["orient"].ExpiresAt == "" {
+		t.Fatalf("expected UntilReset to set ExpiresAt, err=%v got=%+v", err, stMap["orient"])
+	}
+	_ = wake
+	for _, k := range []string{"auto", "conserve", "deep", "devin", "grok", "mcode", "muse", "mistral"} {
+		if pre, ok := PresetStages("ooda-" + k); !ok || len(pre) != 4 {
+			t.Fatalf("missing preset %s", k)
+		}
+	}
+	if _, err := ConfigureStage(StagePatch{Stage: "preset", Lane: "conserve", Local: true, Cwd: tmp}); err != nil {
+		t.Fatalf("local preset failed: %v", err)
+	}
+	if _, err := ConfigureStage(StagePatch{Stage: "all", Lane: "auto", Local: true, Cwd: tmp}); err != nil {
+		t.Fatalf("local reset failed: %v", err)
+	}
+	if _, err := os.Stat(WorkspaceStagesPath(tmp)); !os.IsNotExist(err) {
+		t.Fatalf("expected workspace file deleted after reset-all, stat=%v", err)
+	}
+
+	bads := []StagePatch{
+		{Stage: "bogus", Lane: "mcode", Cwd: tmp},
+		{Stage: "act", Lane: "bogus-lane", Cwd: tmp},
+		{Stage: "act", Lane: "agy-opus", Model: "gemini-4-carbon-high", Cwd: tmp},
+		{Stage: "act", Lane: "auto", Model: "grok-4.7", Cwd: tmp},
+		{Stage: "preset", Lane: "deep", Effort: "high", Cwd: tmp},
+		{Stage: "verify", Lane: "devin-fusion", Cwd: tmp},
+		{Stage: "act", Lane: "devin-fusion", Cwd: tmp},
+	}
+	for _, bad := range bads {
+		if _, err := ConfigureStage(bad); err == nil {
+			t.Fatalf("expected refusal for invalid StagePatch %+v", bad)
+		} else {
+			var ee *fleet.ExitError
+			if !errors.As(err, &ee) || ee.Code != 2 {
+				t.Fatalf("expected ExitError(2) for %+v, got %v", bad, err)
+			}
+		}
+	}
+}

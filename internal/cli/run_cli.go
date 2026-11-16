@@ -144,7 +144,9 @@ func dispatchManifest(opts CLIOpts, outW, errW io.Writer) int {
 		fmt.Fprintln(errW, err)
 		return 1
 	}
-	sel, _ := envelope.SelectProvider(envelope.SelectReq{RequestedLane: opts.Lane, Quota: q})
+	actSt := cliResolveStage("act", opts, root, q)
+	verSt := cliResolveStage("verify", CLIOpts{Profile: opts.Profile}, root, q)
+	sel, _ := envelope.SelectProvider(envelope.SelectReq{RequestedLane: actSt.Lane, Quota: q})
 	if sel.Lane == "" {
 		fmt.Fprintf(errW, "error: no usable worker CLI found on this host (%s)\n", sel.SkippedNote)
 		return 2
@@ -158,20 +160,24 @@ func dispatchManifest(opts CLIOpts, outW, errW io.Writer) int {
 		stripeStr = "off (--no-stripe)"
 	}
 	fmt.Fprintf(outW, "default lane: %s -> %s | jobs: %d | tasks: %d | stripe: %s\n",
-		opts.Lane, sel.Lane, jobs, len(tasks), stripeStr)
+		actSt.Lane, sel.Lane, jobs, len(tasks), stripeStr)
 	if sel.SkippedNote != "" {
 		fmt.Fprintf(outW, "routing note: %s\n", sel.SkippedNote)
 	}
 	return dispatch.RunManifestBatch(root, tasks, dispatch.BatchOpts{
-		Lane: opts.Lane, Model: opts.Model, Effort: opts.Effort, Timeout: opts.Timeout,
-		Skills: opts.Skills, ExcludeLanes: opts.ExcludeLanes, Jobs: jobs,
-		NoStripe: opts.NoStripe, NoReview: opts.NoReview, NoPivot: opts.NoPivot, LogWriter: outW,
+		Lane: actSt.Lane, Model: actSt.Model, Effort: actSt.Effort, Timeout: opts.Timeout,
+		VerifyLane: verSt.Lane, VerifyModel: verSt.Model, VerifyEffort: verSt.Effort,
+		Skills: opts.Skills, ExcludeLanes: opts.ExcludeLanes, Jobs: jobs, LogWriter: outW,
+		NoStripe: opts.NoStripe, NoReview: opts.NoReview, NoPivot: opts.NoPivot, SoftPin: actSt.Source != "cli",
 	})
 }
 
 func runDispatchMode(opts CLIOpts, outW, errW io.Writer) int {
 	if opts.Recon != nil {
 		return DoRecon(opts, outW, errW)
+	}
+	if opts.Orient != nil {
+		return DoOrient(opts, outW, errW)
 	}
 	if opts.Task != nil {
 		return DoSingleTask(opts, outW, errW)
@@ -207,28 +213,32 @@ func RunCLI(prog string, argv []string, outW, errW io.Writer) int {
 		return 0
 	}
 	if opts.Status {
-		return ReportStatus(outW, false)
+		return ReportStatus(outW, false, opts)
 	}
 	if opts.Discover {
-		return ReportStatus(outW, true)
+		return ReportStatus(outW, true, opts)
 	}
 	if opts.Usage {
 		return DoUsage(outW)
 	}
 	if fleet.RouterDepth() >= 1 {
-		fmt.Fprintln(errW,
-			"error: recursive agent-ooda dispatch blocked (AGENT_OODA_DEPTH>=1 / ROUTER_DEPTH>=1). "+
-				"You are already running inside a dispatched worker — execute the task directly "+
-				"with your native tools instead of invoking agent-ooda.")
+		fmt.Fprintln(errW, "error: recursive agent-ooda dispatch blocked (AGENT_OODA_DEPTH>=1 / ROUTER_DEPTH>=1). "+
+			"Execute directly with native tools instead of invoking agent-ooda.")
 		return 2
+	}
+	if opts.Select {
+		return RunSelectTUI(opts, nil, outW, errW)
 	}
 	if opts.Probe {
 		return DoProbe(outW, errW)
 	}
+	if rc, handled := handleStageFlags(opts, outW, errW); handled {
+		return rc
+	}
 	if rc, handled := handleQuotaFlags(opts, outW, errW); handled {
 		return rc
 	}
-	if opts.Cleanup && opts.Recon == nil && opts.Task == nil && opts.Review == nil {
+	if opts.Cleanup && opts.Recon == nil && opts.Orient == nil && opts.Task == nil && opts.Review == nil {
 		root, err := fleet.RepoRoot("")
 		if err != nil {
 			fmt.Fprintln(errW, err)
@@ -237,10 +247,9 @@ func RunCLI(prog string, argv []string, outW, errW io.Writer) int {
 		worktree.Cleanup(root, outW)
 		return 0
 	}
-	if opts.Recon == nil && opts.Task == nil && opts.Review == nil && opts.Manifest == "" {
-		fmt.Fprintln(errW,
-			"error: manifest path is required (or pass --version, --recon, --task, --review, "+
-				"--status, --discover, --usage, --probe, --set-cycle, --enable, --disable, --cleanup)")
+	if opts.Recon == nil && opts.Orient == nil && opts.Task == nil && opts.Review == nil && opts.Manifest == "" {
+		fmt.Fprintln(errW, "error: manifest path is required (or pass --select, --recon, --orient, --task, "+
+			"--review, --status, --usage, --set-stage, --reset-stages, --cleanup)")
 		return 2
 	}
 	return runDispatchMode(opts, outW, errW)

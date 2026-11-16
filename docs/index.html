@@ -301,6 +301,11 @@
     .c-violet { color: var(--violet); }
     .c-red { color: var(--red); }
     .c-muted { color: var(--muted); }
+    .c-tok-cold { color: #5fafff; }
+    .c-tok-cruise { color: #00ffaf; }
+    .c-tok-warm { color: #ffd700; }
+    .c-tok-hot { color: #ff8700; font-weight: 600; }
+    .c-tok-redhot { color: #ff0000; font-weight: 700; }
 
     .grid-2 {
       display: grid;
@@ -462,14 +467,14 @@
   <main id="top">
     <section class="hero">
       <div class="wrap">
-        <span class="eyebrow">agent-ooda v2.0.0 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Multi-Window E-M Router (v8)</span>
+        <span class="eyebrow">agent-ooda v2.1.0 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Per-Stage E-M Router (v9)</span>
         <h1>Turn one session into a<br><span>token-routed agent fleet.</span></h1>
         <p class="lead">
           <strong>UberMetroid/agent-ooda</strong> ships one zero-dependency static Go OODA engine
           (<code>agent-ooda</code>, <code>agent-ooda-hud</code>, <code>agent-ooda-hook</code>) paired with
-          host plugin adapters (<code>plugins/agent-ooda</code> for Antigravity <code>agy</code> today, structured to
-          extend directly to <code>mcode</code> next): v8 multi-window E-M scheduling, UTC off-peak tariffs, live quota
-          kill, cross-model verification, and a <code>~tok/s</code> Bubble-Canopy HUD with one-line SHA-256 web install.
+          host plugin adapters (<code>plugins/agent-ooda</code> for Antigravity <code>agy</code> today): v9 per-stage
+          OODA routing (<code>--select</code> TUI, <code>/lane</code>, 8 <code>/agents</code> profiles),
+          <code>--orient</code> synthesis, cross-model verification, and a thermal <code>tok/s</code> Bubble-Canopy HUD.
         </p>
         <div class="install-bar" role="region" aria-label="One-line web installer">
           <code id="install-cmd">curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash</code>
@@ -477,13 +482,13 @@
         </div>
         <div class="hero-actions">
           <a class="btn btn-primary" href="#quickstart">Install &amp; Quickstart</a>
-          <a class="btn" href="https://github.com/UberMetroid/agent-ooda/releases/latest">Release Binaries (v2.0.0)</a>
+          <a class="btn" href="https://github.com/UberMetroid/agent-ooda/releases/latest">Release Binaries (v2.1.0)</a>
           <a class="btn" href="#architecture">Go Architecture</a>
         </div>
         <div class="telemetry-strip">
           <div class="stat">
-            <div class="stat-k">Agent Fleet</div>
-            <div class="stat-v green">8 Lanes &bull; 6 Families</div>
+            <div class="stat-k">Per-Stage OODA</div>
+            <div class="stat-v green">--select &bull; /lane &bull; /agents</div>
           </div>
           <div class="stat">
             <div class="stat-k">Static Binary</div>
@@ -491,7 +496,7 @@
           </div>
           <div class="stat">
             <div class="stat-k">Live Canopy HUD</div>
-            <div class="stat-v violet">~tok/s &bull; Tool &bull; Wake</div>
+            <div class="stat-v violet">5-Band Thermal tok/s &bull; Pins</div>
           </div>
           <div class="stat">
             <div class="stat-k">Dependencies</div>
@@ -508,39 +513,45 @@
           <span class="sec-tag">bin/agent-ooda-hud &bull; statusLine</span>
         </div>
         <p class="sec-sub">
-          Like an F-16 bubble canopy, <code>bin/agent-ooda-hud</code> renders live OODA phase transitions, sliding-window
-          <code>~tok/s</code> or exact <code>tok/s</code> stream speed, active <code>tool Xs</code> waits, injected
-          skills, parallel bursts, and multi-window wake countdowns &amp; Muse PAYG exclusion right inside Antigravity&apos;s status bar.
+          Like an F-16 bubble canopy, <code>bin/agent-ooda-hud</code> renders live OODA phase transitions,
+          active per-stage pins (<code>│ pin ...</code>), a 5-band thermal <code>tok/s</code> heat ramp
+          (Ice Blue <code>&lt;25</code> &rarr; Cyan-Green <code>25&ndash;59</code> &rarr; Solar Amber <code>60&ndash;109</code>
+          &rarr; Bold Orange <code>110&ndash;179</code> &rarr; Crimson <code>&ge;180</code>), active <code>tool Xs</code>
+          waits, and multi-window wake countdowns right inside Antigravity&apos;s status bar.
         </p>
         <div class="terminal" role="region" aria-label="Bubble-Canopy HUD status states">
           <div class="term-bar">
             <span class="term-ws">[TTY1 &middot; OMARCHY]</span>
-            <span>statusLine telemetry &bull; live states</span>
+            <span>statusLine telemetry &bull; 5-band thermal tok/s</span>
           </div>
           <ul class="hud-list">
             <li class="hud-row">
-              <span class="hud-stage">Standby</span>
-              <span class="hud-line"><span class="c-muted">&cir; agent-ooda</span> │ <span class="c-green">fleet 8/8</span></span>
+              <span class="hud-stage">Standby + Pins</span>
+              <span class="hud-line"><span class="c-muted">&cir; agent-ooda</span> │ <span class="c-cyan">pin act:grok, verify:mcode</span> │ <span class="c-green">fleet 8/8</span></span>
             </li>
             <li class="hud-row">
-              <span class="hud-stage">Orient / Decide</span>
+              <span class="hud-stage">Thinking / Decide</span>
               <span class="hud-line"><span class="c-amber">&#x25d0; orient/decide</span> │ <span class="c-muted">skill devin</span> │ <span class="c-amber">fleet 7/8</span> <span class="c-muted">(next 2h59m)</span></span>
             </li>
             <li class="hud-row">
-              <span class="hud-stage">Observe (Stream)</span>
-              <span class="hud-line"><span class="c-cyan">&#x280b; observe</span> <span class="c-muted">&middot;</span> <span class="c-cyan">swe-2-flash-max</span> <span class="c-muted">&middot; ~64 tok/s</span> │ <span class="c-green">fleet 8/8</span></span>
+              <span class="hud-stage">Orient (Cold &lt;25)</span>
+              <span class="hud-line"><span class="c-amber">&#x280b; orient</span> <span class="c-muted">&middot;</span> <span class="c-amber">claude-opus-5-5-high</span> <span class="c-muted">&middot;</span> <span class="c-tok-cold">~18 tok/s</span> │ <span class="c-amber">fleet 7/8</span> <span class="c-muted">(next 2h59m)</span></span>
             </li>
             <li class="hud-row">
-              <span class="hud-stage">Act (Tool Call)</span>
-              <span class="hud-line"><span class="c-green">&#x280b; act</span> <span class="c-muted">&middot;</span> <span class="c-green">claude-opus-5-5-high</span> <span class="c-muted">&middot; tool 4s</span> │ <span class="c-muted">skill devin</span> │ <span class="c-amber">fleet 7/8</span></span>
+              <span class="hud-stage">Observe (Cruise 25+)</span>
+              <span class="hud-line"><span class="c-cyan">&#x280b; observe</span> <span class="c-muted">&middot;</span> <span class="c-cyan">swe-2-flash-max</span> <span class="c-muted">&middot;</span> <span class="c-tok-cruise">~42 tok/s</span> │ <span class="c-green">fleet 8/8</span></span>
             </li>
             <li class="hud-row">
-              <span class="hud-stage">Parallel Act</span>
-              <span class="hud-line"><span class="c-green">&#x280b; act &times;2</span> <span class="c-muted">&middot;</span> <span class="c-green">claude-opus-5-5-high, grok-4.7</span> <span class="c-muted">&middot; ~112 tok/s</span> │ <span class="c-amber">fleet 7/8</span></span>
+              <span class="hud-stage">Act (Warm 60+)</span>
+              <span class="hud-line"><span class="c-green">&#x280b; act</span> <span class="c-muted">&middot;</span> <span class="c-green">grok-4.7</span> <span class="c-muted">&middot;</span> <span class="c-tok-warm">~78 tok/s</span> │ <span class="c-muted">skill devin</span> │ <span class="c-amber">fleet 7/8</span></span>
             </li>
             <li class="hud-row">
-              <span class="hud-stage">Cross-Model Verify</span>
-              <span class="hud-line"><span class="c-violet">&#x280b; verify</span> <span class="c-muted">&middot;</span> <span class="c-violet">MiniMax-M3.1-Flash</span> <span class="c-muted">&middot; ~48 tok/s</span> │ <span class="c-amber">fleet 7/8</span></span>
+              <span class="hud-stage">Parallel (Hot 110+)</span>
+              <span class="hud-line"><span class="c-green">&#x280b; act &times;2</span> <span class="c-muted">&middot;</span> <span class="c-green">claude-opus-5-5-high, grok-4.7</span> <span class="c-muted">&middot;</span> <span class="c-tok-hot">~138 tok/s</span> │ <span class="c-amber">fleet 7/8</span></span>
+            </li>
+            <li class="hud-row">
+              <span class="hud-stage">Verify (Red-Hot 180+)</span>
+              <span class="hud-line"><span class="c-violet">&#x280b; verify</span> <span class="c-muted">&middot;</span> <span class="c-violet">MiniMax-M3.1-Flash</span> <span class="c-muted">&middot;</span> <span class="c-tok-redhot">~195 tok/s</span> │ <span class="c-amber">fleet 7/8</span></span>
             </li>
           </ul>
         </div>
@@ -601,11 +612,13 @@
           </div>
           <div class="card">
             <span class="badge b-violet">Shared Engine</span>
-            <h3>Multi-Host Plugin Repository</h3>
+            <h3>Multi-Host Plugin &amp; 3 Selectors</h3>
             <p>
-              Core OODA packages live under <code>internal/{fleet,envelope,dispatch,verify,worktree,hud,cli,install}</code>
-              while unified host manifests/skills live under <code>plugins/agent-ooda</code> (Antigravity <code>agy</code>
-              today, ready to extend to <code>mcode</code> next).
+              Core packages live under <code>internal/{fleet,envelope,dispatch,verify,worktree,hud,cli,install}</code>
+              while <code>plugins/agent-ooda</code> ships the <code>agy</code> skill/hook suite, <code>/lane</code>, and
+              8 native <code>/agents</code> profiles (<code>ooda-auto</code>, <code>conserve</code>, <code>deep</code>,
+              <code>devin</code>, <code>grok</code>, <code>mcode</code>, <code>muse</code>, <code>mistral</code>), synced
+              with <code>agent-ooda --select</code> (<code>-s</code>).
             </p>
           </div>
           <div class="card">
@@ -873,14 +886,18 @@ curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash
 git clone https://github.com/UberMetroid/agent-ooda.git
 cd agent-ooda &amp;&amp; ./install.sh
 
-# restart agy so the plugin + statusLine load
-agy plugin list       # confirm "agent-ooda" is enabled
+# restart agy so the plugin, 8 /agents profiles, /lane &amp; statusLine load
+agy plugin list       # confirm "agent-ooda" is enabled (2.1.0)
 agent-ooda --version  # print binary version
-agent-ooda --status   # fleet tiers, resets, capabilities &amp; skills
+agent-ooda --status   # OODA stage matrix, fleet tiers, resets &amp; skills
+agent-ooda --select   # arrow-key TUI configurator (-s; add --local for repo)
+agent-ooda --set-stage act=grok --effort xhigh
+agent-ooda --set-stage preset=deep   # or --reset-stages
 agent-ooda --discover # refresh live CLI model probes
 agent-ooda --probe    # minimal 1-token prompt canaries &amp; muse PAYG check
 agent-ooda --usage    # per-lane 5h/24h/7d/30d windows &amp; UTC tariffs
 agent-ooda --recon "Map auth flow and callers"
+agent-ooda --orient "Trace cache invalidation &amp; coupling"
 agent-ooda --review . # cross-model diff gate
 make all              # full House-Law + race test + dogfood suite
 
@@ -915,9 +932,11 @@ curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --un
           <div class="card">
             <h3>State Paths &amp; House-Law Gates</h3>
             <p>
-              Quota state persists under <code>${XDG_STATE_HOME:-~/.local/state}/agent-ooda/quota.json</code>
-              (override with <code>AGENT_OODA_QUOTA_FILE</code>). Live HUD telemetry and <code>flock</code>
-              slot markers live in <code>/tmp/agent-ooda-hud</code> (override with <code>AGENT_OODA_HUD_DIR</code>).
+              Quota state (<code>v9</code>) and global stage pins persist under
+              <code>${XDG_STATE_HOME:-~/.local/state}/agent-ooda/quota.json</code> (override via
+              <code>AGENT_OODA_QUOTA_FILE</code>); <code>--local</code> per-repo pins live out-of-git in
+              <code>workspaces/&lt;id&gt;.json</code>. Live HUD markers and <code>flock</code> leases live in
+              <code>/tmp/agent-ooda-hud</code>.
             </p>
             <div class="pills">
               <span class="pill">portable (0 requires, no home paths)</span>

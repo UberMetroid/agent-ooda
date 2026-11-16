@@ -22,7 +22,7 @@ func migratePool(cur []string, def []string, oldVer int) ([]string, bool) {
 		}
 		cleaned = append(cleaned, p)
 	}
-	if oldVer < QuotaSchemaVersion || len(cleaned) == 0 {
+	if oldVer < 8 || len(cleaned) == 0 {
 		out := append([]string(nil), def...)
 		return out, true
 	}
@@ -45,7 +45,7 @@ func migrateProvider(name string, info *ProviderConfig, tmpl *ProviderConfig, ol
 			info.MaxParallel, info.Role, changed = Ptr(McodeMaxPar), tmpl.Role, true
 		}
 	}
-	if oldVer < QuotaSchemaVersion {
+	if oldVer < 8 {
 		if len(tmpl.Windows) > 0 {
 			info.Windows = append([]string(nil), tmpl.Windows...)
 			changed = true
@@ -112,6 +112,14 @@ func MigrateQuota(q *QuotaState) bool {
 			changed = true
 		}
 	}
+	if q.Stages == nil {
+		q.Stages, changed = make(map[string]StageRoute, len(StageNames)), true
+	}
+	for _, st := range StageNames {
+		if r := q.Stages[st]; r.Lane == "" {
+			q.Stages[st], changed = StageRoute{Lane: "auto"}, true
+		}
+	}
 	return changed || c1 || c2
 }
 
@@ -120,6 +128,13 @@ func ExpireAndReset(q *QuotaState, nowUTC time.Time) bool {
 	changed := false
 	if nowUTC.IsZero() {
 		nowUTC = time.Now().UTC()
+	}
+	for st, sr := range q.Stages {
+		if sr.ExpiresAt != nil && *sr.ExpiresAt != "" {
+			if dt, ok := ParseISOUTC(*sr.ExpiresAt); ok && !dt.After(nowUTC) {
+				q.Stages[st], changed = StageRoute{Lane: "auto"}, true
+			}
+		}
 	}
 	for _, info := range q.Providers {
 		if info == nil {
@@ -159,13 +174,10 @@ func SaveQuotaLocked(q *QuotaState, qPath string) error {
 }
 
 func readAndPrepLocked(path string) (*QuotaState, error) {
+	var q QuotaState
 	if raw, err := os.ReadFile(path); err == nil {
-		var q QuotaState
-		if jerr := json.Unmarshal(raw, &q); jerr != nil {
-			return nil, UsageErr("error: cannot read quota file %s: %v", path, jerr)
-		}
-		if q.Providers == nil {
-			return nil, UsageErr("error: quota file %s must contain a JSON object with providers", path)
+		if jerr := json.Unmarshal(raw, &q); jerr != nil || q.Providers == nil {
+			return nil, UsageErr("error: quota file %s must contain valid JSON with providers", path)
 		}
 		MigrateQuota(&q)
 		ExpireAndReset(&q, time.Now().UTC())
@@ -173,14 +185,11 @@ func readAndPrepLocked(path string) (*QuotaState, error) {
 	} else if !os.IsNotExist(err) {
 		return nil, UsageErr("error: cannot read quota file %s: %v", path, err)
 	}
-	var q QuotaState
 	seedPath := filepath.Join(PluginRootPath(), "config", "quota.default.json")
-	if raw, err := os.ReadFile(seedPath); err == nil {
-		if jerr := json.Unmarshal(raw, &q); jerr == nil && q.Providers != nil {
-			MigrateQuota(&q)
-			ExpireAndReset(&q, time.Now().UTC())
-			return &q, nil
-		}
+	if raw, serr := os.ReadFile(seedPath); serr == nil && json.Unmarshal(raw, &q) == nil && q.Providers != nil {
+		MigrateQuota(&q)
+		ExpireAndReset(&q, time.Now().UTC())
+		return &q, nil
 	}
 	dq := DefaultQuotaData()
 	MigrateQuota(dq)
@@ -206,9 +215,7 @@ func WithQuotaLock(qPath string, fn func(string) error) error {
 	if err := syscall.Flock(int(fh.Fd()), syscall.LOCK_EX); err != nil {
 		return err
 	}
-	defer func() {
-		_ = syscall.Flock(int(fh.Fd()), syscall.LOCK_UN)
-	}()
+	defer func() { _ = syscall.Flock(int(fh.Fd()), syscall.LOCK_UN) }()
 	return fn(resolved)
 }
 
@@ -222,30 +229,22 @@ func LoadQuota(qPath string) (*QuotaState, error) {
 			if rerr != nil {
 				return rerr
 			}
-			if werr := SaveQuotaLocked(q, path); werr != nil {
-				return werr
-			}
 			out = q
-			return nil
+			return SaveQuotaLocked(q, path)
 		}
 		raw, rerr := os.ReadFile(path)
 		if rerr != nil {
 			return UsageErr("error: cannot read quota file %s: %v", path, rerr)
 		}
 		var q QuotaState
-		if jerr := json.Unmarshal(raw, &q); jerr != nil {
-			return UsageErr("error: cannot read quota file %s: %v", path, jerr)
+		if jerr := json.Unmarshal(raw, &q); jerr != nil || q.Providers == nil {
+			return UsageErr("error: quota file %s must contain valid JSON with providers", path)
 		}
-		changed := MigrateQuota(&q)
-		if ExpireAndReset(&q, time.Now().UTC()) {
-			changed = true
-		}
-		if changed {
-			if werr := SaveQuotaLocked(&q, path); werr != nil {
-				return werr
-			}
-		}
+		mig, exp := MigrateQuota(&q), ExpireAndReset(&q, time.Now().UTC())
 		out = &q
+		if mig || exp {
+			return SaveQuotaLocked(&q, path)
+		}
 		return nil
 	})
 	return out, err

@@ -71,6 +71,7 @@ type TaskReq struct {
 	Exclude    []string
 	AvoidFam   map[string]bool
 	NoPivot    bool
+	SoftPin    bool
 	LogWriter  io.Writer
 	Runner     func(ExecReq) ExecRes
 	ResolveCLI func(string) string
@@ -104,6 +105,19 @@ type taskState struct {
 	skipped  string
 }
 
+// UsedLanes returns all attempted lanes plus the final winning lane.
+func (r TaskRes) UsedLanes() []string {
+	out := make([]string, 0, len(r.Attempts)+1)
+	for _, a := range r.Attempts {
+		out = append(out, a.Lane)
+	}
+	return append(out, r.Lane)
+}
+
+func (st *taskState) canDeferCap() bool {
+	return st.canonReq == "auto" || strings.Contains(st.canonReq, ",") || st.req.SoftPin
+}
+
 // ResolveTaskTimeout picks regime timeout unless task or CLI timeout is explicit.
 func ResolveTaskTimeout(cliRaw string, taskSec int, hasTask bool, comp string, ro bool) (int, error) {
 	if hasTask && taskSec > 0 {
@@ -112,10 +126,10 @@ func ResolveTaskTimeout(cliRaw string, taskSec int, hasTask bool, comp string, r
 	if cliRaw != "" {
 		return fleet.ParseTimeout(cliRaw)
 	}
-	if ro {
+	c := strings.ToLower(strings.TrimSpace(comp))
+	if ro && (c == "" || c == "recon") {
 		return fleet.RegimeTimeouts["observe"], nil
 	}
-	c := strings.ToLower(strings.TrimSpace(comp))
 	if fleet.DeepComplexities[c] {
 		return fleet.RegimeTimeouts["deep"], nil
 	}
@@ -165,10 +179,7 @@ func initTaskState(req TaskReq) (*taskState, error) {
 	if err != nil {
 		return nil, err
 	}
-	to, err := ResolveTaskTimeout(
-		req.TimeoutRaw, taskTo, hasTo,
-		req.Task.Complexity, req.Task.ReadOnly,
-	)
+	to, err := ResolveTaskTimeout(req.TimeoutRaw, taskTo, hasTo, req.Task.Complexity, req.Task.ReadOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -184,9 +195,8 @@ func initTaskState(req TaskReq) (*taskState, error) {
 			avoid[k] = true
 		}
 	}
-	return &taskState{
-		req: req, prompt: prompt, timeout: to, canonReq: canon, tried: tried, avoid: avoid,
-	}, nil
+	req.SoftPin = req.SoftPin && req.Task.Lane == ""
+	return &taskState{req: req, prompt: prompt, timeout: to, canonReq: canon, tried: tried, avoid: avoid}, nil
 }
 
 func acquireTaskLease(st *taskState, sel envelope.SelectRes, q *fleet.QuotaState) (*os.File, string, *TaskRes) {
@@ -198,7 +208,7 @@ func acquireTaskLease(st *taskState, sel envelope.SelectRes, q *fleet.QuotaState
 		return nil, "", nil
 	}
 	var lease *os.File
-	if st.canonReq == "auto" {
+	if st.canDeferCap() {
 		lease, _, _ = fleet.AcquireParallelLease(sel.Lane, maxP, false, 0)
 		if lease == nil {
 			ex := map[string]bool{sel.Lane: true}
@@ -208,7 +218,7 @@ func acquireTaskLease(st *taskState, sel envelope.SelectRes, q *fleet.QuotaState
 			alt, _ := envelope.SelectProvider(envelope.SelectReq{
 				RequestedLane: st.canonReq, Complexity: st.req.Task.Complexity, Quota: q,
 				Exclude: ex, StripeIndex: st.req.StripeIdx, AvoidFamilies: st.avoid,
-				DeferAtCap: true, ResolveCLI: st.req.ResolveCLI,
+				DeferAtCap: true, SoftPin: st.req.SoftPin, ResolveCLI: st.req.ResolveCLI,
 			})
 			if alt.Lane != "" {
 				st.tried[sel.Lane] = true

@@ -21,7 +21,7 @@ All runtime roles compile into one static binary (`plugins/agent-ooda/bin/agent-
 
 | Binary / Symlink | Entrypoint (`cmd/agent-ooda`) | Responsibility |
 | --- | --- | --- |
-| `agent-ooda` | CLI dispatcher & fleet admin | `--version`, `--recon`, `--task`, parallel worktree manifests, `--review`, `--status`, `--discover`, `--usage`, `--probe` |
+| `agent-ooda` | CLI dispatcher & fleet admin | `--version`, `--recon`, `--orient`, `--task`, manifests, `--review`, `--select`/`-s`, `--set-stage`, `--status`, `--discover`, `--usage`, `--probe` |
 | `agent-ooda-hud` / `statusline.py` | Bubble-Canopy HUD | Renders live ANSI statusBar telemetry from NDJSON worker markers + `quota.json` |
 | `agent-ooda-hook` | Antigravity lifecycle hook | Tracks injected skills per session and garbage-collects dead worker markers |
 | `__setup` / `__wire` | Installer helpers | Safe JSON validation and idempotent `settings.json` `statusLine` wiring |
@@ -30,13 +30,13 @@ All runtime roles compile into one static binary (`plugins/agent-ooda/bin/agent-
 agent-ooda/
 ├── cmd/agent-ooda/      # multi-call entrypoint (agent-ooda / agent-ooda-hud / agent-ooda-hook)
 ├── internal/
-│   ├── fleet/           # quota store (v8), multi-window cycles, model aliases, flock slot leases
+│   ├── fleet/           # quota store (v9), stage matrix, multi-window cycles, flock leases
 │   ├── envelope/        # E-M regime selection, UTC tariffs, CLI discovery, mismatch pivot
 │   ├── dispatch/        # io.Pipe NDJSON stream pump, tok/s rate meter, live quota kill, worktrees
 │   ├── verify/          # HeadRef/unborn diff gathering, untracked hunks, off-family review
-│   ├── worktree/        # isolated ooda/<id> git worktrees, scope rules, skill loader
-│   ├── hud/             # ANSI Bubble-Canopy line renderer & hook event recorder
-│   ├── cli/             # arg parser, conflict validation, AGENT_OODA_DEPTH / ROUTER_DEPTH guard
+│   ├── worktree/        # isolated ooda/<id> git worktrees, stage resolver, scope & skill loader
+│   ├── hud/             # ANSI Bubble-Canopy line renderer, 5-band tok/s gradient, hook recorder
+│   ├── cli/             # arg parser, --select TUI, depth guard, stage & fleet reporting
 │   └── install/         # cross-host setup/unwire helpers
 ├── plugins/agent-ooda/  # Antigravity (agy) plugin manifest, unified skill, rule, hooks & bin shims
 └── qa/gates/            # AST & repo House-Law gate suite (`make all`)
@@ -82,14 +82,17 @@ on any `gemini*`/`orchestrator*` worker model and block recursive execution (`ag
 `--task`, `--review`, `--probe`, `--cleanup`, `--enable`, `--disable`, `--set-cycle`) whenever
 `AGENT_OODA_DEPTH>=1` or `ROUTER_DEPTH>=1`.
 
-**Stage clocks:**
+**Stage clocks & Per-Stage OODA Routing (`v2.1.0`):**
 
-- **Observe:** read-only recon dispatches to free lanes first (`devin-fast`, `mcode`).
-- **Act:** soonest-resetting capped lanes drain first, followed by remaining capped and free lanes.
-- **Parallel:** manifest batches create one isolated `git worktree` per task with atomic `flock` slot leases on 4-wide pools.
-- **Deep:** capped priority order (`agy-opus → muse → grok → mistral`).
-- **Conserve:** when one capped lane remains, free `devin-*` and `mcode` absorb traffic first.
-- **Verify:** every non-empty diff runs through an independent model family.
+- **Per-Stage Matrix (`observe`, `orient`, `act`, `verify`):** Each worker stage defaults to `auto` (`Decide` remains with you and the top-level orchestrator) and resolves via **`CLI flag > --local > --profile > global > auto`**. CLI `--lane`/`--model`/`--effort` target the primary command stage (`--recon`, `--orient`, `--task`, or standalone `--review`); post-task `verify` follows `--local`/`--profile`/global pins so `--task` worker flags never leak onto the off-family reviewer.
+- **Soft-Pin Failover & Off-Family Verify:** Pinned stages soft-failover on 429s/cooldown down their lane CSV or `E-M auto`, scrubbing primary-lane `--model`/`--effort` overrides when failing over to another lane; `verify` always enforces a non-authoring model family.
+- **3 Synchronized Arrow-Key Selectors:**
+  - `agent-ooda --select` (`-s`): Interactive terminal TUI (`↑`/`↓` + `Enter`, sticky or `--until-reset`, global `quota.json` `v9` or `--local` `~/.local/state/agent-ooda/workspaces/<id>.json`).
+  - `/lane`: Native Antigravity in-chat selector skill (`ask_question`) for per-stage pins, presets, and resets.
+  - `/agents`: `8` native `agy` workflow profiles (`ooda-auto`, `ooda-conserve`, `ooda-deep`, `ooda-devin`, `ooda-grok`, `ooda-mcode`, `ooda-muse`, `ooda-mistral`).
+- **Observe & Orient:** `--recon` (`observe`) dispatches read-only lookup to free lanes (`devin-fast`, `mcode`); `--orient` (`orient`) runs deep read-only root-cause & architecture synthesis (`OODA:ORIENT`).
+- **Act & Parallel:** Soonest-resetting capped lanes drain first; manifest batches isolate `git worktree` stripes with atomic `flock` slot leases.
+- **Conserve & Verify:** When one capped lane remains, free `devin-*` and `mcode` absorb routine work; every non-empty diff runs through an independent model family.
 
 ### Other Agent CLIs (Not Currently Configured)
 
@@ -116,31 +119,45 @@ review or scope checks) are all audited fail-closed with a `240s` review budget:
 ## Bubble-Canopy HUD (`bin/agent-ooda-hud`)
 
 `bin/agent-ooda-hud` (`statusline.py`) reads live NDJSON stream telemetry written over `io.Pipe()` and
-renders OODA phase (`○ agent-ooda`, `◐ orient/decide`, `⠋ observe`, `⠋ act`, `⠋ verify`), live `~tok/s`
-(or exact `tok/s`), active `tool Xs` waits, injected skills, and `fleet X/8 (next …)` wake countdowns:
+renders OODA phase (`○ agent-ooda`, `◐ orient/decide`, `⠋ observe`, `⠋ orient`, `⠋ act`, `⠋ verify`), active
+stage pins on standby (`│ pin ...`), `tool Xs` waits, injected skills, `fleet X/8 (next …)` wake countdowns, and a
+**5-band ANSI 256-color thermal `tok/s` heat ramp**:
+
+- **Cold (`<25 tok/s`):** Ice Blue (`ANSI 75`)
+- **Cruise (`25–59 tok/s`):** Cyan-Green (`ANSI 49`)
+- **Warm (`60–109 tok/s`):** Solar Amber (`ANSI 220`)
+- **Hot (`110–179 tok/s`):** Bold Orange (`ANSI 208`)
+- **Afterburner (`>=180 tok/s`):** Bold Red-Hot Crimson (`ANSI 196`)
 
 ```text
-○ agent-ooda │ fleet 8/8
+○ agent-ooda │ pin act:grok, verify:mcode │ fleet 8/8
 ◐ orient/decide │ skill devin │ fleet 7/8 (next 2h59m)
-⠋ observe · swe-2-flash-max · ~64 tok/s │ fleet 8/8
-⠋ act · claude-opus-5-5-high · tool 4s │ skill devin │ fleet 7/8
-⠋ act ×2 · claude-opus-5-5-high, grok-4.7 · ~112 tok/s │ fleet 7/8
-⠋ verify · MiniMax-M3.1-Flash · ~48 tok/s │ fleet 7/8
+⠋ orient · claude-opus-5-5-high · ~18 tok/s │ fleet 7/8 (next 2h59m)
+⠋ observe · swe-2-flash-max · ~42 tok/s │ fleet 8/8
+⠋ act · grok-4.7 · ~78 tok/s │ skill devin │ fleet 7/8
+⠋ act ×2 · claude-opus-5-5-high, grok-4.7 · ~138 tok/s │ fleet 7/8
+⠋ verify · MiniMax-M3.1-Flash · ~195 tok/s │ fleet 7/8
 ```
 
 ## CLI Quick Reference
 
 ```bash
-agent-ooda --version                 # print binary version
-agent-ooda --status                  # live fleet regimes, models, effort modes, skills & next wake
-agent-ooda --discover                # refresh live CLI capability probe cache
-agent-ooda --probe                   # minimal 1-token prompt canary & muse PAYG check
-agent-ooda --usage                   # per-lane 5h/24h/7d/30d windows, UTC tariffs & E-M regime telemetry
-agent-ooda --recon "Map auth flow"   # read-only Observe recon (free lanes first)
+agent-ooda --version                        # print binary version
+agent-ooda --status                         # OODA stage matrix, fleet regimes, models & skills
+agent-ooda --select                         # interactive arrow-key TUI (-s; add --local for repo)
+agent-ooda --set-stage act=grok --effort xhigh
+agent-ooda --set-stage act=auto --local     # mask one stage to auto in this repo
+agent-ooda --set-stage preset=conserve      # presets: auto, conserve, deep, devin, grok, mcode, muse, mistral
+agent-ooda --reset-stages                   # reset global pins to auto (--local clears repo overrides)
+agent-ooda --discover                       # refresh live CLI capability probe cache
+agent-ooda --probe                          # minimal 1-token prompt canary & muse PAYG check
+agent-ooda --usage                          # per-lane 5h/24h/7d/30d windows, UTC tariffs & E-M regime telemetry
+agent-ooda --recon "Map auth flow"          # OODA Observe: read-only recon (free lanes first)
+agent-ooda --orient "Trace cache race"      # OODA Orient: read-only root-cause & architecture plan
 agent-ooda --task "Fix parser bug" --files internal/cli/parse_args.go --skill devin
 agent-ooda .worktrees/tasks.json -j 4
-agent-ooda --review .                # standalone cross-model working-tree/HEAD diff gate
-agent-ooda --cleanup                 # remove .worktrees and temporary ooda/* branches
+agent-ooda --review .                       # standalone cross-model working-tree/HEAD diff gate
+agent-ooda --cleanup                        # remove .worktrees and temporary ooda/* branches
 ```
 
 ## Install, Update & Uninstall
@@ -195,7 +212,7 @@ git pull && ./install.sh
 curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --uninstall --purge
 ```
 
-Runtime state persists under `${XDG_STATE_HOME:-~/.local/state}/agent-ooda/quota.json` (`AGENT_OODA_QUOTA_FILE`); live HUD markers and `flock` leases live in `/tmp/agent-ooda-hud` (`AGENT_OODA_HUD_DIR`).
+Runtime state persists under `${XDG_STATE_HOME:-~/.local/state}/agent-ooda/quota.json` (`v9`, `AGENT_OODA_QUOTA_FILE`) and per-repo `--local` pins under `~/.local/state/agent-ooda/workspaces/<id>.json`; live HUD markers and `flock` leases live in `/tmp/agent-ooda-hud` (`AGENT_OODA_HUD_DIR`).
 
 ## House-Law Verification
 

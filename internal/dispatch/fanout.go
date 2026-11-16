@@ -17,15 +17,15 @@ import (
 
 // BatchOpts configures parallel manifest execution across git worktrees.
 type BatchOpts struct {
-	Lane, Model, Effort, Timeout string
-	QuotaPath                    string
-	Skills, ExcludeLanes         []string
-	Jobs                         int
-	NoStripe, NoReview, NoPivot  bool
-	LogWriter                    io.Writer
-	TaskRunner                   func(ExecReq) ExecRes
-	ReviewRunner                 verify.ReviewRunner
-	ResolveCLI                   func(string) string
+	Lane, Model, Effort, Timeout, QuotaPath string
+	VerifyLane, VerifyModel, VerifyEffort   string
+	Skills, ExcludeLanes                    []string
+	Jobs                                    int
+	NoStripe, NoReview, NoPivot, SoftPin    bool
+	LogWriter                               io.Writer
+	TaskRunner                              func(ExecReq) ExecRes
+	ReviewRunner                            verify.ReviewRunner
+	ResolveCLI                              func(string) string
 }
 
 // BatchReview is the serialized review section written into results.json.
@@ -71,7 +71,7 @@ type batchJob struct {
 
 func reviewWorktreeTask(
 	task worktree.TaskSpec, wt string, slotNum int,
-	changed, viols []string, opts BatchOpts, authorLane string, dc verify.DiffContext,
+	changed, viols []string, opts BatchOpts, authors []string, dc verify.DiffContext,
 ) BatchReview {
 	if opts.NoReview || (task.Review != nil && !*task.Review) {
 		return BatchReview{Model: fleet.ReviewModelEnv(), Verdict: "SKIPPED", Reason: "disabled"}
@@ -86,7 +86,8 @@ func reviewWorktreeTask(
 	}
 	res := ExecReview(verify.ReviewReq{TargetDir: wt, SlotDir: revSlot, DiffCtx: dc,
 		TimeoutSec: fleet.ReviewTimeout, ScopeViols: viols, Declared: task.Files, LogWriter: opts.LogWriter,
-		AuthorLane: authorLane, QuotaPath: opts.QuotaPath, Runner: opts.ReviewRunner, ResolveCLI: opts.ResolveCLI})
+		ReqLane: opts.VerifyLane, Model: opts.VerifyModel, Effort: opts.VerifyEffort,
+		AuthorLanes: authors, QuotaPath: opts.QuotaPath, Runner: opts.ReviewRunner, ResolveCLI: opts.ResolveCLI})
 	rc := res.ExitCode
 	return BatchReview{Ran: res.Ran, Lane: res.Lane, Model: res.Model, Verdict: res.Verdict,
 		ExitCode: &rc, Reason: res.Reason, Output: res.Output}
@@ -131,8 +132,8 @@ func processBatchTask(slotPool chan int, job batchJob, opts BatchOpts) BatchReco
 	}
 	res, runErr := RunTaskWithFallback(TaskReq{Task: tCopy, Worktree: job.wt, SlotDir: slotDir,
 		Lane: opts.Lane, Model: opts.Model, Effort: opts.Effort, TimeoutRaw: opts.Timeout, QuotaPath: opts.QuotaPath,
-		StripeIdx: stripe, IsParallel: true, Exclude: excl, NoPivot: opts.NoPivot, LogWriter: opts.LogWriter,
-		Runner: opts.TaskRunner, ResolveCLI: opts.ResolveCLI})
+		StripeIdx: stripe, IsParallel: true, Exclude: excl, NoPivot: opts.NoPivot, SoftPin: opts.SoftPin,
+		Runner: opts.TaskRunner, ResolveCLI: opts.ResolveCLI, LogWriter: opts.LogWriter})
 	if runErr != nil {
 		res = TaskRes{ExitCode: -1, Output: runErr.Error(), RequestedLane: opts.Lane}
 	}
@@ -147,7 +148,7 @@ func processBatchTask(slotPool chan int, job batchJob, opts BatchOpts) BatchReco
 		dc = verify.CollectDiffContext(job.wt, false)
 	}
 	viols := worktree.FindScopeViolations(changed, job.task.Files)
-	rev := reviewWorktreeTask(job.task, job.wt, slotNum, changed, viols, opts, res.Lane, dc)
+	rev := reviewWorktreeTask(job.task, job.wt, slotNum, changed, viols, opts, res.UsedLanes(), dc)
 	relWT := filepath.Base(job.wt)
 	if r, rerr := filepath.Rel(job.root, job.wt); rerr == nil {
 		relWT = r

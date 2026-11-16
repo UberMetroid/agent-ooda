@@ -181,13 +181,9 @@ func TestCorruptQuotaReviewFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	res := RunReview(ReviewReq{
-		TargetDir: tmp,
-		SlotDir:   tmp,
-		DiffCtx:   DiffContext{HasChanges: true, Source: "working-tree", Diff: "+x\n"},
-		QuotaPath: badQuota,
-		Runner: func(ReviewExecReq) ReviewExecRes {
-			return ReviewExecRes{ExitCode: 0, Output: "VERDICT: ACCEPT"}
-		},
+		TargetDir: tmp, SlotDir: tmp, QuotaPath: badQuota,
+		DiffCtx: DiffContext{HasChanges: true, Source: "working-tree", Diff: "+x\n"},
+		Runner:  func(ReviewExecReq) ReviewExecRes { return ReviewExecRes{ExitCode: 0, Output: "VERDICT: ACCEPT"} },
 	})
 	if res.ExitCode != 2 || res.Verdict != "SKIPPED" || res.Reason == "" {
 		t.Fatalf("expected exit 2 SKIPPED on corrupt quota file, got %+v", res)
@@ -208,8 +204,6 @@ func TestCorruptQuotaReviewFails(t *testing.T) {
 	}
 	repo := t.TempDir()
 	runGit(t, repo, "init", "-q")
-	runGit(t, repo, "config", "user.email", "t@invalid")
-	runGit(t, repo, "config", "user.name", "t")
 	base := HeadRef(repo)
 	_ = os.WriteFile(filepath.Join(repo, "c.go"), []byte("package c\n"), 0o644)
 	runGit(t, repo, "add", "c.go")
@@ -218,5 +212,45 @@ func TestCorruptQuotaReviewFails(t *testing.T) {
 	if !cdc.HasChanges || len(cdc.ChangedFiles) != 1 || cdc.ChangedFiles[0] != "c.go" ||
 		!strings.Contains(cdc.Diff, "+++ b/c.go") {
 		t.Fatalf("committed work against baseRef missed: %+v", cdc)
+	}
+}
+
+func TestVerifyPinOffFamilyScrub(t *testing.T) {
+	tmp := t.TempDir()
+	qPath := filepath.Join(tmp, "quota.json")
+	t.Setenv("OODA_NO_AUTO_PROBE", "1")
+	_ = fleet.AtomicWriteJSON(qPath, fleet.DefaultQuotaData(), false, true)
+	installed := map[string]string{"mcode": "/bin/true", "devin": "/bin/true"}
+	var calls []ReviewExecReq
+	diff := DiffContext{HasChanges: true, Source: "working-tree", Diff: "+x\n"}
+	run := func(r ReviewExecReq) ReviewExecRes {
+		calls = append(calls, r)
+		return ReviewExecRes{ExitCode: 0, Output: "No issues found.\nVERDICT: ACCEPT"}
+	}
+	res := RunReview(ReviewReq{
+		TargetDir: tmp, SlotDir: filepath.Join(tmp, "slot"), AuthorLane: "mcode", ReqLane: "mcode",
+		Model: "minimax/MiniMax-M3.1-Flash", Effort: "high", QuotaPath: qPath,
+		DiffCtx: diff, ResolveCLI: fakeCLIResolver(installed), Runner: run,
+	})
+	if !res.Ran || res.Lane != "devin-fast" || len(calls) != 1 ||
+		calls[0].Model == "minimax/MiniMax-M3.1-Flash" || calls[0].Effort != "" {
+		t.Fatalf("expected off-family fallback + scrub, got res=%+v calls=%+v", res, calls)
+	}
+	calls = nil
+	res2 := RunReview(ReviewReq{
+		TargetDir: tmp, SlotDir: filepath.Join(tmp, "slot2"), AuthorLane: "mcode", ReqLane: "devin",
+		Model: "fusion", QuotaPath: qPath, DiffCtx: diff, ResolveCLI: fakeCLIResolver(installed), Runner: run,
+	})
+	if !res2.Ran || res2.Lane != "devin-pro" || len(calls) != 1 || calls[0].Model != "fusion" {
+		t.Fatalf("expected alias devin to preserve fusion model, got res=%+v calls=%+v", res2, calls)
+	}
+	ins3 := map[string]string{"mcode": "/bin/true", "grok": "/bin/true", "devin": "/bin/true"}
+	res3 := RunReview(ReviewReq{
+		TargetDir: tmp, SlotDir: filepath.Join(tmp, "slot3"), AuthorLane: "mcode", ReqLane: "grok",
+		AuthorLanes: []string{"grok", "mcode"}, QuotaPath: qPath, DiffCtx: diff,
+		ResolveCLI: fakeCLIResolver(ins3), Runner: run,
+	})
+	if !res3.Ran || res3.Lane != "devin-fast" {
+		t.Fatalf("expected earlier attempt family grok excluded from verify, got res=%+v", res3)
 	}
 }

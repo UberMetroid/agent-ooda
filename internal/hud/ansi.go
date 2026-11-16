@@ -23,6 +23,11 @@ const (
 	CFleetFull    = "\033[38;5;78m"
 	CFleetPartial = "\033[38;5;221m"
 	CFleetLow     = "\033[1;38;5;203m"
+	CTokCold      = "\033[38;5;75m"
+	CTokCruise    = "\033[38;5;49m"
+	CTokWarm      = "\033[38;5;220m"
+	CTokHot       = "\033[1;38;5;208m"
+	CTokRedHot    = "\033[1;38;5;196m"
 	CMuted        = "\033[38;5;244m"
 	Reset         = "\033[0m"
 )
@@ -41,10 +46,28 @@ func copyIgnoredSkills() map[string]bool {
 	}
 	out["agent-ooda"] = true
 	out["agent-ooda:agent-ooda"] = true
+	out["lane"] = true
+	out["agent-ooda:lane"] = true
 	out["ooda"] = true
 	out["ooda:ooda"] = true
 	out["ooda:router"] = true
 	return out
+}
+
+// TokRateColor maps live tok/s throughput across a 5-band thermal gradient.
+func TokRateColor(tokS float64) string {
+	switch {
+	case tokS >= 180:
+		return CTokRedHot
+	case tokS >= 110:
+		return CTokHot
+	case tokS >= 60:
+		return CTokWarm
+	case tokS >= 25:
+		return CTokCruise
+	default:
+		return CTokCold
+	}
 }
 
 // Colorize wraps text in ANSI color sequences unless color output is disabled.

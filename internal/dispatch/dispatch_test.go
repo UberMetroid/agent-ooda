@@ -95,9 +95,8 @@ func TestNDJSONRealCLISchemas(t *testing.T) {
 	st.consumeLine(`{"type":"item.started","item":{"type":"message","contentDelta":"VERDICT: "}}`, 10.8)
 	st.consumeLine(`{"type":"item.completed","item":{"type":"agent_message","content":"VERDICT: ACCEPT"}}`, 11.0)
 	st.consumeLine(`{"type":"turn.completed","usage":{"inputTokens":1030,"outputTokens":20,"totalTokens":1050}}`, 11.1)
-	resLine := `{"type":"exec.completed","result":{"status":"succeeded",` +
-		`"output":"VERDICT: ACCEPT","usage":{"totalTokens":1050}}}`
-	st.consumeLine(resLine, 11.2)
+	st.consumeLine(`{"type":"exec.completed","result":{"status":"succeeded",`+
+		`"output":"VERDICT: ACCEPT","usage":{"totalTokens":1050}}}`, 11.2)
 	if rate, _ := st.currentRate(11.2); rate <= 0 {
 		t.Fatalf("expected mcode streaming ~tok/s > 0, got %.1f", rate)
 	}
@@ -137,8 +136,7 @@ func TestExecStreamAndGeminiGuard(t *testing.T) {
 		t.Fatalf("expected Gemini settings block exit 2, got %+v", blocked)
 	}
 	script := filepath.Join(tmp, "fake_cli.sh")
-	body := "#!/usr/bin/env bash\n" +
-		"printf '{\"type\":\"content_block_delta\",\"delta\":{\"text\":\"hello \"}}\\n'\n" +
+	body := "#!/usr/bin/env bash\nprintf '{\"type\":\"content_block_delta\",\"delta\":{\"text\":\"hello \"}}\\n'\n" +
 		"printf '{\"type\":\"content_block_delta\",\"delta\":{\"text\":\"world this is streamed text.\"}}\\n'\n" +
 		"printf '{\"type\":\"result\",\"result\":\"hello world this is streamed text.\",\"usage\":{\"total_tokens\":99}}\\n'\n"
 	_ = os.WriteFile(script, []byte(body), 0o755)
@@ -176,9 +174,12 @@ func TestManifestScopeAndReject(t *testing.T) {
 	tasks := []worktree.TaskSpec{{ID: "t1", Prompt: "edit a.go", Files: []string{"a.go"}, Lane: "mcode"}}
 	installed := map[string]string{"mcode": "/bin/true", "grok": "/bin/true"}
 	rc := RunManifestBatch(repo, tasks, BatchOpts{
-		Lane: "mcode", Jobs: 1, NoStripe: true, QuotaPath: qPath,
+		Lane: "grok", Model: "grok-4.7", Effort: "xhigh", Jobs: 1, NoStripe: true, QuotaPath: qPath,
 		ResolveCLI: func(c string) string { return installed[c] },
 		TaskRunner: func(r ExecReq) ExecRes {
+			if r.Provider != "mcode" || r.Model == "grok-4.7" || r.Effort == "xhigh" {
+				t.Fatalf("batch act-pin leaked onto task lane: %+v", r)
+			}
 			_ = os.WriteFile(filepath.Join(r.Worktree, "a.go"), []byte("package a\nvar X = 1\n"), 0o644)
 			runGit(r.Worktree, "add", "a.go")
 			runGit(r.Worktree, "commit", "-q", "-m", "worker commit")
@@ -221,6 +222,9 @@ func TestCorruptQuotaAndBoundedStream(t *testing.T) {
 	vibeErr := `Error: API error occurred: Status 402. Body: {"type":"billing_vibe_budget_exhausted"}`
 	if !fleet.HasErrorPattern(vibeErr, 2, fleet.QuotaErrorPats) {
 		t.Fatal("expected QuotaErrorPats to match vibe HTTP 402 budget exhausted")
+	}
+	if ts, _ := ResolveTaskTimeout("", 0, false, "deep", true); ts != fleet.RegimeTimeouts["deep"] {
+		t.Fatalf("expected orient/deep ro timeout %d, got %d", fleet.RegimeTimeouts["deep"], ts)
 	}
 }
 

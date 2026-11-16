@@ -14,12 +14,17 @@ import (
 
 func runTaskAttempt(st *taskState, sel envelope.SelectRes, lease *os.File) (ExecRes, string, string) {
 	req := st.req
-	rawMod, rawEff := req.Model, req.Effort
-	if rawMod == "" {
-		rawMod = req.Task.Model
+	prim := strings.Split(st.canonReq, ",")[0]
+	reqP, _ := fleet.NormalizeLane(strings.Split(req.Lane, ",")[0], true)
+	rawMod, rawEff := req.Task.Model, req.Task.Effort
+	if (req.Task.Lane == "" || prim == reqP) && rawMod == "" {
+		rawMod = req.Model
 	}
-	if rawEff == "" {
-		rawEff = req.Task.Effort
+	if (req.Task.Lane == "" || prim == reqP) && rawEff == "" {
+		rawEff = req.Effort
+	}
+	if st.canonReq != "auto" && prim != "" && sel.Lane != prim {
+		rawMod, rawEff = "", ""
 	}
 	spec, err := envelope.EffectiveLaneSpec(sel.Lane, sel.Info, rawMod, rawEff, req.Task.Complexity, "")
 	if err != nil {
@@ -29,7 +34,9 @@ func runTaskAttempt(st *taskState, sel envelope.SelectRes, lease *os.File) (Exec
 	extra := VisibleExtraSkills(req.Task.Skills)
 	parRun := req.IsParallel || req.StripeIdx != nil
 	modeTag, stage := "act", "OODA:ACT"
-	if req.Task.ReadOnly {
+	if req.Task.ID == "orient" || req.Task.Complexity == "orient" {
+		modeTag, stage = "orient", "OODA:ORIENT"
+	} else if req.Task.ReadOnly {
 		modeTag, stage = "observe", "OODA:OBSERVE"
 	} else if parRun {
 		modeTag, stage = "act:parallel", "OODA:ACT parallel:"+req.Task.ID
@@ -73,14 +80,12 @@ func handleTaskOutcome(st *taskState, prov string, res ExecRes) bool {
 	if fleet.HasErrorPattern(res.Output, res.ExitCode, fleet.QuotaErrorPats) {
 		_, _ = fleet.MarkProviderCooldown(prov, "Auto-detected quota/credit error on "+fleet.NowISO(),
 			true, res.Output, st.req.QuotaPath)
-		note, msg = "quota/credit limit detected",
-			fmt.Sprintf("quota limit hit on %q; switching to fallback lane", prov)
+		note, msg = "quota/credit limit detected", fmt.Sprintf("quota limit hit on %q; switching to fallback lane", prov)
 	} else if fleet.HasErrorPattern(res.Output, res.ExitCode, fleet.AuthErrorPats) {
-		_, _ = fleet.MarkProviderCooldown(prov, "Authentication required on "+fleet.NowISO(),
-			false, "", st.req.QuotaPath)
-		note, msg = "authentication required",
-			fmt.Sprintf("auth error on %q; switching to fallback lane", prov)
-	} else if res.ExitCode != 0 && st.canonReq == "auto" && !st.req.NoPivot && !st.pivoted {
+		_, _ = fleet.MarkProviderCooldown(prov, "Authentication required on "+fleet.NowISO(), false, "", st.req.QuotaPath)
+		note, msg = "authentication required", fmt.Sprintf("auth error on %q; switching to fallback lane", prov)
+	} else if res.ExitCode != 0 && (st.canonReq == "auto" || st.req.SoftPin) &&
+		!st.req.NoPivot && !st.pivoted {
 		fam := envelope.ModelFamily(prov)
 		ex := map[string]bool{prov: true}
 		for k, v := range st.tried {
@@ -96,14 +101,13 @@ func handleTaskOutcome(st *taskState, prov string, res ExecRes) bool {
 		}
 		probe, _ := envelope.SelectProvider(envelope.SelectReq{RequestedLane: st.canonReq,
 			Complexity: st.req.Task.Complexity, Quota: q, Exclude: ex, StripeIndex: st.req.StripeIdx,
-			AvoidFamilies: av, DeferAtCap: true, ResolveCLI: st.req.ResolveCLI})
-		if probe.Lane == "" {
+			AvoidFamilies: av, DeferAtCap: true, SoftPin: st.req.SoftPin, ResolveCLI: st.req.ResolveCLI})
+		if probe.Lane == "" || envelope.ModelFamily(probe.Lane) == fam {
 			return false
 		}
-		st.pivoted = true
-		st.avoid[fam] = true
-		note = fmt.Sprintf("exit=%d mismatch pivot", res.ExitCode)
-		msg = fmt.Sprintf("mismatch/timeout on %q; pivoting to fresh model family", prov)
+		st.pivoted, st.avoid[fam] = true, true
+		note, msg = fmt.Sprintf("exit=%d mismatch pivot", res.ExitCode),
+			fmt.Sprintf("mismatch/timeout on %q; pivoting to fresh model family", prov)
 	} else {
 		return false
 	}
@@ -128,7 +132,7 @@ func RunTaskWithFallback(req TaskReq) (TaskRes, error) {
 		}
 		sel, serr := envelope.SelectProvider(envelope.SelectReq{RequestedLane: st.canonReq,
 			Complexity: req.Task.Complexity, Quota: q, Exclude: st.tried, StripeIndex: req.StripeIdx,
-			AvoidFamilies: st.avoid, DeferAtCap: true, ResolveCLI: req.ResolveCLI})
+			AvoidFamilies: st.avoid, DeferAtCap: st.canDeferCap(), SoftPin: st.req.SoftPin, ResolveCLI: req.ResolveCLI})
 		if serr != nil {
 			return TaskRes{}, serr
 		}
@@ -239,16 +243,14 @@ func IsLiveQuotaLine(raw string) bool {
 		return false
 	}
 	if strings.HasPrefix(s, "{") {
-		jsonPats := []string{"insufficient_quota", "quota_exceeded", "rate_limit_exceeded",
-			"budget_exhausted", `"status":429`, `"status_code":429`, `"code":429`}
-		return fleet.HasErrorPattern(s, 1, jsonPats)
+		return fleet.HasErrorPattern(s, 1, []string{"insufficient_quota", "quota_exceeded",
+			"rate_limit_exceeded", "budget_exhausted", `"status":429`, `"status_code":429`, `"code":429`})
 	}
-	if !fleet.HasErrorPattern(s, 1, []string{"error", "fatal", "429", "402",
-		"exceeded", "exhausted", "insufficient_quota"}) {
+	if !fleet.HasErrorPattern(s, 1, []string{"error", "fatal", "429", "402", "exceeded", "exhausted", "insufficient_quota"}) {
 		return false
 	}
-	pats := []string{"insufficient_quota", "quota exceeded", "quota_exceeded", "quota exhausted",
-		"rate_limit_exceeded", "rate limit exceeded", "rate limit reached", "credits exhausted",
-		"out of credits", "budget_exhausted", "http 429", "status 429", "error 429", "429 too many requests"}
+	pats := []string{"insufficient_quota", "quota exceeded", "quota_exceeded", "quota exhausted", "rate_limit_exceeded",
+		"rate limit exceeded", "rate limit reached", "credits exhausted", "out of credits", "budget_exhausted",
+		"http 429", "status 429", "error 429", "429 too many requests"}
 	return fleet.HasErrorPattern(s, 1, pats)
 }

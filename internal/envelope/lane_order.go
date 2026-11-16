@@ -193,28 +193,34 @@ func BuildCandidateOrder(
 	if err != nil {
 		return nil, err
 	}
-	if len(lanes) != 1 || lanes[0] != "auto" {
-		return dedupStrings(append(append([]string(nil), lanes...), chain...)), nil
-	}
+	comp := strings.ToLower(strings.TrimSpace(complexity))
 	nowUTC := time.Now().UTC()
 	em := ComputeEMEnvelope(q, nowUTC)
-	comp := strings.ToLower(strings.TrimSpace(complexity))
 	var ordered []string
 	if fleet.FastComplexities[comp] {
 		ordered = fastOrder(q, chain, em)
 	} else {
 		ordered = normalOrder(comp, q, chain, pool, em, cappedActiveSorted(q, nowUTC), stripeIdx)
 	}
-	if len(avoidFamilies) == 0 {
-		return ordered, nil
-	}
-	var head, tail []string
-	for _, p := range ordered {
-		if avoidFamilies[ModelFamily(p)] {
-			tail = append(tail, p)
-		} else {
-			head = append(head, p)
+	if len(lanes) != 1 || lanes[0] != "auto" {
+		var tail []string
+		for _, p := range ordered {
+			if info := q.Providers[p]; info == nil || info.Tier != "credits" {
+				tail = append(tail, p)
+			}
 		}
+		ordered = dedupStrings(append(append([]string(nil), lanes...), tail...))
 	}
-	return append(head, tail...), nil
+	if len(avoidFamilies) > 0 {
+		var head, tail []string
+		for _, p := range ordered {
+			if avoidFamilies[ModelFamily(p)] {
+				tail = append(tail, p)
+			} else {
+				head = append(head, p)
+			}
+		}
+		ordered = append(head, tail...)
+	}
+	return ordered, nil
 }

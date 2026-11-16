@@ -90,7 +90,7 @@ func statusRow(
 }
 
 // ReportStatus prints fleet readiness or refreshes CLI capability discovery caches.
-func ReportStatus(w io.Writer, refresh bool) int {
+func ReportStatus(w io.Writer, refresh bool, cliOpts ...CLIOpts) int {
 	if w == nil {
 		w = os.Stdout
 	}
@@ -139,6 +139,12 @@ func ReportStatus(w io.Writer, refresh bool) int {
 			revLbl = "cli default unless overridden"
 		}
 		fmt.Fprintf(w, "Auto-review mcode (%s): %s\n", revLbl, nonEmptyOr(fleet.ResolveCLI("mcode"), "MISSING"))
+		cwd, _ := os.Getwd()
+		var co CLIOpts
+		if len(cliOpts) > 0 {
+			co = cliOpts[0]
+		}
+		printStageMatrix(w, cwd, co, q)
 	}
 	printDiscoveryFooter(w, caps, skills, refresh)
 	return 0

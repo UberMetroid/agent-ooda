@@ -12,6 +12,7 @@ import (
 
 	"github.com/UberMetroid/agent-ooda/internal/dispatch"
 	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agent-ooda/internal/worktree"
 )
 
 const sessionTTLSecs = 43200.0
@@ -23,6 +24,7 @@ type FleetSummary struct {
 	Active   int
 	Total    int
 	WakeCD   string
+	Pins     string
 	CodeLane string
 	CodeEff  string
 	FastLane string
@@ -168,7 +170,7 @@ func readFleetProviders() (*fleet.QuotaState, bool) {
 }
 
 // LoadFleetSummary reads quota.json read-only to compute active lane counts and wake timer.
-func LoadFleetSummary(nowUTC time.Time) FleetSummary {
+func LoadFleetSummary(nowUTC time.Time, cwd ...string) FleetSummary {
 	def := FleetSummary{
 		CodeLane: "agy-opus", CodeEff: "high", FastLane: "devin-fast", FastEff: "max",
 	}
@@ -176,6 +178,7 @@ func LoadFleetSummary(nowUTC time.Time) FleetSummary {
 	if !ok {
 		return def
 	}
+	fleet.ExpireAndReset(q, nowUTC)
 	active := make(map[string]bool, len(q.Providers))
 	var soonest *float64
 	for name, info := range q.Providers {
@@ -208,12 +211,16 @@ func LoadFleetSummary(nowUTC time.Time) FleetSummary {
 	if active["muse"] && fleet.CachedMuseProbe(0).PayAsYouGo {
 		delete(active, "muse")
 	}
-	wakeCD := ""
+	wakeCD, pinDir := "", ""
 	if soonest != nil {
 		wakeCD = FormatCD(*soonest)
 	}
+	if len(cwd) > 0 {
+		pinDir = cwd[0]
+	}
 	return FleetSummary{
 		Active: len(active), Total: len(q.Providers), WakeCD: wakeCD,
+		Pins:     worktree.ActivePinsSummary(pinDir, "", q),
 		CodeLane: firstActive(q.DefaultFallbackChain, active, "none"),
 		FastLane: firstActive(fastChain, active, "none"),
 	}

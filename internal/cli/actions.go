@@ -66,10 +66,11 @@ func DoStandaloneReview(targetArg string, opts CLIOpts, outW, errW io.Writer) in
 		fmt.Fprintf(outW, "No uncommitted changes or commit diff found to review in %s.\n", root)
 		return 0
 	}
-	fmt.Fprintf(outW, "Reviewing %s in %s (cross-model, lane=%s)...\n", dc.Source, root, opts.Lane)
+	verSt := cliResolveStage("verify", opts, root, nil)
+	fmt.Fprintf(outW, "Reviewing %s in %s (cross-model, lane=%s)...\n", dc.Source, root, verSt.Lane)
 	res := dispatch.ExecReview(verify.ReviewReq{
 		TargetDir: root, SlotDir: slot, DiffCtx: dc, TimeoutSec: timeout,
-		LogWriter: outW, Exclude: excl, ReqLane: opts.Lane, Model: opts.Model, Effort: opts.Effort,
+		LogWriter: outW, Exclude: excl, ReqLane: verSt.Lane, Model: verSt.Model, Effort: verSt.Effort,
 	})
 	if res.Verdict == "SKIPPED" && res.Lane == "" {
 		fmt.Fprintf(errW, "error: no review provider available (%s)\n", res.Reason)
@@ -102,15 +103,14 @@ func DoRecon(opts CLIOpts, outW, errW io.Writer) int {
 	if !ok {
 		return 1
 	}
-	comp := opts.Complexity
-	if comp == "" {
-		comp = "recon"
-	}
+	comp := nonEmptyOr(opts.Complexity, "recon")
+	st := cliResolveStage("observe", opts, cwd, nil)
+	opts.Lane, opts.Model, opts.Effort = st.Lane, st.Model, st.Effort
 	task := buildTaskSpec("recon", *opts.Recon, comp, files, opts, cwd, true)
 	res, err := dispatch.RunTaskWithFallback(dispatch.TaskReq{
-		Task: task, Worktree: cwd, SlotDir: slot, Lane: opts.Lane, Model: opts.Model,
-		Effort: opts.Effort, TimeoutRaw: opts.Timeout,
-		Exclude: worktree.ParseCSVArg(opts.ExcludeLanes), NoPivot: opts.NoPivot, LogWriter: errW,
+		Task: task, Worktree: cwd, SlotDir: slot, Lane: st.Lane, Model: st.Model,
+		Effort: st.Effort, TimeoutRaw: opts.Timeout,
+		Exclude: worktree.ParseCSVArg(opts.ExcludeLanes), NoPivot: opts.NoPivot, SoftPin: st.Source != "cli", LogWriter: errW,
 	})
 	if err != nil {
 		fmt.Fprintln(errW, err)
@@ -131,9 +131,7 @@ func reviewAndTrackTask(
 	opts CLIOpts, res dispatch.TaskRes, cwd, baseRef string,
 	files []string, baseline map[string]string, outW io.Writer,
 ) bool {
-	verdict := ""
-	revFailed := false
-	revReason := "review slot setup failed"
+	verdict, revFailed, revReason := "", false, "review slot setup failed"
 	var viols []string
 	if fleet.TryRepoRoot(cwd) != "" {
 		var changed []string
@@ -155,9 +153,12 @@ func reviewAndTrackTask(
 				fmt.Fprintf(outW, "error: review slot setup failed (%v) — failing closed\n", err)
 				revFailed = true
 			} else {
+				verSt := cliResolveStage("verify", CLIOpts{Profile: opts.Profile}, cwd, nil)
 				rev := dispatch.ExecReview(verify.ReviewReq{
 					TargetDir: cwd, SlotDir: revSlot, DiffCtx: dc, TimeoutSec: fleet.ReviewTimeout,
-					ScopeViols: viols, Declared: files, LogWriter: outW, AuthorLane: res.Lane,
+					ScopeViols: viols, Declared: files, LogWriter: outW,
+					AuthorLane: res.Lane, AuthorLanes: res.UsedLanes(),
+					ReqLane: verSt.Lane, Model: verSt.Model, Effort: verSt.Effort,
 				})
 				verdict = rev.Verdict
 				if verdict != "REJECT" && (verdict != "ACCEPT" || rev.ExitCode != 0) {
@@ -187,7 +188,7 @@ func reviewAndTrackTask(
 
 // DoSingleTask executes a single routed coding task directly in CWD.
 func DoSingleTask(opts CLIOpts, outW, errW io.Writer) int {
-	lanes, _, files, err := validateRunArgs(opts, fleet.DefaultTimeout, true)
+	_, _, files, err := validateRunArgs(opts, fleet.DefaultTimeout, true)
 	if err != nil {
 		fmt.Fprintln(errW, err)
 		return 2
@@ -207,9 +208,10 @@ func DoSingleTask(opts CLIOpts, outW, errW io.Writer) int {
 		baseline = worktree.DirtyState(cwd)
 		baseRef = verify.HeadRef(cwd)
 	}
+	actSt := cliResolveStage("act", opts, cwd, nil)
 	avoid := map[string]bool{}
-	if len(lanes) == 1 && lanes[0] == "auto" && !opts.NoPivot {
-		if mm := envelope.LoadRecentMismatch(cwd, files); mm != nil {
+	if (actSt.Lane == "auto" || strings.HasPrefix(actSt.Source, "profile:")) && !opts.NoPivot {
+		if mm := envelope.LoadRecentMismatch(cwd, files); mm != nil && envelope.HasLaneFamily(actSt.Lane, mm.Family) {
 			avoid[mm.Family] = true
 			fmt.Fprintf(outW, "▸ [OODA:MISMATCH PIVOT] prior loop on %s (%s) %s — rotating model family\n",
 				mm.Lane, mm.Family, mm.Reason)
@@ -219,11 +221,12 @@ func DoSingleTask(opts CLIOpts, outW, errW io.Writer) int {
 	if comp == "" {
 		comp = worktree.InferComplexity(*opts.Task, files, false)
 	}
+	opts.Lane, opts.Model, opts.Effort = actSt.Lane, actSt.Model, actSt.Effort
 	task := buildTaskSpec("task", *opts.Task, comp, files, opts, cwd, false)
 	res, err := dispatch.RunTaskWithFallback(dispatch.TaskReq{
-		Task: task, Worktree: cwd, SlotDir: slot, Lane: opts.Lane,
-		Model: opts.Model, Effort: opts.Effort, TimeoutRaw: opts.Timeout,
-		Exclude: worktree.ParseCSVArg(opts.ExcludeLanes), AvoidFam: avoid, NoPivot: opts.NoPivot, LogWriter: outW,
+		Task: task, Worktree: cwd, SlotDir: slot, Lane: actSt.Lane, Model: actSt.Model,
+		Effort: actSt.Effort, TimeoutRaw: opts.Timeout, Exclude: worktree.ParseCSVArg(opts.ExcludeLanes),
+		AvoidFam: avoid, NoPivot: opts.NoPivot, SoftPin: actSt.Source != "cli", LogWriter: outW,
 	})
 	if err != nil {
 		fmt.Fprintln(errW, err)

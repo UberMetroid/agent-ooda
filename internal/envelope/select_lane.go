@@ -17,6 +17,7 @@ type SelectReq struct {
 	AvoidFamilies map[string]bool
 	StrictAvoid   bool
 	DeferAtCap    bool
+	SoftPin       bool
 	ResolveCLI    func(string) string
 }
 
@@ -40,7 +41,7 @@ func checkCandidate(
 	if req.StrictAvoid && req.AvoidFamilies != nil && req.AvoidFamilies[ModelFamily(name)] {
 		return SelectRes{}, name + ": excluded family (" + ModelFamily(name) + ")", false
 	}
-	if isAuto && name == "muse" && fleet.CachedMuseProbe(900).PayAsYouGo {
+	if (isAuto || req.SoftPin) && name == "muse" && fleet.CachedMuseProbe(900).PayAsYouGo {
 		return SelectRes{}, "muse: skipped (pay-as-you-go api_key active; Power subscription inactive)", false
 	}
 	var info *fleet.ProviderConfig
@@ -49,6 +50,9 @@ func checkCandidate(
 	}
 	if info == nil {
 		return SelectRes{}, name + ": not configured", false
+	}
+	if req.Complexity == "review" && info.Tier == "credits" {
+		return SelectRes{}, name + ": credits tier blocked for verify/review", false
 	}
 	if info.Status != "active" {
 		why := info.Status
@@ -99,7 +103,7 @@ func SelectProvider(req SelectReq) (SelectRes, error) {
 		if cand.Info.MaxParallel != nil {
 			maxP = *cand.Info.MaxParallel
 		}
-		if isAuto && req.DeferAtCap && maxP > 0 && fleet.CountActiveLeases(name, maxP) >= maxP {
+		if req.DeferAtCap && maxP > 0 && fleet.CountActiveLeases(name, maxP) >= maxP {
 			atCap = append(atCap, cand)
 			skipped = append(skipped, fmt.Sprintf("%s: %d/%d parallel slots busy", name, maxP, maxP))
 			continue
@@ -113,6 +117,19 @@ func SelectProvider(req SelectReq) (SelectRes, error) {
 		return pick, nil
 	}
 	return SelectRes{SkippedNote: orStr(strings.Join(skipped, "; "), "no configured providers")}, nil
+}
+
+// HasLaneFamily reports whether laneCSV is auto or contains any lane in fam.
+func HasLaneFamily(laneCSV, fam string) bool {
+	if laneCSV == "" || laneCSV == "auto" {
+		return true
+	}
+	for _, l := range strings.Split(laneCSV, ",") {
+		if c, err := fleet.NormalizeLane(l, true); err == nil && ModelFamily(c) == fam {
+			return true
+		}
+	}
+	return false
 }
 
 func pickCleanModel(models []string, prefs ...string) string {

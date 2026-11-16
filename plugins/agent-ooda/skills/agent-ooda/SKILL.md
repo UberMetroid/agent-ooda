@@ -27,7 +27,7 @@ single-line typos or pure Q&A.
 3. Synthesize verified facts in `<= 5` concise bullets before orienting.
 
 ### Phase 2 — ORIENT (Zero Edits)
-Determine root cause, invariants, blast radius, and file coupling:
+Determine root cause, invariants, blast radius, and file coupling (optionally offloading deep read-only synthesis via `agent-ooda --orient "<question>"` using the `orient` stage route):
 - **Coupled / overlapping files:** shared files or interdependent signatures -> **Sequential**.
 - **Disjoint modules:** zero overlapping `files` -> **Parallel Worktrees**.
 
@@ -84,9 +84,22 @@ Lock in before any code edits:
 
 ## Part II — Dynamic Fleet Routing, Windows, Tariffs & CLI Reference
 
-Runtime quota state lives in `~/.local/state/agent-ooda/quota.json` (`v8`, `$XDG_STATE_HOME/agent-ooda`;
-overridable via `AGENT_OODA_QUOTA_FILE`). HUD markers and `flock` leases live in `/tmp/agent-ooda-hud`
-(`AGENT_OODA_HUD_DIR`).
+Runtime quota state lives in `~/.local/state/agent-ooda/quota.json` (`v9`, `$XDG_STATE_HOME/agent-ooda`;
+overridable via `AGENT_OODA_QUOTA_FILE`), and `--local` per-repo stage pins persist out-of-git in
+`~/.local/state/agent-ooda/workspaces/<id>.json` (surviving `agent-ooda --cleanup`). HUD markers and `flock`
+leases live in `/tmp/agent-ooda-hud` (`AGENT_OODA_HUD_DIR`).
+
+### Per-Stage OODA Routing Matrix & 3 Selector Surfaces (`v2.1.0`)
+Each worker OODA stage (`observe`, `orient`, `act`, `verify`) defaults to `auto` (`Decide` stays with the user /
+top-level orchestrator) and resolves via: **`CLI flag > --local > --profile > global > auto`**.
+- **Soft Pin Failover:** When a stage's primary pinned lane hits a 429/cooldown or is omitted, execution fails over
+  down its priority CSV or `E-M auto`, scrubbing primary-lane `--model`/`--effort` overrides when failing over to another lane.
+- **Strict Off-Family Verify:** `verify` always excludes the authoring model family even if pinned identically.
+- **3 Selector Interfaces:**
+  1. `agent-ooda --select` (`-s`): Terminal arrow-key configurator (`↑`/`↓` + `Enter`, supports sticky & `--until-reset`, global & `--local`).
+  2. `/lane`: Interactive in-chat stage/preset selector skill (`ask_question`).
+  3. `/agents`: `8` native `agy` workflow profiles under `plugins/agent-ooda/agents/`:
+     `ooda-auto`, `ooda-conserve`, `ooda-deep`, `ooda-devin`, `ooda-grok`, `ooda-mcode`, `ooda-muse`, `ooda-mistral`.
 
 | Lane | CLI | Effort Control & Defaults | Tier | Cycle / Cap |
 |---|---|---|---|---|
@@ -102,7 +115,7 @@ overridable via `AGENT_OODA_QUOTA_FILE`). HUD markers and `flock` leases live in
 ### Key Engine Guarantees
 - **Expiring Window Draining (`CORNER`) & Stall Shield (`CONSERVE`):** Prioritizes `0.5x` off-peak tariffs and expiring capped clocks; protects the final active capped lane by shifting routine `act` work to `devin-pro` -> `devin-fast` -> `mcode`.
 - **Auto Complexity & Skill Matching:** Omitted `--complexity` and up to 2 non-core `--skill` entries are inferred from prompt & files (`--skill none` or `OODA_NO_AUTO_SKILL=1` opts out).
-- **Gemini Worker Guardrail (`exit 2`):** Rejects `gemini*` / `orchestrator*` models across `--model`, env vars, `--set-cycle`, and manifests.
+- **Gemini Worker Guardrail (`exit 2`):** Rejects `gemini*` / `orchestrator*` models across `--model`, env vars, `--set-cycle`, `--set-stage`, and manifests.
 - **Recursion Guard (`exit 2`):** Workers run with `AGENT_OODA_DEPTH>=1` and `ROUTER_DEPTH>=1`, blocking nested `agent-ooda` dispatch/admin calls.
 - **Live Quota Kill & Cross-Model Review:** Unambiguous mid-stream quota errors trigger `SIGKILL` (<100ms failover); `--review` excludes the authoring family and never spends `devin-fusion` credits.
 
@@ -111,15 +124,22 @@ overridable via `AGENT_OODA_QUOTA_FILE`). HUD markers and `flock` leases live in
 | Action | Command |
 |---|---|
 | Show binary version | `agent-ooda --version` |
-| Show fleet status, live models, efforts & skills | `agent-ooda --status` |
+| Show fleet status, stage matrix, models & skills | `agent-ooda --status` |
+| Interactive arrow-key stage & model configurator | `agent-ooda --select` (`-s`, add `--local` for workspace) |
+| Pin stage or apply 1 of 8 presets | `agent-ooda --set-stage act=grok --effort xhigh` / `--set-stage preset=deep` |
+| Mask stage to `auto` in this repo only | `agent-ooda --set-stage act=auto --local` |
+| Reset global pins (`--local` clears overrides) | `agent-ooda --reset-stages` (add `--local` to inherit global/profile) |
 | Refresh & cache live CLI model/config/skill probes | `agent-ooda --discover` |
 | Run minimal 1-token prompt canaries & `muse` PAYG check | `agent-ooda --probe` |
 | Show per-lane multi-window usage & UTC tariffs | `agent-ooda --usage` |
 | OODA Observe: read-only codebase recon | `agent-ooda --recon "<question>"` |
+| OODA Orient: read-only root-cause & plan | `agent-ooda --orient "<question>"` |
 | OODA Act: single-shot coding task in CWD | `agent-ooda --task "<prompt>" --files a.go,b.go` |
+| Apply temporary workflow preset for one run | `agent-ooda --task "<prompt>" --profile conserve` |
 | Inject skill guidance into worker | `agent-ooda --task "<prompt>" --skill devin` |
 | Route deep reasoning task (`xhigh` on muse/grok) | `agent-ooda --task "<prompt>" --complexity deep` |
 | Override lane / model / effort | `agent-ooda --task "<prompt>" --lane agy-opus --model sonnet` |
+| Auto-expire stage pin when lane quota resets | `agent-ooda --set-stage act=muse --until-reset` |
 | OODA Verify: cross-model diff gate (`mcode` first) | `agent-ooda --review [repo_dir]` |
 | OODA Act: parallel worktrees | `agent-ooda .worktrees/tasks.json` |
 | Parallel worktrees without striping | `agent-ooda .worktrees/tasks.json --no-stripe` |
