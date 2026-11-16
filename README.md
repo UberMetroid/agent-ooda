@@ -58,16 +58,18 @@ The scheduler borrows two principles from fighter tactician **Col. John Boyd**:
 
 ## The 8-Lane Fleet
 
+`agent-ooda` is currently configured for the **6 agent CLIs** (`8` routing lanes) we actively run and subscribe to:
+
 | Lane | Engine / CLI | Tier / clock |
 | --- | --- | --- |
-| `agy-opus` | Antigravity CLI (`agy`) | capped, `5h + 7d` |
-| `muse` | Muse CLI (`muse`, `muse-ember-1.0` / `muse-wonder-1.0` on `deep`) | capped, `5h + 7d` (auto-skips PAYG `api_key`) |
-| `grok` | xAI Grok CLI (`grok`) | capped, `7d` rolling weekly |
-| `mistral` | Mistral Vibe CLI (`vibe`) | capped, `30d` monthly (`0.5x` off-peak Z.ai) |
-| `mcode` | MiniMax mcode CLI (primary reviewer) | high-cap `5h + 7d`, **max 4 parallel** |
-| `devin-fast` | Devin Fast pool (`devin`) | unlimited `$20/mo` Pro, `24h + 7d`, **max 4 parallel** |
-| `devin-pro` | Devin Pro pool (`devin`) | unlimited `$20/mo` Pro, `24h + 7d` |
-| `devin-fusion` | Devin Fusion pool (`devin`) | paid credits (reserve) |
+| `agy-opus` | [Google Antigravity CLI](https://antigravity.google/) (`agy`) | capped, `5h + 7d` |
+| `muse` | [Meta Muse Code](https://dev.meta.ai/products/muse-code) (`muse`, `muse-ember-1.0` / `muse-wonder-1.0` on `deep`) | capped, `5h + 7d` (auto-skips PAYG `api_key`) |
+| `grok` | [xAI Grok Build](https://github.com/xai-org/grok-build) (`grok`) | capped, `7d` rolling weekly |
+| `mistral` | [Mistral Vibe](https://github.com/mistralai/mistral-vibe) (`vibe`, optional [Z.ai](https://docs.z.ai/) GLM `0.5x` off-peak) | capped, `30d` monthly |
+| `mcode` | [MiniMax Code](https://github.com/MiniMax-AI/minimax-code) (`mcode`, primary reviewer) | high-cap `5h + 7d`, **max 4 parallel** |
+| `devin-fast` | [Cognition Devin CLI](https://docs.devin.ai/) Fast pool (`devin`) | unlimited `$20/mo` Pro, `24h + 7d`, **max 4 parallel** |
+| `devin-pro` | [Cognition Devin CLI](https://docs.devin.ai/) Pro pool (`devin`) | unlimited `$20/mo` Pro, `24h + 7d` |
+| `devin-fusion` | [Cognition Devin CLI](https://docs.devin.ai/) Fusion pool (`devin`) | paid credits (reserve) |
 
 Model IDs and efforts are **discovered dynamically, not hardcoded**: `agent-ooda --status` and
 `agent-ooda --discover` inspect non-secret local CLI configs, cached CLI model lists, effort flags
@@ -88,6 +90,17 @@ on any `gemini*`/`orchestrator*` worker model and block recursive execution (`ag
 - **Deep:** capped priority order (`agy-opus → muse → grok → mistral`).
 - **Conserve:** when one capped lane remains, free `devin-*` and `mcode` absorb traffic first.
 - **Verify:** every non-empty diff runs through an independent model family.
+
+### Other Agent CLIs (Not Currently Configured)
+
+These coding-agent CLIs are **not** currently wired in `agent-ooda` because we don't carry paid subscriptions for them today. If you use them and want to add a lane, adapters live modularly under `internal/dispatch/` and `internal/fleet/`:
+
+- **[Anthropic Claude Code](https://code.claude.com/docs/en/overview)** (`claude`) — no standalone Claude subscription configured (Claude Opus/Sonnet worker execution in our fleet currently routes through Antigravity's `agy-opus` pool).
+- **[OpenAI Codex CLI](https://github.com/openai/codex)** (`codex`) — requires a ChatGPT plan or OpenAI API subscription.
+- **[Cursor CLI](https://cursor.com/cli)** (`cursor-agent`) — requires a Cursor Pro/paid plan.
+- **[GitHub Copilot CLI](https://github.com/features/copilot)** (`copilot`) — requires a GitHub Copilot paid plan.
+- **[Sourcegraph Amp](https://ampcode.com/)** (`amp`) — requires an Amp account / credits.
+- **[Factory Droid](https://factory.ai/)** (`droid`) — requires a Factory subscription.
 
 ## Cross-Model Verification
 

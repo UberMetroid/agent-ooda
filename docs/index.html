@@ -697,12 +697,13 @@
           <span class="sec-tag">agent-ooda --status &bull; --discover &bull; --probe</span>
         </div>
         <p class="sec-sub">
-          <code>agent-ooda --status</code> and <code>agent-ooda --discover</code> probe installed CLIs dynamically for active
-          models, effort controls, UTC off-peak/peak-jam tariffs, and injectable skills. <code>agent-ooda --probe</code>
-          runs minimal 1-token prompt canaries (skipping credits), while omitted <code>--complexity</code> and
-          <code>--skill</code> infer automatically (opt out via <code>--skill none</code> or
-          <code>OODA_NO_AUTO_SKILL=1</code>). Gemini quota is shielded exclusively for the top-level Antigravity
-          orchestrator.
+          Currently configured for the <strong>6 agent CLIs</strong> (<code>8</code> lanes) we actively subscribe to
+          below. <code>agent-ooda --status</code> and <code>agent-ooda --discover</code> probe installed CLIs
+          dynamically for active models, effort controls, UTC off-peak/peak-jam tariffs, and injectable skills.
+          <code>agent-ooda --probe</code> runs minimal 1-token prompt canaries (skipping credits), while omitted
+          <code>--complexity</code> and <code>--skill</code> infer automatically (opt out via
+          <code>--skill none</code> or <code>OODA_NO_AUTO_SKILL=1</code>). Gemini quota is shielded exclusively
+          for the top-level Antigravity orchestrator.
         </p>
 
         <div class="table-wrap" style="margin-bottom: 18px;">
@@ -719,56 +720,56 @@
             <tbody>
               <tr>
                 <td><code>agy-opus</code></td>
-                <td><code>agy</code></td>
+                <td><a href="https://antigravity.google/" target="_blank" rel="noopener">Google Antigravity</a> (<code>agy</code>)</td>
                 <td><code>--effort</code> + non-Gemini Claude model</td>
                 <td>capped &bull; 5h + 7d</td>
                 <td>Default capped coding lane &bull; Gemini-blocked safeguard</td>
               </tr>
               <tr>
                 <td><code>muse</code></td>
-                <td><code>muse</code></td>
+                <td><a href="https://dev.meta.ai/products/muse-code" target="_blank" rel="noopener">Meta Muse Code</a> (<code>muse</code>)</td>
                 <td><code>muse-ember-1.0</code> (<code>muse-wonder-1.0</code> on <code>deep</code>)</td>
                 <td>capped &bull; 5h + 7d</td>
                 <td>Muse Power lane &bull; auto-skips PAYG <code>api_key</code></td>
               </tr>
               <tr>
                 <td><code>grok</code></td>
-                <td><code>grok</code></td>
+                <td><a href="https://github.com/xai-org/grok-build" target="_blank" rel="noopener">xAI Grok Build</a> (<code>grok</code>)</td>
                 <td><code>--reasoning-effort</code> + user CLI default</td>
                 <td>capped &bull; 7d rolling weekly</td>
                 <td>Shared weekly SuperGrok pool &amp; off-family reviewer</td>
               </tr>
               <tr>
                 <td><code>mistral</code></td>
-                <td><code>vibe</code></td>
+                <td><a href="https://github.com/mistralai/mistral-vibe" target="_blank" rel="noopener">Mistral Vibe</a> (<code>vibe</code>)</td>
                 <td><code>via-model</code> tier + user CLI default</td>
                 <td>capped &bull; 30d monthly</td>
-                <td><code>0.5x</code> UTC off-peak aware (Z.ai / DeepSeek)</td>
+                <td><code>0.5x</code> UTC off-peak aware (<a href="https://docs.z.ai/" target="_blank" rel="noopener">Z.ai</a> / DeepSeek)</td>
               </tr>
               <tr>
                 <td><code>mcode</code></td>
-                <td><code>mcode</code></td>
+                <td><a href="https://github.com/MiniMax-AI/minimax-code" target="_blank" rel="noopener">MiniMax Code</a> (<code>mcode</code>)</td>
                 <td><code>--effort</code> + MiniMax user default</td>
                 <td>high-cap &bull; 5h + 7d</td>
                 <td>Primary diff reviewer &bull; <strong>max 4 parallel</strong> &bull; weekday peak-jam aware</td>
               </tr>
               <tr>
                 <td><code>devin-fast</code></td>
-                <td><code>devin</code></td>
+                <td><a href="https://docs.devin.ai/" target="_blank" rel="noopener">Cognition Devin</a> (<code>devin</code>)</td>
                 <td><code>swe-2-flash</code> pool (<code>via-model</code>)</td>
                 <td>unlimited &bull; 24h + 7d ($20/mo Pro)</td>
                 <td>Read-only recon &amp; fast sweeps &bull; <strong>max 4 parallel</strong></td>
               </tr>
               <tr>
                 <td><code>devin-pro</code></td>
-                <td><code>devin</code></td>
+                <td><a href="https://docs.devin.ai/" target="_blank" rel="noopener">Cognition Devin</a> (<code>devin</code>)</td>
                 <td><code>swe-2</code> pool (<code>via-model</code>)</td>
                 <td>unlimited &bull; 24h + 7d ($20/mo Pro)</td>
                 <td>Conserve-mode coder &amp; heavy refactors</td>
               </tr>
               <tr>
                 <td><code>devin-fusion</code></td>
-                <td><code>devin</code></td>
+                <td><a href="https://docs.devin.ai/" target="_blank" rel="noopener">Cognition Devin</a> (<code>devin</code>)</td>
                 <td><code>fusion</code> pool (<code>via-model</code>)</td>
                 <td>paid credits (reserve)</td>
                 <td>Protected reserve (never touched by <code>--probe</code>)</td>
@@ -796,6 +797,22 @@
               models on any worker or review lane.
             </p>
           </div>
+        </div>
+
+        <div class="card" style="margin-top: 16px;">
+          <span class="badge b-amber">Unconfigured Agents</span>
+          <h3>Other Agent CLIs (Not Wired &mdash; No Active Paid Subscription)</h3>
+          <p>
+            <code>agent-ooda</code> does not currently wire
+            <a href="https://code.claude.com/docs/en/overview" target="_blank" rel="noopener">Anthropic Claude Code</a> (<code>claude</code>; Claude Opus/Sonnet workers already run via <code>agy-opus</code>),
+            <a href="https://github.com/openai/codex" target="_blank" rel="noopener">OpenAI Codex CLI</a> (<code>codex</code>),
+            <a href="https://cursor.com/cli" target="_blank" rel="noopener">Cursor CLI</a> (<code>cursor-agent</code>),
+            <a href="https://github.com/features/copilot" target="_blank" rel="noopener">GitHub Copilot CLI</a> (<code>copilot</code>),
+            <a href="https://ampcode.com/" target="_blank" rel="noopener">Sourcegraph Amp</a> (<code>amp</code>), or
+            <a href="https://factory.ai/" target="_blank" rel="noopener">Factory Droid</a> (<code>droid</code>)
+            because we don&apos;t pay for subscriptions to them today. New CLI adapters can be added modularly under
+            <code>internal/dispatch/</code> and <code>internal/fleet/</code> if you want to route your own plan.
+          </p>
         </div>
       </div>
     </section>
