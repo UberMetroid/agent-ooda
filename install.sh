@@ -1,35 +1,39 @@
 #!/usr/bin/env bash
-# install.sh — wire the ooda Antigravity plugin, CLI shims, and statusLine HUD into $HOME.
-# Idempotent: safe to re-run. Displaced paths and legacy router/boyd installs are archived
-# under "$STATE_DIR/backups" (never deleted) only AFTER quota state is migrated and validated.
+# install.sh — wire the agent-ooda Antigravity plugin, CLI binary, and statusLine HUD into $HOME.
+# Idempotent: safe to re-run. Migrates legacy ooda/router installs cleanly, archiving displaced
+# items under "$STATE_DIR/backups" (never deleted) AFTER quota state is migrated and validated.
 # `./install.sh --uninstall [--purge]` reverses it (logic lives in uninstall.sh).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
-PLUGIN_DIR="$REPO_ROOT/plugins/ooda"
-OODA_BIN="$PLUGIN_DIR/bin/ooda"
+PLUGIN_DIR="$REPO_ROOT/plugins/agent-ooda"
+OODA_BIN="$PLUGIN_DIR/bin/agent-ooda"
 STATE_BASE="${XDG_STATE_HOME:-$HOME/.local/state}"
-STATE_DIR="$STATE_BASE/ooda"
+STATE_DIR="$STATE_BASE/agent-ooda"
+LEGACY_STATE_DIR="$STATE_BASE/ooda"
 QUOTA_FILE="$STATE_DIR/quota.json"
 DEFAULT_QUOTA="$PLUGIN_DIR/config/quota.default.json"
 QUOTA_SOURCE="existing"
 AGY_DIR="$HOME/.gemini/antigravity-cli"
 SETTINGS_JSON="$AGY_DIR/settings.json"
+NO_STATUSLINE="${AGENT_OODA_NO_STATUSLINE:-${OODA_NO_STATUSLINE:-0}}"
+NO_BUILD="${AGENT_OODA_NO_BUILD:-${OODA_NO_BUILD:-0}}"
+RELEASE_BASE="${AGENT_OODA_RELEASE_BASE:-${OODA_RELEASE_BASE:-https://github.com/UberMetroid/agent-ooda/releases/latest/download}}"
 
 usage() {
   cat <<'EOF'
 usage: ./install.sh [--uninstall [--purge]] [--help]
 
-  (no options)         build (if go present) & install: link plugin, CLI shims, statusLine HUD; wire settings.json
-  --uninstall          remove ooda symlinks that point into this repo and unwire statusLine
-  --uninstall --purge  also delete ${XDG_STATE_HOME:-~/.local/state}/ooda (quota state + backups)
+  (no options)         build (if go present) & install: link plugin, CLI, statusLine HUD; wire settings.json
+  --uninstall          remove agent-ooda symlinks pointing into this repo and unwire statusLine
+  --uninstall --purge  also delete ${XDG_STATE_HOME:-~/.local/state}/agent-ooda (quota state + backups)
   -h, --help           show this help
 
 environment:
-  OODA_NO_STATUSLINE=1  do not add the statusLine block to ~/.gemini/antigravity-cli/settings.json
-  OODA_NO_BUILD=1       use existing plugins/ooda/bin/ooda without rebuilding/downloading
-  OODA_RELEASE_BASE     override base URL for prebuilt binaries + SHA256SUMS
-  XDG_STATE_HOME        base for runtime state (default ~/.local/state)
+  AGENT_OODA_NO_STATUSLINE=1  skip adding statusLine to ~/.gemini/antigravity-cli/settings.json
+  AGENT_OODA_NO_BUILD=1       use existing plugins/agent-ooda/bin/agent-ooda without rebuilding/downloading
+  AGENT_OODA_RELEASE_BASE     override base URL for prebuilt binaries + SHA256SUMS
+  XDG_STATE_HOME              base for runtime state (default ~/.local/state)
 EOF
 }
 
@@ -44,9 +48,9 @@ esac
 [ -d "$PLUGIN_DIR" ] || { echo "error: plugin not found at $PLUGIN_DIR" >&2; exit 1; }
 
 if [ "$MODE" = "uninstall" ]; then
-  # Guard STATE_DIR before uninstall or purge touches anything, even when $OODA_BIN is absent.
   if [ -x "$OODA_BIN" ]; then
     "$OODA_BIN" __setup check-state "$STATE_BASE" "$STATE_DIR" "$HOME" "$REPO_ROOT" || exit 1
+    "$OODA_BIN" __setup check-state "$STATE_BASE" "$LEGACY_STATE_DIR" "$HOME" "$REPO_ROOT" || exit 1
   else
     case "$STATE_BASE" in /*) ;; *) echo "error: state base must be absolute: $STATE_BASE" >&2; exit 1 ;; esac
     case "$STATE_DIR" in /*) ;; *) echo "error: state dir must be absolute: $STATE_DIR" >&2; exit 1 ;; esac
@@ -54,10 +58,14 @@ if [ "$MODE" = "uninstall" ]; then
       "$HOME"|"$HOME/"|"$REPO_ROOT"|"$REPO_ROOT"/*)
         echo "error: refusing unsafe state dir: $STATE_DIR" >&2; exit 1 ;;
     esac
+    case "$LEGACY_STATE_DIR" in
+      /|"$HOME"|"$HOME/"|"$REPO_ROOT"|"$REPO_ROOT"/*)
+        echo "error: refusing unsafe legacy state dir: $LEGACY_STATE_DIR" >&2; exit 1 ;;
+    esac
   fi
   # shellcheck source=uninstall.sh
   . "$REPO_ROOT/uninstall.sh"
-  ooda_uninstall "$@"
+  agent_ooda_uninstall "$@"
   exit $?
 fi
 
@@ -74,23 +82,22 @@ sha256_file() {
 
 download_prebuilt_binary() {
   local base os arch asset
-  base="${OODA_RELEASE_BASE:-https://github.com/UberMetroid/agent-ooda/releases/latest/download}"
-  base="${base%/}"
+  base="${RELEASE_BASE%/}"
   case "$(uname -s)" in
     Linux) os="linux" ;;
     Darwin) os="darwin" ;;
-    *) echo "error: unsupported OS '$(uname -s)' for prebuilt ooda (install Go 1.22+)" >&2; return 1 ;;
+    *) echo "error: unsupported OS '$(uname -s)' for prebuilt agent-ooda (install Go 1.22+)" >&2; return 1 ;;
   esac
   case "$(uname -m)" in
     x86_64|amd64) arch="amd64" ;;
     aarch64|arm64) arch="arm64" ;;
-    *) echo "error: unsupported arch '$(uname -m)' for prebuilt ooda (install Go 1.22+)" >&2; return 1 ;;
+    *) echo "error: unsupported arch '$(uname -m)' for prebuilt agent-ooda (install Go 1.22+)" >&2; return 1 ;;
   esac
   command -v curl >/dev/null 2>&1 || {
-    echo "error: curl required to download prebuilt ooda binary (or install Go 1.22+)" >&2
+    echo "error: curl required to download prebuilt agent-ooda binary (or install Go 1.22+)" >&2
     return 1
   }
-  asset="ooda-${os}-${arch}"
+  asset="agent-ooda-${os}-${arch}"
   (
     local stage expected actual cur_hash
     stage="$(mktemp -d)"
@@ -122,16 +129,16 @@ download_prebuilt_binary() {
 }
 
 mkdir -p "$PLUGIN_DIR/bin"
-if [ "${OODA_NO_BUILD:-0}" != "1" ]; then
+if [ "$NO_BUILD" != "1" ]; then
   if command -v go >/dev/null 2>&1 && [ -w "$PLUGIN_DIR/bin" ]; then
-    (cd "$REPO_ROOT" && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$OODA_BIN" ./cmd/ooda)
+    (cd "$REPO_ROOT" && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$OODA_BIN" ./cmd/agent-ooda)
   else
     download_prebuilt_binary
   fi
 fi
 [ -x "$OODA_BIN" ] || { echo "error: executable not found at $OODA_BIN" >&2; exit 1; }
-ln -sfn ooda "$PLUGIN_DIR/bin/ooda-hud"
-ln -sfn ooda "$PLUGIN_DIR/bin/ooda-hook"
+ln -sfn agent-ooda "$PLUGIN_DIR/bin/agent-ooda-hud"
+ln -sfn agent-ooda "$PLUGIN_DIR/bin/agent-ooda-hook"
 
 "$OODA_BIN" __setup check-state "$STATE_BASE" "$STATE_DIR" "$HOME" "$REPO_ROOT" || exit 1
 
@@ -168,6 +175,18 @@ retire_legacy() {
   fi
 }
 
+DATA_CLONE="${XDG_DATA_HOME:-$HOME/.local/share}/agent-ooda"
+
+retire_owned_legacy() {
+  local target
+  [ -L "$2" ] || return 0
+  target="$(readlink "$2" || true)"
+  case "$target" in
+    "$REPO_ROOT"|"$REPO_ROOT"/*|"$DATA_CLONE"|"$DATA_CLONE"/*|"$HOME/.agents/skills/router"|"$HOME/.agents/skills/router"/*)
+      archive_path "$1" "$2" ;;
+  esac
+}
+
 health_report() {
   local cli lanes=""
   echo "health:"
@@ -185,13 +204,13 @@ health_report() {
     if command -v "$cli" >/dev/null 2>&1; then lanes="$lanes $cli:found"; else lanes="$lanes $cli:missing"; fi
   done
   echo "  lane CLIs   :$lanes (informational)"
-  echo "  reminder    : restart agy so the ooda plugin and statusLine HUD load"
+  echo "  reminder    : restart agy so the agent-ooda plugin and statusLine HUD load"
 }
 
 # Preflight directory layout + skills.json + settings.json before mutating any state, plugins, shims, or legacy installs.
 "$OODA_BIN" __setup check-dirs "$STATE_DIR" "$HOME/.gemini/config/plugins" "$HOME/.local/bin" "$AGY_DIR" "$HOME/.agents/skills" || exit 1
 "$OODA_BIN" __setup skills-check "$HOME/.gemini/config/skills.json"
-if [ "${OODA_NO_STATUSLINE:-0}" != "1" ]; then
+if [ "$NO_STATUSLINE" != "1" ]; then
   "$OODA_BIN" __wire check "$SETTINGS_JSON" "$STATE_DIR"
 fi
 
@@ -199,16 +218,22 @@ fi
 mkdir -p "$STATE_DIR"
 chmod 700 "$STATE_DIR"
 
-# 2. Seed or migrate quota.json (legacy router state first, then boyd, else defaults).
+# 2. Seed or migrate quota.json (legacy state/ooda, router, boyd, else defaults).
 if [ ! -f "$QUOTA_FILE" ]; then
   QUOTA_SOURCE="$DEFAULT_QUOTA"
-  for legacy in "$HOME/.agents/skills/router/quota.json" "$STATE_BASE/boyd/quota.json"; do
+  for legacy in "$LEGACY_STATE_DIR/quota.json" "$HOME/.agents/skills/router/quota.json" "$STATE_BASE/boyd/quota.json"; do
     if valid_quota "$legacy"; then
       QUOTA_SOURCE="$legacy"
       break
     fi
   done
   cp -p "$QUOTA_SOURCE" "$QUOTA_FILE"
+fi
+if [ -f "$LEGACY_STATE_DIR/statusline.prev.json" ] && [ ! -e "$STATE_DIR/statusline.prev.json" ]; then
+  cp -p "$LEGACY_STATE_DIR/statusline.prev.json" "$STATE_DIR/statusline.prev.json"
+fi
+if [ -f "$LEGACY_STATE_DIR/discovery.json" ] && [ ! -e "$STATE_DIR/discovery.json" ]; then
+  cp -p "$LEGACY_STATE_DIR/discovery.json" "$STATE_DIR/discovery.json"
 fi
 if ! valid_quota "$QUOTA_FILE"; then
   echo "error: $QUOTA_FILE is not a JSON object with 'providers'; legacy installs left untouched" >&2
@@ -221,47 +246,53 @@ SKILLS_JSON="$HOME/.gemini/config/skills.json"
 mkdir -p "$HOME/.gemini/config"
 "$OODA_BIN" __setup skills-update "$SKILLS_JSON"
 
-# 4. Antigravity plugin registration (archive obsolete router-core / boyd plugins).
+# 4. Antigravity plugin registration (retire owned ooda plugin & obsolete plugins).
 mkdir -p "$HOME/.gemini/config/plugins"
-link "$PLUGIN_DIR" "$HOME/.gemini/config/plugins/ooda" "plugin-ooda"
+link "$PLUGIN_DIR" "$HOME/.gemini/config/plugins/agent-ooda" "plugin-agent-ooda"
+retire_owned_legacy "plugin-ooda" "$HOME/.gemini/config/plugins/ooda"
 retire_legacy "plugin-router-core" "$HOME/.gemini/config/plugins/router-core"
 retire_legacy "plugin-boyd" "$HOME/.gemini/config/plugins/boyd"
 
-# 5. CLI shims: `ooda` and its `router` alias.
+# 5. Single CLI binary: ~/.local/bin/agent-ooda (retire owned legacy ooda/router shims safely).
 mkdir -p "$HOME/.local/bin"
-link "$OODA_BIN" "$HOME/.local/bin/ooda" "bin-ooda"
-link "$OODA_BIN" "$HOME/.local/bin/router" "bin-router"
+link "$OODA_BIN" "$HOME/.local/bin/agent-ooda" "bin-agent-ooda"
+retire_owned_legacy "bin-ooda" "$HOME/.local/bin/ooda"
+retire_owned_legacy "bin-router" "$HOME/.local/bin/router"
 retire_legacy "bin-boyd" "$HOME/.local/bin/boyd"
 
 # 6. Bubble-canopy statusLine HUD: symlink, then point settings.json statusLine at it.
 mkdir -p "$AGY_DIR"
-link "$PLUGIN_DIR/bin/ooda-hud" "$AGY_DIR/statusline.py" "statusline.py"
+link "$PLUGIN_DIR/bin/agent-ooda-hud" "$AGY_DIR/statusline.py" "statusline.py"
 SETTINGS_NOTE="$SETTINGS_JSON (statusLine -> ~/.gemini/antigravity-cli/statusline.py)"
 WIRE_OUT=""
-if [ "${OODA_NO_STATUSLINE:-0}" = "1" ]; then
-  SETTINGS_NOTE="(skipped: OODA_NO_STATUSLINE=1; $SETTINGS_JSON untouched)"
+if [ "$NO_STATUSLINE" = "1" ]; then
+  SETTINGS_NOTE="(skipped: AGENT_OODA_NO_STATUSLINE=1; $SETTINGS_JSON untouched)"
 else
   WIRE_OUT="$("$OODA_BIN" __wire wire "$SETTINGS_JSON" "$STATE_DIR")"
 fi
 
-# 7. Archive duplicate legacy skill copies (the plugin now ships ooda + router skills).
+# 7. Retire legacy state directory and duplicate standalone skills after steps 1-6 succeed.
+if [ "$LEGACY_STATE_DIR" != "$STATE_DIR" ]; then
+  retire_legacy "state-ooda" "$LEGACY_STATE_DIR"
+fi
+retire_legacy "skill-agent-ooda" "$HOME/.agents/skills/agent-ooda"
 retire_legacy "skill-router" "$HOME/.agents/skills/router"
 retire_legacy "skill-ooda" "$HOME/.agents/skills/ooda"
 mkdir -p "$HOME/.agents/skills"
 
-ACTIVE_OODA="$(command -v ooda 2>/dev/null || true)"
+ACTIVE_BIN="$(command -v agent-ooda 2>/dev/null || true)"
 PATH_NOTE=""
-if [ -n "$ACTIVE_OODA" ] && [ "$ACTIVE_OODA" != "$HOME/.local/bin/ooda" ] && [ "$ACTIVE_OODA" != "$OODA_BIN" ]; then
-  PATH_NOTE="  note        : 'ooda' on PATH resolves to $ACTIVE_OODA; use 'router' (or ~/.local/bin/ooda)"
+if [ -n "$ACTIVE_BIN" ] && [ "$ACTIVE_BIN" != "$HOME/.local/bin/agent-ooda" ] && [ "$ACTIVE_BIN" != "$OODA_BIN" ]; then
+  PATH_NOTE="  note        : 'agent-ooda' on PATH resolves to $ACTIVE_BIN; use ~/.local/bin/agent-ooda"
 fi
 
 cat <<EOF
-ooda install complete
+agent-ooda install complete
   repo        : $REPO_ROOT
   quota       : $QUOTA_FILE (source: $QUOTA_SOURCE)
-  plugin      : ~/.gemini/config/plugins/ooda -> plugins/ooda
-  cli         : ~/.local/bin/ooda, ~/.local/bin/router -> plugins/ooda/bin/ooda
-  statusLine  : ~/.gemini/antigravity-cli/statusline.py -> plugins/ooda/bin/ooda-hud
+  plugin      : ~/.gemini/config/plugins/agent-ooda -> plugins/agent-ooda
+  cli         : ~/.local/bin/agent-ooda -> plugins/agent-ooda/bin/agent-ooda
+  statusLine  : ~/.gemini/antigravity-cli/statusline.py -> plugins/agent-ooda/bin/agent-ooda-hud
   settings    : $SETTINGS_NOTE
   skills.json : $SKILLS_JSON
   archived    : ${BACKUP_DIR:-(none displaced)}
@@ -269,4 +300,4 @@ EOF
 [ -z "$WIRE_OUT" ] || printf '%s\n' "$WIRE_OUT" | sed 's/^/  wire        : /'
 [ -n "$PATH_NOTE" ] && printf '%s\n' "$PATH_NOTE"
 health_report
-echo "Next: restart agy, then: agy plugin list && router --status && router --usage"
+echo "Next: restart agy, then: agy plugin list && agent-ooda --version && agent-ooda --status && agent-ooda --usage"

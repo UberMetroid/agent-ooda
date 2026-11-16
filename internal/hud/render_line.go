@@ -112,7 +112,7 @@ func buildLeftSegment(
 		spin := OrientFrames[frameIdx%len(OrientFrames)]
 		return Colorize(spin+" orient/decide", COrient, useColor)
 	}
-	return Colorize("○", CIdleIcon, useColor) + " " + Colorize("ooda", CIdleText, useColor)
+	return Colorize("○", CIdleIcon, useColor) + " " + Colorize("agent-ooda", CIdleText, useColor)
 }
 
 func buildLine(

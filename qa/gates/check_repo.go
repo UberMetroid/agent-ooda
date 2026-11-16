@@ -184,7 +184,7 @@ func checkLineCap(root string) []string {
 
 func checkDensity(root string) []string {
 	var viols []string
-	roots := []string{"cmd", "internal", filepath.Join("plugins", "ooda"), "qa"}
+	roots := []string{"cmd", "internal", filepath.Join("plugins", "agent-ooda"), "qa"}
 	for _, sub := range roots {
 		base := filepath.Join(root, sub)
 		if _, err := os.Stat(base); err != nil {
@@ -219,7 +219,7 @@ func checkDensity(root string) []string {
 }
 
 func checkPlugin(root, agyBin string) []string {
-	cmd := exec.Command(agyBin, "plugin", "validate", "plugins/ooda", "--strict", "--json")
+	cmd := exec.Command(agyBin, "plugin", "validate", "plugins/agent-ooda", "--strict", "--json")
 	cmd.Dir = root
 	out, err := cmd.Output()
 	var parsed struct {

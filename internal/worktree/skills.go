@@ -13,7 +13,9 @@ import (
 )
 
 var (
-	skillAliases  = map[string]string{"agent-router": "router"}
+	skillAliases = map[string]string{
+		"ooda": "agent-ooda", "router": "agent-ooda", "agent-router": "agent-ooda",
+	}
 	fmNameRe      = regexp.MustCompile(`^\s*name\s*:\s*(.+)$`)
 	fmDescRe      = regexp.MustCompile(`^\s*description\s*:\s*(.*)$`)
 	discoverCache sync.Map
@@ -194,6 +196,7 @@ func LoadSkillBlocks(names []string, cwd string) (string, error) {
 	var blocks []string
 	for _, raw := range names {
 		name := strings.TrimSpace(raw)
+		name = strings.TrimPrefix(name, "agent-ooda:")
 		name = strings.TrimPrefix(name, "ooda:")
 		if alias, ok := skillAliases[name]; ok {
 			name = alias

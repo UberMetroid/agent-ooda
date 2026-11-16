@@ -37,7 +37,7 @@ type BuiltCmd struct {
 func childEnv(depth int, stripAgy bool) []string {
 	var out []string
 	for _, kv := range os.Environ() {
-		if strings.HasPrefix(kv, "ROUTER_DEPTH=") {
+		if strings.HasPrefix(kv, "ROUTER_DEPTH=") || strings.HasPrefix(kv, "AGENT_OODA_DEPTH=") {
 			continue
 		}
 		if stripAgy && strings.HasPrefix(kv, "ANTIGRAVITY_") {
@@ -45,7 +45,7 @@ func childEnv(depth int, stripAgy bool) []string {
 		}
 		out = append(out, kv)
 	}
-	return append(out, fmt.Sprintf("ROUTER_DEPTH=%d", depth))
+	return append(out, fmt.Sprintf("ROUTER_DEPTH=%d", depth), fmt.Sprintf("AGENT_OODA_DEPTH=%d", depth))
 }
 
 func buildAgyCmd(req CmdReq, model string) (BuiltCmd, error) {

@@ -18,10 +18,12 @@ type ExportUsage struct {
 	CostUSD *float64
 }
 
-// PluginRootPath resolves the plugins/ooda directory dynamically at call time.
+// PluginRootPath resolves the plugins/agent-ooda directory dynamically at call time.
 func PluginRootPath() string {
-	if env := os.Getenv("OODA_PLUGIN_ROOT"); env != "" {
-		return env
+	for _, key := range []string{"AGENT_OODA_PLUGIN_ROOT", "OODA_PLUGIN_ROOT"} {
+		if env := os.Getenv(key); env != "" {
+			return env
+		}
 	}
 	if exe, err := os.Executable(); err == nil {
 		if realExe, rerr := filepath.EvalSymlinks(exe); rerr == nil {
@@ -34,11 +36,11 @@ func PluginRootPath() string {
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "plugins/ooda"
+		return "plugins/agent-ooda"
 	}
 	cur := cwd
 	for {
-		for _, sub := range []string{"", filepath.Join("plugins", "ooda")} {
+		for _, sub := range []string{"", filepath.Join("plugins", "agent-ooda")} {
 			cand := filepath.Join(cur, sub)
 			if st, serr := os.Stat(filepath.Join(cand, "plugin.json")); serr == nil && !st.IsDir() {
 				return cand
@@ -50,7 +52,7 @@ func PluginRootPath() string {
 		}
 		cur = parent
 	}
-	return filepath.Join(cwd, "plugins", "ooda")
+	return filepath.Join(cwd, "plugins", "agent-ooda")
 }
 
 // QuotaFilePath resolves quota.json via override, env vars, or XDG state home.
@@ -58,46 +60,51 @@ func QuotaFilePath(override string) string {
 	if override != "" {
 		return override
 	}
-	if env := os.Getenv("AGENT_QUOTA_FILE"); env != "" {
-		return env
-	}
-	if env := os.Getenv("OODA_QUOTA_FILE"); env != "" {
-		return env
+	for _, key := range []string{"AGENT_OODA_QUOTA_FILE", "AGENT_QUOTA_FILE", "OODA_QUOTA_FILE"} {
+		if env := os.Getenv(key); env != "" {
+			return env
+		}
 	}
 	stateHome := os.Getenv("XDG_STATE_HOME")
 	if stateHome == "" {
 		home, _ := os.UserHomeDir()
 		stateHome = filepath.Join(home, ".local", "state")
 	}
-	return filepath.Join(stateHome, "ooda", "quota.json")
+	return filepath.Join(stateHome, "agent-ooda", "quota.json")
 }
 
 // DiscoveryFilePath resolves the cached CLI capability JSON path beside quota.json.
 func DiscoveryFilePath() string {
-	if env := os.Getenv("OODA_DISCOVERY_FILE"); env != "" {
-		if strings.HasPrefix(env, "~/") {
-			home, _ := os.UserHomeDir()
-			return filepath.Join(home, env[2:])
+	for _, key := range []string{"AGENT_OODA_DISCOVERY_FILE", "OODA_DISCOVERY_FILE"} {
+		if env := os.Getenv(key); env != "" {
+			if strings.HasPrefix(env, "~/") {
+				home, _ := os.UserHomeDir()
+				return filepath.Join(home, env[2:])
+			}
+			return env
 		}
-		return env
 	}
 	return filepath.Join(filepath.Dir(QuotaFilePath("")), "discovery.json")
 }
 
 // HudDirPath returns the live HUD telemetry root directory.
 func HudDirPath() string {
-	if env := os.Getenv("ROUTER_HUD_DIR"); env != "" {
-		return env
+	for _, key := range []string{"AGENT_OODA_HUD_DIR", "ROUTER_HUD_DIR"} {
+		if env := os.Getenv(key); env != "" {
+			return env
+		}
 	}
-	return "/tmp/router-hud"
+	return "/tmp/agent-ooda-hud"
 }
 
 // SlotsRootPath returns the worktree slot scratch directory.
 func SlotsRootPath() string {
-	if env := os.Getenv("ROUTER_SLOTS_DIR"); env != "" {
-		return env
+	for _, key := range []string{"AGENT_OODA_SLOTS_DIR", "ROUTER_SLOTS_DIR"} {
+		if env := os.Getenv(key); env != "" {
+			return env
+		}
 	}
-	return "/tmp/router-slots"
+	return "/tmp/agent-ooda-slots"
 }
 
 // SafeID sanitizes a string for safe filenames, defaulting to "default".
@@ -109,20 +116,22 @@ func SafeID(raw string) string {
 	return cleaned
 }
 
-// RouterDepth returns nested worker dispatch depth from ROUTER_DEPTH.
+// RouterDepth returns max nested dispatch depth across AGENT_OODA_DEPTH and ROUTER_DEPTH.
 func RouterDepth() int {
-	raw := strings.TrimSpace(os.Getenv("ROUTER_DEPTH"))
-	if raw == "" {
-		return 0
+	best := 0
+	for _, key := range []string{"AGENT_OODA_DEPTH", "ROUTER_DEPTH"} {
+		raw := strings.TrimSpace(os.Getenv(key))
+		if raw == "" {
+			continue
+		}
+		n, err := strconv.Atoi(raw)
+		if err != nil {
+			best = max(best, 1)
+			continue
+		}
+		best = max(best, n)
 	}
-	n, err := strconv.Atoi(raw)
-	if err != nil {
-		return 1
-	}
-	if n < 0 {
-		return 0
-	}
-	return n
+	return best
 }
 
 // AtomicWriteJSON serializes v to JSON atomically via a sibling temp file.

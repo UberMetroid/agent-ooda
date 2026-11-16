@@ -186,7 +186,7 @@ func runDispatchMode(opts CLIOpts, outW, errW io.Writer) int {
 	return dispatchManifest(opts, outW, errW)
 }
 
-// RunCLI parses argv and executes the selected ooda / router command.
+// RunCLI parses argv and executes the selected agent-ooda command.
 func RunCLI(prog string, argv []string, outW, errW io.Writer) int {
 	if outW == nil {
 		outW = os.Stdout
@@ -202,6 +202,10 @@ func RunCLI(prog string, argv []string, outW, errW io.Writer) int {
 	if opts.Help {
 		return 0
 	}
+	if opts.Version {
+		fmt.Fprintf(outW, "agent-ooda v%s\n", fleet.Version)
+		return 0
+	}
 	if opts.Status {
 		return ReportStatus(outW, false)
 	}
@@ -213,9 +217,9 @@ func RunCLI(prog string, argv []string, outW, errW io.Writer) int {
 	}
 	if fleet.RouterDepth() >= 1 {
 		fmt.Fprintln(errW,
-			"error: recursive router dispatch blocked (ROUTER_DEPTH>=1). "+
+			"error: recursive agent-ooda dispatch blocked (AGENT_OODA_DEPTH>=1 / ROUTER_DEPTH>=1). "+
 				"You are already running inside a dispatched worker — execute the task directly "+
-				"with your native tools instead of invoking router.")
+				"with your native tools instead of invoking agent-ooda.")
 		return 2
 	}
 	if opts.Probe {
@@ -235,7 +239,7 @@ func RunCLI(prog string, argv []string, outW, errW io.Writer) int {
 	}
 	if opts.Recon == nil && opts.Task == nil && opts.Review == nil && opts.Manifest == "" {
 		fmt.Fprintln(errW,
-			"error: manifest path is required (or pass --recon, --task, --review, "+
+			"error: manifest path is required (or pass --version, --recon, --task, --review, "+
 				"--status, --discover, --usage, --probe, --set-cycle, --enable, --disable, --cleanup)")
 		return 2
 	}

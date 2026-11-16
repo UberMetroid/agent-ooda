@@ -15,7 +15,7 @@ import (
 
 var (
 	skillPathRe = regexp.MustCompile(`/skills/([A-Za-z0-9._-]+)/SKILL\.md$`)
-	routerCmdRe = regexp.MustCompile(`(?:^|[\s/;|&"'])(ooda|router|dispatch\.py)(?:\s|$|"|')`)
+	routerCmdRe = regexp.MustCompile(`(?:^|[\s/;|&"'])(agent-ooda|ooda|router|dispatch\.py)(?:\s|$|"|')`)
 	skillFlagRe = regexp.MustCompile(`--skills?(?:=|\s+)([A-Za-z0-9.,:_-]+)`)
 )
 
@@ -28,7 +28,9 @@ type sessionRecord struct {
 }
 
 func appendSkill(skills []string, raw string) []string {
-	name := strings.TrimPrefix(strings.TrimSpace(raw), "ooda:")
+	name := strings.TrimSpace(raw)
+	name = strings.TrimPrefix(name, "agent-ooda:")
+	name = strings.TrimPrefix(name, "ooda:")
 	if name == "agent-router" {
 		name = "router"
 	}
@@ -143,7 +145,7 @@ func HandleHookStdin(r io.Reader, w io.Writer) {
 	_, _ = io.WriteString(w, "{}\n")
 }
 
-// RunHook is the CLI entrypoint for ooda-hook.
+// RunHook is the CLI entrypoint for agent-ooda-hook.
 func RunHook() int {
 	HandleHookStdin(os.Stdin, os.Stdout)
 	return 0

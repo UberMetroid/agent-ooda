@@ -101,13 +101,13 @@ func TestSetupSkillsAndOwnedLink(t *testing.T) {
 		t.Fatalf("malformed skills.json entries must fail")
 	}
 
-	pDir := filepath.Join(tmp, "plugins", "ooda")
+	pDir := filepath.Join(tmp, "plugins", "agent-ooda")
 	_ = os.MkdirAll(filepath.Join(pDir, "bin"), 0o755)
-	_ = os.WriteFile(filepath.Join(pDir, "bin", "ooda"), []byte("x"), 0o755)
+	_ = os.WriteFile(filepath.Join(pDir, "bin", "agent-ooda"), []byte("x"), 0o755)
 	ownLink := filepath.Join(tmp, "own")
 	brokenOwn := filepath.Join(tmp, "broken-own")
 	foreignLink := filepath.Join(tmp, "foreign")
-	_ = os.Symlink(filepath.Join(pDir, "bin", "ooda"), ownLink)
+	_ = os.Symlink(filepath.Join(pDir, "bin", "agent-ooda"), ownLink)
 	_ = os.Symlink(filepath.Join(pDir, "bin", "missing"), brokenOwn)
 	_ = os.Symlink(filepath.Join(tmp, "other"), foreignLink)
 	if RunSetupCmd([]string{"owned-link", ownLink, pDir}, &errB) != 0 ||
@@ -117,62 +117,82 @@ func TestSetupSkillsAndOwnedLink(t *testing.T) {
 	}
 }
 
-func TestInstallAndUninstallScript(t *testing.T) {
-	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+func runBash(t *testing.T, dir string, env []string, script string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("bash", append([]string{script}, args...)...)
+	cmd.Dir = dir
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("%s %v failed: %v\n%s", script, args, err, out)
 	}
-	if _, err := os.Stat(filepath.Join(repoRoot, "plugins", "ooda", "bin", "ooda")); err != nil {
-		t.Fatalf("compiled plugins/ooda/bin/ooda missing: %v", err)
+	return string(out)
+}
+
+func stageTestRepo(t *testing.T, srcRoot, dstRoot string) {
+	t.Helper()
+	_ = os.MkdirAll(filepath.Join(dstRoot, "plugins", "agent-ooda", "bin"), 0o755)
+	_ = os.MkdirAll(filepath.Join(dstRoot, "plugins", "agent-ooda", "config"), 0o755)
+	for _, rel := range []string{
+		"install.sh", "uninstall.sh",
+		filepath.Join("plugins", "agent-ooda", "bin", "agent-ooda"),
+		filepath.Join("plugins", "agent-ooda", "config", "quota.default.json"),
+		filepath.Join("plugins", "agent-ooda", "plugin.json"),
+	} {
+		mode := os.FileMode(0o644)
+		if strings.HasSuffix(rel, ".sh") || strings.HasSuffix(rel, "agent-ooda") {
+			mode = 0o755
+		}
+		_ = os.WriteFile(filepath.Join(dstRoot, rel), readWireRaw(t, filepath.Join(srcRoot, rel)), mode)
+	}
+}
+
+func TestInstallAndUninstallScript(t *testing.T) {
+	repoRoot, _ := filepath.Abs(filepath.Join("..", ".."))
+	binPath := filepath.Join(repoRoot, "plugins", "agent-ooda", "bin", "agent-ooda")
+	if _, err := os.Stat(binPath); err != nil {
+		t.Fatalf("compiled %s missing: %v", binPath, err)
 	}
 	tmp := t.TempDir()
+	staged := filepath.Join(tmp, "staged-repo")
+	stageTestRepo(t, repoRoot, staged)
 	fakeHome := filepath.Join(tmp, "home")
 	_ = os.MkdirAll(fakeHome, 0o755)
-	run := func(env []string, script string, args ...string) string {
-		cmd := exec.Command("bash", append([]string{filepath.Join(repoRoot, script)}, args...)...)
-		cmd.Dir = repoRoot
-		cmd.Env = env
-		out, cerr := cmd.CombinedOutput()
-		if cerr != nil {
-			t.Fatalf("%s %v failed: %v\n%s", script, args, cerr, out)
-		}
-		return string(out)
-	}
 	env := []string{
-		"HOME=" + fakeHome,
-		"XDG_STATE_HOME=" + filepath.Join(fakeHome, ".local", "state"),
-		"OODA_NO_BUILD=1",
-		"PATH=" + os.Getenv("PATH"),
+		"HOME=" + fakeHome, "XDG_STATE_HOME=" + filepath.Join(fakeHome, ".local", "state"),
+		"AGENT_OODA_NO_BUILD=1", "PATH=" + os.Getenv("PATH"),
 	}
-	instOut := run(env, "install.sh")
-	if !strings.Contains(instOut, "ooda install complete") {
+	if instOut := runBash(t, staged, env, filepath.Join(staged, "install.sh")); !strings.Contains(
+		instOut, "agent-ooda install complete") {
 		t.Fatalf("unexpected install output: %s", instOut)
 	}
 	setPath := filepath.Join(fakeHome, ".gemini", "antigravity-cli", "settings.json")
 	if !strings.Contains(string(readWireRaw(t, setPath)), "statusline.py") {
 		t.Fatalf("settings.json missing statusLine after install")
 	}
-	unOut := run(env, "uninstall.sh", "--purge")
-	if !strings.Contains(unOut, "purged") {
+	if _, rerr := os.Lstat(filepath.Join(fakeHome, ".local", "bin", "agent-ooda")); rerr != nil {
+		t.Fatalf("expected agent-ooda bin symlink: %v", rerr)
+	}
+	if _, rerr := os.Lstat(filepath.Join(fakeHome, ".local", "bin", "router")); !os.IsNotExist(rerr) {
+		t.Fatalf("legacy router symlink should not be created")
+	}
+	if unOut := runBash(t, staged, env, filepath.Join(staged, "uninstall.sh"), "--purge"); !strings.Contains(
+		unOut, "purged") {
 		t.Fatalf("unexpected uninstall --purge output: %s", unOut)
 	}
 
-	// Verify uninstall succeeds cleanly on a host with neither plugins/ooda/bin/ooda nor go.
 	noBinRepo := filepath.Join(tmp, "nobin-repo")
-	_ = os.MkdirAll(filepath.Join(noBinRepo, "plugins", "ooda"), 0o755)
+	_ = os.MkdirAll(filepath.Join(noBinRepo, "plugins", "agent-ooda"), 0o755)
 	for _, name := range []string{"install.sh", "uninstall.sh"} {
-		src, _ := os.ReadFile(filepath.Join(repoRoot, name))
-		_ = os.WriteFile(filepath.Join(noBinRepo, name), src, 0o755)
+		_ = os.WriteFile(filepath.Join(noBinRepo, name), readWireRaw(t, filepath.Join(repoRoot, name)), 0o755)
 	}
-	symTarget := filepath.Join(fakeHome, ".local", "bin", "ooda")
+	symTarget := filepath.Join(fakeHome, ".local", "bin", "agent-ooda")
 	_ = os.MkdirAll(filepath.Dir(symTarget), 0o755)
-	_ = os.Symlink(filepath.Join(noBinRepo, "plugins", "ooda", "bin", "ooda"), symTarget)
-	cmd := exec.Command("bash", filepath.Join(noBinRepo, "uninstall.sh"), "--purge")
-	cmd.Dir = noBinRepo
-	cmd.Env = []string{"HOME=" + fakeHome, "XDG_STATE_HOME=" + filepath.Join(fakeHome, ".local", "state"),
-		"PATH=/usr/bin:/bin"}
-	if noBinOut, nerr := cmd.CombinedOutput(); nerr != nil || !strings.Contains(string(noBinOut), symTarget) {
-		t.Fatalf("uninstall without binary failed: err=%v out=%s", nerr, noBinOut)
+	_ = os.Symlink(filepath.Join(noBinRepo, "plugins", "agent-ooda", "bin", "agent-ooda"), symTarget)
+	if noBinOut := runBash(t, noBinRepo, []string{
+		"HOME=" + fakeHome, "XDG_STATE_HOME=" + filepath.Join(fakeHome, ".local", "state"), "PATH=/usr/bin:/bin",
+	}, filepath.Join(noBinRepo, "uninstall.sh"), "--purge"); !strings.Contains(noBinOut, symTarget) {
+		t.Fatalf("uninstall without binary failed: %s", noBinOut)
 	}
 }
 
@@ -187,11 +207,11 @@ func readWireRaw(t *testing.T, p string) []byte {
 
 func TestInstallPrebuiltWithoutGo(t *testing.T) {
 	repoRoot, _ := filepath.Abs(filepath.Join("..", ".."))
-	binSrc := readWireRaw(t, filepath.Join(repoRoot, "plugins", "ooda", "bin", "ooda"))
+	binSrc := readWireRaw(t, filepath.Join(repoRoot, "plugins", "agent-ooda", "bin", "agent-ooda"))
 	tmp := t.TempDir()
 	noGoBin, relDir, repoDir, fakeHome := filepath.Join(tmp, "bin"), filepath.Join(tmp, "rel"),
 		filepath.Join(tmp, "repo"), filepath.Join(tmp, "home")
-	for _, d := range []string{noGoBin, relDir, filepath.Join(repoDir, "plugins", "ooda", "config"), fakeHome} {
+	for _, d := range []string{noGoBin, relDir, filepath.Join(repoDir, "plugins", "agent-ooda", "config"), fakeHome} {
 		_ = os.MkdirAll(d, 0o755)
 	}
 	tools := []string{"bash", "dirname", "cat", "uname", "mktemp", "curl", "awk", "sha256sum",
@@ -201,14 +221,14 @@ func TestInstallPrebuiltWithoutGo(t *testing.T) {
 			_ = os.Symlink(p, filepath.Join(noGoBin, name))
 		}
 	}
-	asset := fmt.Sprintf("ooda-%s-%s", runtime.GOOS, runtime.GOARCH)
+	asset := fmt.Sprintf("agent-ooda-%s-%s", runtime.GOOS, runtime.GOARCH)
 	_ = os.WriteFile(filepath.Join(relDir, asset), binSrc, 0o755)
 	_ = os.WriteFile(filepath.Join(relDir, "SHA256SUMS"),
 		[]byte(fmt.Sprintf("%x  %s\n", sha256.Sum256(binSrc), asset)), 0o644)
 	for _, name := range []string{"install.sh", "uninstall.sh"} {
 		_ = os.WriteFile(filepath.Join(repoDir, name), readWireRaw(t, filepath.Join(repoRoot, name)), 0o755)
 	}
-	qDef := filepath.Join("plugins", "ooda", "config", "quota.default.json")
+	qDef := filepath.Join("plugins", "agent-ooda", "config", "quota.default.json")
 	_ = os.WriteFile(filepath.Join(repoDir, qDef), readWireRaw(t, filepath.Join(repoRoot, qDef)), 0o644)
 
 	runInst := func() error {
@@ -216,7 +236,7 @@ func TestInstallPrebuiltWithoutGo(t *testing.T) {
 		cmd.Dir = repoDir
 		cmd.Env = []string{
 			"HOME=" + fakeHome, "XDG_STATE_HOME=" + filepath.Join(fakeHome, ".local", "state"),
-			"PATH=" + noGoBin, "OODA_RELEASE_BASE=file://" + relDir,
+			"PATH=" + noGoBin, "AGENT_OODA_RELEASE_BASE=file://" + relDir,
 		}
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -227,7 +247,7 @@ func TestInstallPrebuiltWithoutGo(t *testing.T) {
 	if err := runInst(); err != nil {
 		t.Fatalf("prebuilt no-Go install failed: %v", err)
 	}
-	_ = os.Remove(filepath.Join(repoDir, "plugins", "ooda", "bin", "ooda"))
+	_ = os.Remove(filepath.Join(repoDir, "plugins", "agent-ooda", "bin", "agent-ooda"))
 	_ = os.WriteFile(filepath.Join(relDir, "SHA256SUMS"), []byte(strings.Repeat("0", 64)+"  "+asset+"\n"), 0o644)
 	if err := runInst(); err == nil {
 		t.Fatal("expected SHA-256 mismatch to fail closed")

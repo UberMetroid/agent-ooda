@@ -1,0 +1,14 @@
+{
+  "name": "agent-ooda",
+  "displayName": "agent-ooda — Multi-Agent OODA Router & HUD",
+  "version": "2.0.0",
+  "description": "Unified OODA engineering discipline, Energy-Maneuverability multi-agent CLI router, cross-model diff verification, and minimal statusLine HUD for Antigravity.",
+  "author": "UberMetroid",
+  "homepage": "https://ubermetroid.github.io/agent-ooda/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/UberMetroid/agent-ooda"
+  },
+  "license": "Apache-2.0",
+  "logo": "assets/logo.svg"
+}

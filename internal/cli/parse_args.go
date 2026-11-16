@@ -10,25 +10,28 @@ import (
 	"github.com/UberMetroid/agent-ooda/internal/fleet"
 )
 
-// CLIOpts holds parsed command-line options for the ooda / router CLI.
+// CLIOpts holds parsed command-line options for the agent-ooda CLI.
 type CLIOpts struct {
-	Manifest, Complexity, Lane, Model, Effort, Timeout        string
-	Enable, Disable, SetCycle, Reason                         string
-	Recon, Task, Review                                       *string
-	Files, Skills, ExcludeLanes                               []string
-	Jobs                                                      int
-	Hours, CostBudget                                         *float64
-	TokenBudget, MaxParallel                                  *int
-	NoStripe, NoPivot, NoReview, Status                       bool
-	Discover, Usage, Probe, AutoWake, ResetNow, Cleanup, Help bool
+	Manifest, Complexity, Lane, Model, Effort, Timeout string
+	Enable, Disable, SetCycle, Reason                  string
+	Recon, Task, Review                                *string
+	Files, Skills, ExcludeLanes                        []string
+	Jobs                                               int
+	Hours, CostBudget                                  *float64
+	TokenBudget, MaxParallel                           *int
+	NoStripe, NoPivot, NoReview, Status                bool
+	Discover, Usage, Probe, AutoWake, ResetNow         bool
+	Cleanup, Help, Version                             bool
 }
 
 func usageText(prog string) string {
 	return fmt.Sprintf(
-		"usage: %s [--status | --discover | --usage | --probe | --recon PROMPT | --task PROMPT |\n"+
-			"             --review [PATH] | --cleanup | --enable P | --disable P | --set-cycle P | manifest]\n\n"+
+		"usage: %s [--version | --status | --discover | --usage | --probe | --recon PROMPT |\n"+
+			"             --task PROMPT | --review [PATH] | --cleanup | --enable P | --disable P |\n"+
+			"             --set-cycle P | manifest]\n\n"+
 			"options:\n"+
 			"  -h, --help             show this help message and exit\n"+
+			"  -v, --version          show binary version and exit\n"+
 			"  --recon/--task PROMPT  read-only recon or coding task in CWD\n"+
 			"  --review [PATH]        standalone read-only cross-model review (default CWD)\n"+
 			"  --files / --skill CSV  scoped paths / skills to inject (repeatable)\n"+
@@ -58,37 +61,29 @@ func takeArg(argv []string, idx *int, hasEq bool, eqVal, flag string) (string, e
 }
 
 func applyNumFlag(opts *CLIOpts, name, val string) error {
+	if name == "--hours" || name == "--cost-budget" {
+		f, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			return fleet.UsageErr("error: %s: invalid number %q", name, val)
+		}
+		if name == "--hours" {
+			opts.Hours = &f
+		} else {
+			opts.CostBudget = &f
+		}
+		return nil
+	}
+	n, err := strconv.Atoi(val)
+	if err != nil {
+		return fleet.UsageErr("error: %s: invalid integer %q", name, val)
+	}
 	switch name {
 	case "--jobs", "-j", "--slots":
-		n, err := strconv.Atoi(val)
-		if err != nil {
-			return fleet.UsageErr("error: %s: invalid integer %q", name, val)
-		}
 		opts.Jobs = n
 	case "--token-budget":
-		n, err := strconv.Atoi(val)
-		if err != nil {
-			return fleet.UsageErr("error: --token-budget: invalid integer %q", val)
-		}
 		opts.TokenBudget = &n
 	case "--max-parallel":
-		n, err := strconv.Atoi(val)
-		if err != nil {
-			return fleet.UsageErr("error: --max-parallel: invalid integer %q", val)
-		}
 		opts.MaxParallel = &n
-	case "--hours":
-		f, err := strconv.ParseFloat(val, 64)
-		if err != nil {
-			return fleet.UsageErr("error: --hours: invalid number %q", val)
-		}
-		opts.Hours = &f
-	case "--cost-budget":
-		f, err := strconv.ParseFloat(val, 64)
-		if err != nil {
-			return fleet.UsageErr("error: --cost-budget: invalid number %q", val)
-		}
-		opts.CostBudget = &f
 	}
 	return nil
 }
@@ -151,6 +146,8 @@ func applyBoolFlag(opts *CLIOpts, name string) bool {
 		opts.ResetNow = true
 	case "--cleanup":
 		opts.Cleanup = true
+	case "-v", "--version":
+		opts.Version = true
 	case "-h", "--help":
 		opts.Help = true
 	default:
@@ -204,8 +201,8 @@ func validateModes(opts CLIOpts) error {
 	quotaAdmin := opts.Enable != "" || opts.Disable != "" || opts.SetCycle != ""
 	modes := 0
 	for _, on := range []bool{
-		opts.Status, opts.Discover, opts.Usage, opts.Probe, quotaAdmin,
-		opts.Cleanup, opts.Recon != nil, opts.Task != nil, opts.Review != nil,
+		opts.Version, opts.Status, opts.Discover, opts.Usage, opts.Probe,
+		quotaAdmin, opts.Cleanup, opts.Recon != nil, opts.Task != nil, opts.Review != nil,
 	} {
 		if on {
 			modes++

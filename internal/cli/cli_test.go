@@ -54,6 +54,7 @@ func setupCLIEnv(t *testing.T) (string, string, string) {
 	t.Setenv("OODA_NO_AUTO_PROBE", "1")
 	t.Setenv("ROUTER_HUD_DIR", filepath.Join(tmp, "hud"))
 	t.Setenv("ROUTER_SLOTS_DIR", filepath.Join(tmp, "slots"))
+	t.Setenv("AGENT_OODA_DEPTH", "0")
 	t.Setenv("ROUTER_DEPTH", "0")
 	t.Setenv("NO_COLOR", "1")
 	gitBin, _ := exec.LookPath("git")
@@ -63,9 +64,16 @@ func setupCLIEnv(t *testing.T) (string, string, string) {
 
 func TestParseArgsPermutations(t *testing.T) {
 	var helpOut bytes.Buffer
-	opts, err := ParseArgs("router", []string{"-h"}, &helpOut)
-	if err != nil || !opts.Help || !strings.Contains(helpOut.String(), "usage: router") {
+	opts, err := ParseArgs("agent-ooda", []string{"-h"}, &helpOut)
+	if err != nil || !opts.Help || !strings.Contains(helpOut.String(), "usage: agent-ooda") {
 		t.Fatalf("unexpected help parse: opts=%+v err=%v", opts, err)
+	}
+	vOpts, err := ParseArgs("agent-ooda", []string{"--version"}, nil)
+	if err != nil || !vOpts.Version {
+		t.Fatalf("expected --version parsed, got %+v err=%v", vOpts, err)
+	}
+	if _, err := ParseArgs("agent-ooda", []string{"--version", "--status"}, nil); err == nil {
+		t.Fatal("expected conflicting --version --status error")
 	}
 	o1, err := ParseArgs("ooda", []string{"--review"}, nil)
 	if err != nil || o1.Review == nil || *o1.Review != "." {
@@ -94,7 +102,12 @@ func TestParseArgsPermutations(t *testing.T) {
 func TestStatusUsageAndQuotaAdmin(t *testing.T) {
 	_, _, _ = setupCLIEnv(t)
 	var out, errB bytes.Buffer
-	if rc := RunCLI("router", []string{"--status"}, &out, &errB); rc != 0 ||
+	if rc := RunCLI("agent-ooda", []string{"--version"}, &out, &errB); rc != 0 ||
+		strings.TrimSpace(out.String()) != "agent-ooda v"+fleet.Version {
+		t.Fatalf("--version failed rc=%d out=%q err=%q", rc, out.String(), errB.String())
+	}
+	out.Reset()
+	if rc := RunCLI("agent-ooda", []string{"--status"}, &out, &errB); rc != 0 ||
 		!strings.Contains(out.String(), "LANE") {
 		t.Fatalf("--status failed rc=%d out=%q err=%q", rc, out.String(), errB.String())
 	}
@@ -126,9 +139,7 @@ func TestStatusUsageAndQuotaAdmin(t *testing.T) {
 		t.Fatalf("expected clean upfront Gemini block exit 2, got rc=%d err=%q", rc, errB.String())
 	}
 	out.Reset()
-	rc := RunCLI("router", []string{
-		"--set-cycle", "mcode", "--effort", "high", "--token-budget", "5000",
-	}, &out, &errB)
+	rc := RunCLI("agent-ooda", []string{"--set-cycle", "mcode", "--effort", "high", "--token-budget", "5000"}, &out, &errB)
 	if rc != 0 || !strings.Contains(out.String(), "configured mcode:") {
 		t.Fatalf("--set-cycle mcode failed rc=%d out=%q err=%q", rc, out.String(), errB.String())
 	}
@@ -141,6 +152,7 @@ func TestRouterDepthGuard(t *testing.T) {
 		!strings.Contains(cErr.String(), "conflicting") {
 		t.Fatalf("mixed modes at ROUTER_DEPTH=0: rc=%d err=%q", rc, cErr.String())
 	}
+	t.Setenv("AGENT_OODA_DEPTH", "0")
 	t.Setenv("ROUTER_DEPTH", "1")
 	blocked := [][]string{
 		{"--recon", "hi"}, {"--task", "hi"}, {"--review", "."}, {"--probe"},
@@ -148,13 +160,21 @@ func TestRouterDepthGuard(t *testing.T) {
 	}
 	for _, argv := range blocked {
 		var out, errB bytes.Buffer
-		if rc := RunCLI("router", argv, &out, &errB); rc != 2 ||
+		if rc := RunCLI("agent-ooda", argv, &out, &errB); rc != 2 ||
 			!strings.Contains(errB.String(), "ROUTER_DEPTH>=1") {
 			t.Fatalf("%v under ROUTER_DEPTH=1: rc=%d err=%q", argv, rc, errB.String())
 		}
 	}
+	t.Setenv("AGENT_OODA_DEPTH", "1")
+	t.Setenv("ROUTER_DEPTH", "0")
 	var out, errB bytes.Buffer
-	if rc := RunCLI("router", []string{"--status"}, &out, &errB); rc != 0 {
+	if rc := RunCLI("agent-ooda", []string{"--recon", "hi"}, &out, &errB); rc != 2 ||
+		!strings.Contains(errB.String(), "AGENT_OODA_DEPTH>=1") {
+		t.Fatalf("--recon under AGENT_OODA_DEPTH=1: rc=%d err=%q", rc, errB.String())
+	}
+	out.Reset()
+	errB.Reset()
+	if rc := RunCLI("agent-ooda", []string{"--status"}, &out, &errB); rc != 0 {
 		t.Fatalf("--status should work when ROUTER_DEPTH=1, got %d (%q)", rc, errB.String())
 	}
 }
@@ -169,9 +189,7 @@ func TestSingleTaskScopeAndReject(t *testing.T) {
 	writeExecFile(t, binDir, "grok",
 		"echo 'package main' > escape.txt\necho '{\"content\":\"done\"}'\n")
 	var out, errB bytes.Buffer
-	rc := RunCLI("router", []string{
-		"--task", "edit", "--lane", "grok", "--files", "a.go", "--no-review",
-	}, &out, &errB)
+	rc := RunCLI("agent-ooda", []string{"--task", "edit", "--lane", "grok", "--files", "a.go", "--no-review"}, &out, &errB)
 	if rc != 1 || !strings.Contains(out.String(), "SCOPE VIOLATIONS: escape.txt") ||
 		strings.Contains(out.String(), "dirty.txt") {
 		t.Fatalf("unexpected scope violation result rc=%d out=%q err=%q", rc, out.String(), errB.String())
@@ -183,9 +201,7 @@ func TestSingleTaskScopeAndReject(t *testing.T) {
 	writeExecFile(t, binDir, "mcode", "printf '[P1] bad var\\nVERDICT: REJECT\\n'\n")
 	out.Reset()
 	errB.Reset()
-	rc = RunCLI("router", []string{
-		"--task", "edit a", "--lane", "grok", "--files", "a.go",
-	}, &out, &errB)
+	rc = RunCLI("agent-ooda", []string{"--task", "edit a", "--lane", "grok", "--files", "a.go"}, &out, &errB)
 	if rc != 1 || !strings.Contains(out.String(), "[review verdict: REJECT]") {
 		t.Fatalf("expected review REJECT exit 1, got rc=%d out=%q err=%q", rc, out.String(), errB.String())
 	}
@@ -195,7 +211,7 @@ func TestSingleTaskScopeAndReject(t *testing.T) {
 	writeExecFile(t, binDir, "mcode", "printf 'Looks plausible without verdict line.\\n'\n")
 	out.Reset()
 	errB.Reset()
-	rc = RunCLI("router", []string{"--task", "edit u", "--lane", "grok", "--files", "a.go"}, &out, &errB)
+	rc = RunCLI("agent-ooda", []string{"--task", "edit u", "--lane", "grok", "--files", "a.go"}, &out, &errB)
 	if rc != 1 || !strings.Contains(out.String(), "[review verdict: UNKNOWN]") {
 		t.Fatalf("expected UNKNOWN review fail-closed exit 1, got rc=%d out=%q err=%q", rc, out.String(), errB.String())
 	}
@@ -212,9 +228,7 @@ func TestSingleTaskScopeAndReject(t *testing.T) {
 	}
 	out.Reset()
 	errB.Reset()
-	rc = RunCLI("router", []string{
-		"--task", "edit a2", "--lane", "grok", "--files", "a.go",
-	}, &out, &errB)
+	rc = RunCLI("agent-ooda", []string{"--task", "edit a2", "--lane", "grok", "--files", "a.go"}, &out, &errB)
 	if rc != 1 || !strings.Contains(out.String(), "failing closed") {
 		t.Fatalf("expected EnsureSlot fail-closed exit 1, got rc=%d out=%q err=%q", rc, out.String(), errB.String())
 	}

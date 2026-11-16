@@ -2,7 +2,7 @@
 
 **Static Go OODA multi-agent router, Energy-Maneuverability quota scheduler, cross-model diff verifier, and live `tok/s` Bubble-Canopy HUD.**
 
-`UberMetroid/agent-ooda` packages one zero-dependency Go 1.22+ (`CGO_ENABLED=0`, zero external `require`s) engine paired with host plugin adapters under `plugins/`—starting with [`plugins/ooda`](plugins/ooda) for Antigravity (`agy`) and structured so `mcode` and future coding hosts share the same fleet state, `flock` slot leases, git worktrees, and diff verifier.
+`UberMetroid/agent-ooda` packages one zero-dependency Go 1.22+ (`CGO_ENABLED=0`, zero external `require`s) engine paired with host plugin adapters under `plugins/`—starting with [`plugins/agent-ooda`](plugins/agent-ooda) for Antigravity (`agy`) and structured so `mcode` and future coding hosts share the same fleet state, `flock` slot leases, git worktrees, and diff verifier.
 
 - **Site & web installer:** **<https://ubermetroid.github.io/agent-ooda/>**
 - **Releases & static binaries (`SHA256SUMS`):** **<https://github.com/UberMetroid/agent-ooda/releases/latest>**
@@ -13,22 +13,22 @@
 curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash
 ```
 
-Installs or updates `UberMetroid/agent-ooda` in `${XDG_DATA_HOME:-~/.local/share}/agent-ooda` (override with `AGENT_OODA_HOME`). If Go 1.22+ is on `PATH`, it builds [`plugins/ooda/bin/ooda`](plugins/ooda/bin/ooda) locally with `CGO_ENABLED=0`; otherwise it downloads the matching static GitHub Release binary (`linux`/`darwin`, `amd64`/`arm64`) and verifies its SHA-256 digest against `SHA256SUMS` before installing.
+Installs or updates `UberMetroid/agent-ooda` in `${XDG_DATA_HOME:-~/.local/share}/agent-ooda` (override with `AGENT_OODA_HOME`). If Go 1.22+ is on `PATH`, it builds [`plugins/agent-ooda/bin/agent-ooda`](plugins/agent-ooda/bin/agent-ooda) locally with `CGO_ENABLED=0`; otherwise it downloads the matching static GitHub Release binary (`linux`/`darwin`, `amd64`/`arm64`) and verifies its SHA-256 digest against `SHA256SUMS` before installing.
 
 ## Architecture & Multi-Call Binary
 
-All runtime roles compile into one static binary (`plugins/ooda/bin/ooda`) dispatched via `argv[0]` basename:
+All runtime roles compile into one static binary (`plugins/agent-ooda/bin/agent-ooda`) dispatched via `argv[0]` basename:
 
-| Binary / Symlink | Entrypoint (`cmd/ooda`) | Responsibility |
+| Binary / Symlink | Entrypoint (`cmd/agent-ooda`) | Responsibility |
 | --- | --- | --- |
-| `ooda` / `router` | CLI dispatcher & fleet admin | `--recon`, `--task`, parallel worktree manifests, `--review`, `--status`, `--discover`, `--usage`, `--probe` |
-| `ooda-hud` / `statusline.py` | Bubble-Canopy HUD | Renders live ANSI statusBar telemetry from NDJSON worker markers + `quota.json` |
-| `ooda-hook` | Antigravity lifecycle hook | Tracks injected skills per session and garbage-collects dead worker markers |
+| `agent-ooda` | CLI dispatcher & fleet admin | `--version`, `--recon`, `--task`, parallel worktree manifests, `--review`, `--status`, `--discover`, `--usage`, `--probe` |
+| `agent-ooda-hud` / `statusline.py` | Bubble-Canopy HUD | Renders live ANSI statusBar telemetry from NDJSON worker markers + `quota.json` |
+| `agent-ooda-hook` | Antigravity lifecycle hook | Tracks injected skills per session and garbage-collects dead worker markers |
 | `__setup` / `__wire` | Installer helpers | Safe JSON validation and idempotent `settings.json` `statusLine` wiring |
 
 ```text
 agent-ooda/
-├── cmd/ooda/            # multi-call entrypoint (router / ooda-hud / ooda-hook)
+├── cmd/agent-ooda/      # multi-call entrypoint (agent-ooda / agent-ooda-hud / agent-ooda-hook)
 ├── internal/
 │   ├── fleet/           # quota store (v8), multi-window cycles, model aliases, flock slot leases
 │   ├── envelope/        # E-M regime selection, UTC tariffs, CLI discovery, mismatch pivot
@@ -36,9 +36,9 @@ agent-ooda/
 │   ├── verify/          # HeadRef/unborn diff gathering, untracked hunks, off-family review
 │   ├── worktree/        # isolated ooda/<id> git worktrees, scope rules, skill loader
 │   ├── hud/             # ANSI Bubble-Canopy line renderer & hook event recorder
-│   ├── cli/             # arg parser, conflict validation, ROUTER_DEPTH>=1 guard
+│   ├── cli/             # arg parser, conflict validation, AGENT_OODA_DEPTH / ROUTER_DEPTH guard
 │   └── install/         # cross-host setup/unwire helpers
-├── plugins/ooda/        # Antigravity (agy) plugin manifest, skills, rules, hooks & bin shims
+├── plugins/agent-ooda/  # Antigravity (agy) plugin manifest, unified skill, rule, hooks & bin shims
 └── qa/gates/            # AST & repo House-Law gate suite (`make all`)
 ```
 
@@ -69,16 +69,16 @@ The scheduler borrows two principles from fighter tactician **Col. John Boyd**:
 | `devin-pro` | Devin Pro pool (`devin`) | unlimited `$20/mo` Pro, `24h + 7d` |
 | `devin-fusion` | Devin Fusion pool (`devin`) | paid credits (reserve) |
 
-Model IDs and efforts are **discovered dynamically, not hardcoded**: `router --status` and
-`router --discover` inspect non-secret local CLI configs, cached CLI model lists, effort flags
+Model IDs and efforts are **discovered dynamically, not hardcoded**: `agent-ooda --status` and
+`agent-ooda --discover` inspect non-secret local CLI configs, cached CLI model lists, effort flags
 (`--effort`/`--reasoning-effort` vs `via-model`), live UTC off-peak tariffs (`Z.ai` / `DeepSeek`
 `0.5x` off-peak, `mcode` weekday peak-jam avoidance), and installed `--skill` definitions. When
-`--complexity` or `--skill` are omitted, `router` infers the task regime and matches up to 2
-non-core domain skills automatically, tuning model tier and `--effort`. `router --probe` runs
+`--complexity` or `--skill` are omitted, `agent-ooda` infers the task regime and matches up to 2
+non-core domain skills automatically, tuning model tier and `--effort`. `agent-ooda --probe` runs
 minimal 1-token prompt canaries (never probing `credits`; updates local `quota.json`). Hard binary guardrails exit `2`
-on any `gemini*`/`orchestrator*` worker model and block recursive execution (`router --recon`,
+on any `gemini*`/`orchestrator*` worker model and block recursive execution (`agent-ooda --recon`,
 `--task`, `--review`, `--probe`, `--cleanup`, `--enable`, `--disable`, `--set-cycle`) whenever
-`ROUTER_DEPTH>=1`.
+`AGENT_OODA_DEPTH>=1` or `ROUTER_DEPTH>=1`.
 
 **Stage clocks:**
 
@@ -100,14 +100,14 @@ review or scope checks) are all audited fail-closed with a `240s` review budget:
 - **Inline stream audit (`> 8 KiB` or committed diffs):** `--permission smart --prompt-mode coding --max-steps 25`.
 - **Fail-closed fallback:** on cooldown, nonzero exit, `SKIPPED`, `UNKNOWN`, or `[P0-3]` findings, review rotates off-family (`mcode → devin-fast → devin-pro → grok → mistral → muse → agy-opus`) or fails non-zero.
 
-## Bubble-Canopy HUD (`bin/ooda-hud`)
+## Bubble-Canopy HUD (`bin/agent-ooda-hud`)
 
-`bin/ooda-hud` (`statusline.py`) reads live NDJSON stream telemetry written over `io.Pipe()` and
-renders OODA phase (`○ ooda`, `◐ orient/decide`, `⠋ observe`, `⠋ act`, `⠋ verify`), live `~tok/s`
+`bin/agent-ooda-hud` (`statusline.py`) reads live NDJSON stream telemetry written over `io.Pipe()` and
+renders OODA phase (`○ agent-ooda`, `◐ orient/decide`, `⠋ observe`, `⠋ act`, `⠋ verify`), live `~tok/s`
 (or exact `tok/s`), active `tool Xs` waits, injected skills, and `fleet X/8 (next …)` wake countdowns:
 
 ```text
-○ ooda │ fleet 8/8
+○ agent-ooda │ fleet 8/8
 ◐ orient/decide │ skill devin │ fleet 7/8 (next 2h59m)
 ⠋ observe · swe-2-flash-max · ~64 tok/s │ fleet 8/8
 ⠋ act · claude-opus-5-5-high · tool 4s │ skill devin │ fleet 7/8
@@ -118,15 +118,16 @@ renders OODA phase (`○ ooda`, `◐ orient/decide`, `⠋ observe`, `⠋ act`, `
 ## CLI Quick Reference
 
 ```bash
-router --status                 # live fleet regimes, models, effort modes, skills & next wake
-router --discover               # refresh live CLI capability probe cache
-router --probe                  # minimal 1-token prompt canary & muse PAYG check
-router --usage                  # per-lane 5h/24h/7d/30d windows, UTC tariffs & E-M regime telemetry
-router --recon "Map auth flow"  # read-only Observe recon (free lanes first)
-router --task "Fix parser bug" --files internal/cli/parse_args.go --skill devin
-router .worktrees/tasks.json -j 4
-router --review .               # standalone cross-model working-tree/HEAD diff gate
-router --cleanup                # remove .worktrees and temporary ooda/* branches
+agent-ooda --version                 # print binary version
+agent-ooda --status                  # live fleet regimes, models, effort modes, skills & next wake
+agent-ooda --discover                # refresh live CLI capability probe cache
+agent-ooda --probe                   # minimal 1-token prompt canary & muse PAYG check
+agent-ooda --usage                   # per-lane 5h/24h/7d/30d windows, UTC tariffs & E-M regime telemetry
+agent-ooda --recon "Map auth flow"   # read-only Observe recon (free lanes first)
+agent-ooda --task "Fix parser bug" --files internal/cli/parse_args.go --skill devin
+agent-ooda .worktrees/tasks.json -j 4
+agent-ooda --review .                # standalone cross-model working-tree/HEAD diff gate
+agent-ooda --cleanup                 # remove .worktrees and temporary ooda/* branches
 ```
 
 ## Install, Update & Uninstall
@@ -140,18 +141,17 @@ curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash
 # Local source checkout
 git clone https://github.com/UberMetroid/agent-ooda.git && cd agent-ooda
 ./install.sh            # or: make install   (./install.sh --help lists options)
-agy plugin list         # restart agy first, then confirm "ooda" is enabled
+agy plugin list         # restart agy first, then confirm "agent-ooda" is enabled
 ```
 
 `install.sh` is idempotent:
 
-- **Links** `~/.gemini/config/plugins/ooda` → `plugins/ooda`,
-  `~/.local/bin/ooda` and `~/.local/bin/router` → `plugins/ooda/bin/ooda`, and
-  `~/.gemini/antigravity-cli/statusline.py` → `plugins/ooda/bin/ooda-hud`.
-- **Seeds** `${XDG_STATE_HOME:-~/.local/state}/ooda/quota.json` (migrating legacy state if present)
-  and registers `~/.agents/skills` in `~/.gemini/config/skills.json`.
-- **Archives** displaced symlinks/files under `${XDG_STATE_HOME:-~/.local/state}/ooda/backups/` without deleting them.
-- **Wires `statusLine`** in `~/.gemini/antigravity-cli/settings.json` (skip with `OODA_NO_STATUSLINE=1`):
+- **Links** `~/.gemini/config/plugins/agent-ooda` → `plugins/agent-ooda`,
+  `~/.local/bin/agent-ooda` → `plugins/agent-ooda/bin/agent-ooda`, and
+  `~/.gemini/antigravity-cli/statusline.py` → `plugins/agent-ooda/bin/agent-ooda-hud`.
+- **Migrates & archives** legacy `v1.x` owned `ooda`/`router` symlinks (leaving unrelated `ooda` binaries such as `openOODA-core` untouched) and `${XDG_STATE_HOME:-~/.local/state}/ooda/` state into `${XDG_STATE_HOME:-~/.local/state}/agent-ooda/backups/`.
+- **Seeds** `${XDG_STATE_HOME:-~/.local/state}/agent-ooda/quota.json` and registers `~/.agents/skills` in `~/.gemini/config/skills.json`.
+- **Wires `statusLine`** in `~/.gemini/antigravity-cli/settings.json` (skip with `AGENT_OODA_NO_STATUSLINE=1`):
 
   ```json
   {
@@ -176,13 +176,13 @@ curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash
 # Update from local checkout (links resolve directly into the checkout)
 git pull && ./install.sh
 
-# Uninstall (removes ooda symlinks & restores previous statusLine; add --purge to remove state/checkout)
+# Uninstall (removes agent-ooda symlinks & restores previous statusLine; add --purge to remove state/checkout)
 ./install.sh --uninstall --purge
 # or via web installer:
 curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --uninstall --purge
 ```
 
-Runtime state persists under `${XDG_STATE_HOME:-~/.local/state}/ooda/quota.json` (`AGENT_QUOTA_FILE`); live HUD markers and `flock` leases live in `/tmp/router-hud` (`ROUTER_HUD_DIR`).
+Runtime state persists under `${XDG_STATE_HOME:-~/.local/state}/agent-ooda/quota.json` (`AGENT_OODA_QUOTA_FILE`); live HUD markers and `flock` leases live in `/tmp/agent-ooda-hud` (`AGENT_OODA_HUD_DIR`).
 
 ## House-Law Verification
 

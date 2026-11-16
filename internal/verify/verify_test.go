@@ -114,6 +114,7 @@ func TestReviewFallbackAndUTF8Inline(t *testing.T) {
 	qPath := filepath.Join(tmp, "quota.json")
 	t.Setenv("AGENT_QUOTA_FILE", qPath)
 	t.Setenv("ROUTER_HUD_DIR", filepath.Join(tmp, "hud"))
+	t.Setenv("AGENT_OODA_DEPTH", "0")
 	t.Setenv("ROUTER_DEPTH", "0")
 	t.Setenv("OODA_NO_AUTO_PROBE", "1")
 	_ = fleet.AtomicWriteJSON(qPath, fleet.DefaultQuotaData(), false, true)

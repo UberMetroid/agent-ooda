@@ -1,9 +1,9 @@
 {
-  "ooda-hud-skill-tracker": {
+  "agent-ooda-hud-skill-tracker": {
     "SessionStart": [
       {
         "type": "command",
-        "command": "./bin/ooda-hook",
+        "command": "./bin/agent-ooda-hook",
         "timeout": 5
       }
     ],
@@ -13,7 +13,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "./bin/ooda-hook",
+            "command": "./bin/agent-ooda-hook",
             "timeout": 5
           }
         ]

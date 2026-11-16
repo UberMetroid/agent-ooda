@@ -462,14 +462,14 @@
   <main id="top">
     <section class="hero">
       <div class="wrap">
-        <span class="eyebrow">agent-ooda v1.1.1 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Multi-Window E-M Router (v8)</span>
+        <span class="eyebrow">agent-ooda v2.0.0 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Multi-Window E-M Router (v8)</span>
         <h1>Turn one session into a<br><span>token-routed agent fleet.</span></h1>
         <p class="lead">
           <strong>UberMetroid/agent-ooda</strong> ships one zero-dependency static Go OODA engine
-          (<code>ooda</code>, <code>router</code>, <code>ooda-hud</code>, <code>ooda-hook</code>) paired with
-          host plugin adapters (<code>plugins/ooda</code> for Antigravity <code>agy</code> today, structured to extend
-          directly to <code>mcode</code> next): v8 multi-window E-M scheduling, UTC off-peak tariffs, live quota kill,
-          cross-model verification, and a <code>~tok/s</code> Bubble-Canopy HUD with one-line SHA-256 web install.
+          (<code>agent-ooda</code>, <code>agent-ooda-hud</code>, <code>agent-ooda-hook</code>) paired with
+          host plugin adapters (<code>plugins/agent-ooda</code> for Antigravity <code>agy</code> today, structured to
+          extend directly to <code>mcode</code> next): v8 multi-window E-M scheduling, UTC off-peak tariffs, live quota
+          kill, cross-model verification, and a <code>~tok/s</code> Bubble-Canopy HUD with one-line SHA-256 web install.
         </p>
         <div class="install-bar" role="region" aria-label="One-line web installer">
           <code id="install-cmd">curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash</code>
@@ -477,7 +477,7 @@
         </div>
         <div class="hero-actions">
           <a class="btn btn-primary" href="#quickstart">Install &amp; Quickstart</a>
-          <a class="btn" href="https://github.com/UberMetroid/agent-ooda/releases/latest">Release Binaries (v1.1.1)</a>
+          <a class="btn" href="https://github.com/UberMetroid/agent-ooda/releases/latest">Release Binaries (v2.0.0)</a>
           <a class="btn" href="#architecture">Go Architecture</a>
         </div>
         <div class="telemetry-strip">
@@ -505,10 +505,10 @@
       <div class="wrap">
         <div class="sec-head">
           <h2>Bubble-Canopy HUD</h2>
-          <span class="sec-tag">bin/ooda-hud &bull; statusLine</span>
+          <span class="sec-tag">bin/agent-ooda-hud &bull; statusLine</span>
         </div>
         <p class="sec-sub">
-          Like an F-16 bubble canopy, <code>bin/ooda-hud</code> renders live OODA phase transitions, sliding-window
+          Like an F-16 bubble canopy, <code>bin/agent-ooda-hud</code> renders live OODA phase transitions, sliding-window
           <code>~tok/s</code> or exact <code>tok/s</code> stream speed, active <code>tool Xs</code> waits, injected
           skills, parallel bursts, and multi-window wake countdowns &amp; Muse PAYG exclusion right inside Antigravity&apos;s status bar.
         </p>
@@ -520,7 +520,7 @@
           <ul class="hud-list">
             <li class="hud-row">
               <span class="hud-stage">Standby</span>
-              <span class="hud-line"><span class="c-muted">&cir; ooda</span> │ <span class="c-green">fleet 8/8</span></span>
+              <span class="hud-line"><span class="c-muted">&cir; agent-ooda</span> │ <span class="c-green">fleet 8/8</span></span>
             </li>
             <li class="hud-row">
               <span class="hud-stage">Orient / Decide</span>
@@ -560,8 +560,8 @@
             <h3>statusLine Wiring</h3>
             <p>
               <code>./install.sh</code> symlinks <code>~/.gemini/antigravity-cli/statusline.py</code> to
-              <code>bin/ooda-hud</code> and merges <code>statusLine</code> into <code>settings.json</code> cleanly
-              (skip via <code>OODA_NO_STATUSLINE=1</code>; previous statusLine is backed up).
+              <code>bin/agent-ooda-hud</code> and merges <code>statusLine</code> into <code>settings.json</code> cleanly
+              (skip via <code>AGENT_OODA_NO_STATUSLINE=1</code>; previous statusLine is backed up).
             </p>
           </div>
           <div>
@@ -583,7 +583,7 @@
       <div class="wrap">
         <div class="sec-head">
           <h2>Static Go Core &amp; Multi-Host Suite</h2>
-          <span class="sec-tag">cmd/ooda &bull; internal/* &bull; plugins/*</span>
+          <span class="sec-tag">cmd/agent-ooda &bull; internal/* &bull; plugins/*</span>
         </div>
         <p class="sec-sub">
           <code>agent-ooda</code> separates host-agnostic Go packages from thin plugin adapters so multiple CLI hosts
@@ -592,11 +592,11 @@
         <div class="grid-3">
           <div class="card">
             <span class="badge b-cyan">Multi-Call Binary</span>
-            <h3>One Static <code>ooda</code> Executable</h3>
+            <h3>One Static <code>agent-ooda</code> Executable</h3>
             <p>
               Built with <code>CGO_ENABLED=0</code> and zero third-party packages. Inspects <code>argv[0]</code> to run
-              as <code>ooda</code>/<code>router</code> (dispatcher &amp; CLI), <code>ooda-hud</code> (status bar), or
-              <code>ooda-hook</code> (session skill recorder) with instant startup.
+              as <code>agent-ooda</code> (dispatcher &amp; CLI), <code>agent-ooda-hud</code> (status bar), or
+              <code>agent-ooda-hook</code> (session skill recorder) with instant startup.
             </p>
           </div>
           <div class="card">
@@ -604,8 +604,8 @@
             <h3>Multi-Host Plugin Repository</h3>
             <p>
               Core OODA packages live under <code>internal/{fleet,envelope,dispatch,verify,worktree,hud,cli,install}</code>
-              while host manifests/rules live under <code>plugins/ooda</code> (Antigravity <code>agy</code> today,
-              ready to host an <code>mcode</code> plugin next).
+              while unified host manifests/skills live under <code>plugins/agent-ooda</code> (Antigravity <code>agy</code>
+              today, ready to extend to <code>mcode</code> next).
             </p>
           </div>
           <div class="card">
@@ -694,11 +694,11 @@
       <div class="wrap">
         <div class="sec-head">
           <h2>The 8-Lane Fleet &amp; Binary Guardrails</h2>
-          <span class="sec-tag">router --status &bull; --discover &bull; --probe</span>
+          <span class="sec-tag">agent-ooda --status &bull; --discover &bull; --probe</span>
         </div>
         <p class="sec-sub">
-          <code>router --status</code> and <code>router --discover</code> probe installed CLIs dynamically for active
-          models, effort controls, UTC off-peak/peak-jam tariffs, and injectable skills. <code>router --probe</code>
+          <code>agent-ooda --status</code> and <code>agent-ooda --discover</code> probe installed CLIs dynamically for active
+          models, effort controls, UTC off-peak/peak-jam tariffs, and injectable skills. <code>agent-ooda --probe</code>
           runs minimal 1-token prompt canaries (skipping credits), while omitted <code>--complexity</code> and
           <code>--skill</code> infer automatically (opt out via <code>--skill none</code> or
           <code>OODA_NO_AUTO_SKILL=1</code>). Gemini quota is shielded exclusively for the top-level Antigravity
@@ -790,9 +790,9 @@
           <div class="card">
             <h3>Hard Binary Guardrails</h3>
             <p>
-              Workers run with <code>ROUTER_DEPTH=1</code> (or higher). The Go CLI blocks recursive dispatch,
-              <code>--probe</code>, <code>--cleanup</code>, and quota mutations with exit <code>2</code> whenever
-              <code>ROUTER_DEPTH&gt;=1</code>, and hard-rejects <code>gemini*</code> or <code>orchestrator*</code>
+              Workers run with <code>AGENT_OODA_DEPTH=1</code> &amp; <code>ROUTER_DEPTH=1</code> (or higher). The Go CLI blocks recursive dispatch,
+              <code>--probe</code>, <code>--cleanup</code>, and quota mutations with exit <code>2</code> whenever depth
+              <code>&gt;=1</code>, and hard-rejects <code>gemini*</code> or <code>orchestrator*</code>
               models on any worker or review lane.
             </p>
           </div>
@@ -804,10 +804,10 @@
       <div class="wrap">
         <div class="sec-head">
           <h2>Cross-Model Diff Verification</h2>
-          <span class="sec-tag">router --review .</span>
+          <span class="sec-tag">agent-ooda --review .</span>
         </div>
         <p class="sec-sub">
-          No model family grades its own patch. <code>router --review</code> excludes the authoring family automatically,
+          No model family grades its own patch. <code>agent-ooda --review</code> excludes the authoring family automatically,
           tracks pre-task <code>HeadRef</code> state so worker commits never evade scope or review checks, renders
           untracked files as synthetic hunks, and fails closed on any <code>[P0-3]</code>, <code>UNKNOWN</code>, or
           <code>SKIPPED</code> result.
@@ -857,13 +857,14 @@ git clone https://github.com/UberMetroid/agent-ooda.git
 cd agent-ooda &amp;&amp; ./install.sh
 
 # restart agy so the plugin + statusLine load
-agy plugin list       # confirm "ooda" is enabled
-router --status       # fleet tiers, resets, capabilities &amp; skills
-router --discover     # refresh live CLI model probes
-router --probe        # minimal 1-token prompt canaries &amp; muse PAYG check
-router --usage        # per-lane 5h/24h/7d/30d windows &amp; UTC tariffs
-router --recon "Map auth flow and callers"
-router --review .     # cross-model diff gate
+agy plugin list       # confirm "agent-ooda" is enabled
+agent-ooda --version  # print binary version
+agent-ooda --status   # fleet tiers, resets, capabilities &amp; skills
+agent-ooda --discover # refresh live CLI model probes
+agent-ooda --probe    # minimal 1-token prompt canaries &amp; muse PAYG check
+agent-ooda --usage    # per-lane 5h/24h/7d/30d windows &amp; UTC tariffs
+agent-ooda --recon "Map auth flow and callers"
+agent-ooda --review . # cross-model diff gate
 make all              # full House-Law + race test + dogfood suite
 
 # Update or uninstall cleanly (guards uncommitted/unpushed work)
@@ -877,9 +878,9 @@ curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --un
               <code>${XDG_DATA_HOME:-~/.local/share}/agent-ooda</code> and invokes <code>./install.sh</code>. On hosts
               without Go 1.22+, <code>install.sh</code> downloads the matching static GitHub Release binary and verifies
               its SHA-256 checksum against <code>SHA256SUMS</code> before installing. It links
-              <code>~/.gemini/config/plugins/ooda</code>, <code>~/.local/bin/ooda</code>,
-              <code>~/.local/bin/router</code>, and <code>~/.gemini/antigravity-cli/statusline.py</code>, and wires
-              <code>~/.gemini/antigravity-cli/settings.json</code> idempotently.
+              <code>~/.gemini/config/plugins/agent-ooda</code>, <code>~/.local/bin/agent-ooda</code>,
+              and <code>~/.gemini/antigravity-cli/statusline.py</code> (migrating legacy <code>v1.x</code> shims safely),
+              and wires <code>~/.gemini/antigravity-cli/settings.json</code> idempotently.
             </p>
           </div>
         </div>
@@ -897,9 +898,9 @@ curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --un
           <div class="card">
             <h3>State Paths &amp; House-Law Gates</h3>
             <p>
-              Quota state persists under <code>${XDG_STATE_HOME:-~/.local/state}/ooda/quota.json</code>
-              (override with <code>AGENT_QUOTA_FILE</code>). Live HUD telemetry and <code>flock</code>
-              slot markers live in <code>/tmp/router-hud</code> (override with <code>ROUTER_HUD_DIR</code>).
+              Quota state persists under <code>${XDG_STATE_HOME:-~/.local/state}/agent-ooda/quota.json</code>
+              (override with <code>AGENT_OODA_QUOTA_FILE</code>). Live HUD telemetry and <code>flock</code>
+              slot markers live in <code>/tmp/agent-ooda-hud</code> (override with <code>AGENT_OODA_HUD_DIR</code>).
             </p>
             <div class="pills">
               <span class="pill">portable (0 requires, no home paths)</span>

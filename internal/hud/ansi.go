@@ -35,10 +35,12 @@ var (
 )
 
 func copyIgnoredSkills() map[string]bool {
-	out := make(map[string]bool, len(fleet.CoreHiddenSkills)+3)
+	out := make(map[string]bool, len(fleet.CoreHiddenSkills)+4)
 	for k, v := range fleet.CoreHiddenSkills {
 		out[k] = v
 	}
+	out["agent-ooda"] = true
+	out["agent-ooda:agent-ooda"] = true
 	out["ooda"] = true
 	out["ooda:ooda"] = true
 	out["ooda:router"] = true

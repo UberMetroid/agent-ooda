@@ -45,6 +45,7 @@ func TestEMRegimesAndOrder(t *testing.T) {
 	if len(rev) == 0 || rev[0] != "mcode" {
 		t.Fatalf("expected mcode first in review order, got %v", rev)
 	}
+	t.Setenv("AGENT_OODA_DEPTH", "0")
 	t.Setenv("ROUTER_DEPTH", "0")
 	t.Setenv("ROUTER_HUD_DIR", t.TempDir())
 	sel, err := SelectProvider(SelectReq{
@@ -158,6 +159,7 @@ func TestTariffsAndMusePaygSkip(t *testing.T) {
 	hudDir := t.TempDir()
 	t.Setenv("ROUTER_HUD_DIR", hudDir)
 	t.Setenv("OODA_NO_AUTO_PROBE", "1")
+	t.Setenv("AGENT_OODA_DEPTH", "0")
 	t.Setenv("ROUTER_DEPTH", "0")
 	_ = fleet.AtomicWriteJSON(filepath.Join(hudDir, "muse_usage.json"), fleet.MuseProbe{
 		Installed: true, PayAsYouGo: true, CheckedAt: float64(time.Now().Unix()),

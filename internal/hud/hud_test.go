@@ -37,7 +37,7 @@ func TestStatusLineModes(t *testing.T) {
 	sum, now := FleetSummary{Active: 5, Total: 8, WakeCD: "1h05m"}, 1000.0
 	fleetTail := " │ fleet 5/8 (next 1h05m)"
 
-	if got := RenderStatusLine("{}", true, &now, &sum); got != "○ ooda"+fleetTail {
+	if got := RenderStatusLine("{}", true, &now, &sum); got != "○ agent-ooda"+fleetTail {
 		t.Fatalf("idle mismatch: %q", got)
 	}
 	thinking := RenderStatusLine(`{"agent":{"state":"thinking"}}`, true, &now, &sum)
@@ -70,7 +70,7 @@ func TestStatusLineModes(t *testing.T) {
 		},
 		{
 			[]dispatch.WorkerMarker{
-				{Mode: "act", Model: "grok-4.7", Skills: []string{"ooda", "router", "custom-skill"}},
+				{Mode: "act", Model: "grok-4.7", Skills: []string{"agent-ooda", "ooda", "router", "custom-skill"}},
 			},
 			"⠋ act · grok-4.7 │ skill custom-skill",
 		},
@@ -153,6 +153,7 @@ func TestHookAndDeadWorkerGC(t *testing.T) {
 	tmp := t.TempDir()
 	hudDir := filepath.Join(tmp, "hud")
 	t.Setenv("ROUTER_HUD_DIR", hudDir)
+	t.Setenv("AGENT_OODA_DEPTH", "0")
 	t.Setenv("ROUTER_DEPTH", "0")
 
 	stalePath := filepath.Join(hudDir, "active", "stale.json")
@@ -165,6 +166,7 @@ func TestHookAndDeadWorkerGC(t *testing.T) {
 	}
 
 	callHook := func(payload string, depth string) string {
+		t.Setenv("AGENT_OODA_DEPTH", depth)
 		t.Setenv("ROUTER_DEPTH", depth)
 		var out bytes.Buffer
 		HandleHookStdin(strings.NewReader(payload), &out)
@@ -176,10 +178,10 @@ func TestHookAndDeadWorkerGC(t *testing.T) {
 		t.Fatalf("hook output: %q", out)
 	}
 	p2 := `{"conversationId":"c1","hookEventName":"PostToolUse",` +
-		`"toolCall":{"name":"run_command","args":{"CommandLine":"router --status"}}}`
+		`"toolCall":{"name":"run_command","args":{"CommandLine":"agent-ooda --status"}}}`
 	_ = callHook(p2, "0")
 	p3 := `{"conversationId":"c1","hookEventName":"PostToolUse",` +
-		`"toolCall":{"name":"run_command","args":{"CommandLine":"router --task fix --skill newskill"}}}`
+		`"toolCall":{"name":"run_command","args":{"CommandLine":"agent-ooda --task fix --skill newskill"}}}`
 	_ = callHook(p3, "0")
 	raw, _ := os.ReadFile(filepath.Join(hudDir, "sessions", "c1.json"))
 	var rec sessionRecord

@@ -6,9 +6,9 @@ AGY ?= agy
 all: build portable line-cap density vocab shape plugin-check test dogfood
 
 build:
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags="-s -w" -o plugins/ooda/bin/ooda ./cmd/ooda
-	ln -sfn ooda plugins/ooda/bin/ooda-hud
-	ln -sfn ooda plugins/ooda/bin/ooda-hook
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags="-s -w" -o plugins/agent-ooda/bin/agent-ooda ./cmd/agent-ooda
+	ln -sfn agent-ooda plugins/agent-ooda/bin/agent-ooda-hud
+	ln -sfn agent-ooda plugins/agent-ooda/bin/agent-ooda-hook
 
 portable:
 	$(GO) run ./qa/gates --gate portable
@@ -33,16 +33,21 @@ test: build
 
 dogfood: build
 	@set -e; tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
-	export AGENT_QUOTA_FILE="$$tmp/quota.json" OODA_DISCOVERY_FILE="$$tmp/discovery.json" OODA_NO_AUTO_PROBE=1 ROUTER_HUD_DIR="$$tmp/hud" ROUTER_DEPTH=0; \
-	./plugins/ooda/bin/ooda --status >/dev/null; \
-	./plugins/ooda/bin/ooda --discover >/dev/null; \
-	./plugins/ooda/bin/ooda --usage >/dev/null; \
-	printf '{"terminal_width":120}\n' | NO_COLOR=1 ./plugins/ooda/bin/ooda-hud | grep -q "ooda"; \
-	printf '{"conversationId":"dogfood","hookEventName":"SessionStart"}\n' | ./plugins/ooda/bin/ooda-hook >/dev/null; \
+	export AGENT_OODA_QUOTA_FILE="$$tmp/quota.json" AGENT_OODA_DISCOVERY_FILE="$$tmp/discovery.json" \
+	  OODA_NO_AUTO_PROBE=1 AGENT_OODA_HUD_DIR="$$tmp/hud" AGENT_OODA_DEPTH=0 ROUTER_DEPTH=0; \
+	ver=$$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' plugins/agent-ooda/plugin.json); \
+	./plugins/agent-ooda/bin/agent-ooda --version | grep -q "agent-ooda v$$ver"; \
+	./plugins/agent-ooda/bin/agent-ooda --status >/dev/null; \
+	./plugins/agent-ooda/bin/agent-ooda --discover >/dev/null; \
+	./plugins/agent-ooda/bin/agent-ooda --usage >/dev/null; \
+	printf '{"terminal_width":120}\n' | NO_COLOR=1 ./plugins/agent-ooda/bin/agent-ooda-hud | grep -q "agent-ooda"; \
+	printf '{"conversationId":"dogfood","hookEventName":"SessionStart"}\n' | ./plugins/agent-ooda/bin/agent-ooda-hook >/dev/null; \
 	test -f "$$tmp/hud/current_session.json"; \
-	out=$$(ROUTER_DEPTH=1 ./plugins/ooda/bin/ooda --recon "probe" 2>&1 || echo "rc=$$?"); \
-	printf '%s\n' "$$out" | grep -q "ROUTER_DEPTH"; \
-	echo "dogfood: ok (cli status/usage + hud + hook + recursion guard)"
+	out=$$(AGENT_OODA_DEPTH=0 ROUTER_DEPTH=1 ./plugins/agent-ooda/bin/agent-ooda --recon "probe" 2>&1 || true); \
+	printf '%s\n' "$$out" | grep -q "recursive agent-ooda dispatch blocked"; \
+	out=$$(AGENT_OODA_DEPTH=1 ROUTER_DEPTH=0 ./plugins/agent-ooda/bin/agent-ooda --recon "probe" 2>&1 || true); \
+	printf '%s\n' "$$out" | grep -q "recursive agent-ooda dispatch blocked"; \
+	echo "dogfood: ok (cli version/status/usage + hud + hook + recursion guard)"
 
 # Not part of `all`: these mutate $HOME (symlinks, settings.json statusLine).
 install:

@@ -1,4 +1,4 @@
-// Binary ooda is the multi-call router, Bubble-Canopy HUD, hook, and setup entrypoint.
+// Binary agent-ooda is the multi-call router, Bubble-Canopy HUD, hook, and setup entrypoint.
 package main
 
 import (
@@ -12,9 +12,9 @@ import (
 
 func dispatchSubcommand(prog string, args []string) int {
 	switch prog {
-	case "ooda-hud", "statusline.py":
+	case "agent-ooda-hud", "ooda-hud", "statusline.py":
 		return hud.RunStatusLine()
-	case "ooda-hook":
+	case "agent-ooda-hook", "ooda-hook":
 		return hud.RunHook()
 	}
 	if len(args) > 0 {

@@ -11,14 +11,14 @@ case "${1:-}" in
 usage: curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash [-s -- OPTIONS]
 
   (no options)         clone/update agent-ooda into ~/.local/share/agent-ooda and run ./install.sh
-  --uninstall          remove ooda symlinks and unwire statusLine via installed checkout
-  --uninstall --purge  also delete ~/.local/state/ooda and ~/.local/share/agent-ooda
+  --uninstall          remove agent-ooda symlinks and unwire statusLine via installed checkout
+  --uninstall --purge  also delete ~/.local/state/agent-ooda and ~/.local/share/agent-ooda
 
 environment:
-  AGENT_OODA_HOME      override checkout path (default ${XDG_DATA_HOME:-~/.local/share}/agent-ooda)
-  AGENT_OODA_REPO_URL  override git repository URL
-  OODA_NO_STATUSLINE=1 skip adding statusLine to ~/.gemini/antigravity-cli/settings.json
-  OODA_RELEASE_BASE    override prebuilt binary + SHA256SUMS base URL
+  AGENT_OODA_HOME           override checkout path (default ${XDG_DATA_HOME:-~/.local/share}/agent-ooda)
+  AGENT_OODA_REPO_URL       override git repository URL
+  AGENT_OODA_NO_STATUSLINE=1  skip adding statusLine to ~/.gemini/antigravity-cli/settings.json
+  AGENT_OODA_RELEASE_BASE   override prebuilt binary + SHA256SUMS base URL
 EOF
     exit 0 ;;
 esac

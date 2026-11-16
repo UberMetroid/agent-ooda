@@ -25,6 +25,7 @@ func UsageErr(format string, args ...any) error {
 }
 
 const (
+	Version             = "2.0.0"
 	QuotaSchemaVersion  = 8
 	CornerWindowSecs    = 5400
 	SoonWakeSecs        = 2700
@@ -56,11 +57,11 @@ var (
 
 var (
 	CoreHiddenSkills = map[string]bool{
+		"agent-ooda": true, "agent-ooda:agent-ooda": true,
 		"router": true, "agent-router": true, "ooda": true,
 		"ooda:ooda": true, "ooda:router": true,
-		"agy-customizations": true, "antigravity-guide": true,
-		"antigravity_guide": true, "run-workflow": true,
-		"swarm": true, "swarm_monitor": true,
+		"agy-customizations": true, "antigravity-guide": true, "antigravity_guide": true,
+		"run-workflow": true, "swarm": true, "swarm_monitor": true,
 	}
 	DefaultPool = []string{
 		"agy-opus", "muse", "grok", "mistral",

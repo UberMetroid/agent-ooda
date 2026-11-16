@@ -155,3 +155,42 @@ func TestWireRefusesCorruptAndCleans(t *testing.T) {
 		t.Fatalf("leftover tmp files found: %v", tmps)
 	}
 }
+
+func TestInstallLegacyMigration(t *testing.T) {
+	repoRoot, _ := filepath.Abs(filepath.Join("..", ".."))
+	tmp := t.TempDir()
+	staged := filepath.Join(tmp, "staged-repo")
+	stageTestRepo(t, repoRoot, staged)
+	fakeHome := filepath.Join(tmp, "home")
+	stateBase := filepath.Join(fakeHome, ".local", "state")
+	_ = os.MkdirAll(filepath.Join(stateBase, "ooda"), 0o755)
+	_ = os.MkdirAll(filepath.Join(fakeHome, ".local", "bin"), 0o755)
+	_ = os.MkdirAll(filepath.Join(fakeHome, ".gemini", "config", "plugins"), 0o755)
+	_ = os.WriteFile(filepath.Join(stateBase, "ooda", "quota.json"),
+		[]byte(`{"providers":{"mcode":{"status":"active"}}}`), 0o600)
+	_ = os.Symlink(filepath.Join(staged, "plugins", "ooda", "bin", "ooda"),
+		filepath.Join(fakeHome, ".local", "bin", "router"))
+	_ = os.Symlink(filepath.Join(staged, "plugins", "ooda"),
+		filepath.Join(fakeHome, ".gemini", "config", "plugins", "ooda"))
+	vendorBin := filepath.Join(tmp, "vendor", "agent-ooda", "bin", "ooda")
+	_ = os.Symlink(vendorBin, filepath.Join(fakeHome, ".local", "bin", "ooda"))
+	env := []string{
+		"HOME=" + fakeHome, "XDG_STATE_HOME=" + stateBase,
+		"AGENT_OODA_NO_BUILD=1", "AGENT_OODA_NO_STATUSLINE=1", "PATH=" + os.Getenv("PATH"),
+	}
+	_ = runBash(t, staged, env, filepath.Join(staged, "install.sh"))
+	if got, err := os.Readlink(filepath.Join(fakeHome, ".local", "bin", "ooda")); err != nil || got != vendorBin {
+		t.Fatalf("unrelated vendor bin/ooda symlink was touched: got=%q err=%v", got, err)
+	}
+	for _, gone := range []string{
+		filepath.Join(fakeHome, ".local", "bin", "router"),
+		filepath.Join(fakeHome, ".gemini", "config", "plugins", "ooda"),
+	} {
+		if _, err := os.Lstat(gone); !os.IsNotExist(err) {
+			t.Fatalf("expected legacy owned symlink archived: %s", gone)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(stateBase, "agent-ooda", "quota.json")); err != nil {
+		t.Fatalf("expected migrated quota.json: %v", err)
+	}
+}

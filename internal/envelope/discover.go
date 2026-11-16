@@ -157,7 +157,7 @@ func DiscoverFleetCaps(opts DiscoverOpts) map[string]LaneCap {
 		"grok": ProbeGrokConfig(opts.Home), "mistral": ProbeVibeConfig(opts.Home),
 	}
 	var cliMods map[string][]string
-	if opts.Home == "" || os.Getenv("OODA_DISCOVERY_FILE") != "" {
+	if opts.Home == "" || os.Getenv("AGENT_OODA_DISCOVERY_FILE") != "" || os.Getenv("OODA_DISCOVERY_FILE") != "" {
 		cliMods = LoadDiscoveryCache(opts.ForceRefresh, opts.ProbeAgy)
 	}
 	caps := make(map[string]LaneCap, len(fleet.ProviderOrder))

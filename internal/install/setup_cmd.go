@@ -119,14 +119,16 @@ func cmdSkillsJSON(mode, path string, errW io.Writer) int {
 		}
 		return 0
 	}
-	leg1, leg2 := expandUserPath("~/.agents/skills/router"), expandUserPath("~/.agents/skills/ooda")
+	leg1 := expandUserPath("~/.agents/skills/agent-ooda")
+	leg2 := expandUserPath("~/.agents/skills/router")
+	leg3 := expandUserPath("~/.agents/skills/ooda")
 	shared := expandUserPath("~/.agents/skills")
 	var kept []any
 	hasShared := false
 	for _, e := range entries {
 		pStr, _ := e["path"].(string)
 		norm := expandUserPath(pStr)
-		if norm == leg1 || norm == leg2 {
+		if norm == leg1 || norm == leg2 || norm == leg3 {
 			continue
 		}
 		hasShared = hasShared || norm == shared

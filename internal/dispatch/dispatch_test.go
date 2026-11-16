@@ -21,9 +21,9 @@ func TestBuildWorkerCommandAllCLIs(t *testing.T) {
 	wt, slot := filepath.Join(tmp, "wt"), filepath.Join(tmp, "slot")
 	_ = os.MkdirAll(wt, 0o755)
 	_ = os.MkdirAll(slot, 0o755)
+	t.Setenv("AGENT_OODA_DEPTH", "0")
 	t.Setenv("ROUTER_DEPTH", "2")
 	t.Setenv("ANTIGRAVITY_TOKEN", "secret-should-strip")
-
 	for _, lane := range []string{"agy-opus", "devin-pro", "mcode", "grok", "muse", "mistral"} {
 		built, err := BuildWorkerCommand(CmdReq{Provider: lane, CLIPath: "/bin/" + lane,
 			Prompt: "fix bug", Worktree: wt, SlotDir: slot, TaskID: "t1"})
@@ -35,8 +35,8 @@ func TestBuildWorkerCommandAllCLIs(t *testing.T) {
 				t.Fatalf("%s unpinned leaked flag %s: %v", lane, badFlag, built.Argv)
 			}
 		}
-		if !slices.Contains(built.Env, "ROUTER_DEPTH=3") {
-			t.Fatalf("%s missing incremented ROUTER_DEPTH: %v", lane, built.Env)
+		if !slices.Contains(built.Env, "ROUTER_DEPTH=3") || !slices.Contains(built.Env, "AGENT_OODA_DEPTH=3") {
+			t.Fatalf("%s missing incremented depth vars: %v", lane, built.Env)
 		}
 		if lane == "agy-opus" {
 			for _, kv := range built.Env {
@@ -104,7 +104,6 @@ func TestNDJSONRealCLISchemas(t *testing.T) {
 	if !st.hasFinal || st.finalResp != "VERDICT: ACCEPT" || st.usage.Tokens == nil || *st.usage.Tokens != 1050 {
 		t.Fatalf("mcode schema parse mismatch: hasFinal=%v resp=%q usage=%+v", st.hasFinal, st.finalResp, st.usage)
 	}
-
 	grok := &streamTracker{phase: "wait"}
 	grok.consumeLine(`{"type":"thought","data":"Checking safety rules and intent carefully."}`, 20.0)
 	grok.consumeLine(`{"type":"text","data":"VERDICT: ACCEPT"}`, 20.5)
@@ -115,7 +114,6 @@ func TestNDJSONRealCLISchemas(t *testing.T) {
 	if grok.usage.Tokens == nil || *grok.usage.Tokens != 60 || grok.usage.CostUSD == nil {
 		t.Fatalf("grok usage parse mismatch: %+v", grok.usage)
 	}
-
 	muse := &streamTracker{phase: "wait"}
 	muse.consumeLine(`{"payload_type":"run.output.delta","payload":{"text":"Streaming OK"}}`, 30.0)
 	if muse.cleanBuf.str() != "Streaming OK" || muse.phase != "stream" {
@@ -127,14 +125,12 @@ func TestExecStreamAndGeminiGuard(t *testing.T) {
 	tmp := t.TempDir()
 	fakeHome := filepath.Join(tmp, "home")
 	_ = os.MkdirAll(filepath.Join(fakeHome, ".gemini", "antigravity-cli"), 0o755)
-	_ = os.WriteFile(
-		filepath.Join(fakeHome, ".gemini", "antigravity-cli", "settings.json"),
-		[]byte(`{"model":{"name":"Orchestrator (Carbon)"}}`), 0o644,
-	)
+	_ = os.WriteFile(filepath.Join(fakeHome, ".gemini", "antigravity-cli", "settings.json"),
+		[]byte(`{"model":{"name":"Orchestrator (Carbon)"}}`), 0o644)
 	t.Setenv("HOME", fakeHome)
 	t.Setenv("ROUTER_HUD_DIR", filepath.Join(tmp, "hud"))
+	t.Setenv("AGENT_OODA_DEPTH", "0")
 	t.Setenv("ROUTER_DEPTH", "0")
-
 	blocked := ExecuteOnce(ExecReq{Provider: "agy-opus", CLIPath: "/bin/true",
 		Prompt: "hi", Worktree: tmp, SlotDir: tmp, TaskID: "g1", TimeoutSec: 5})
 	if blocked.ExitCode != 2 || !strings.Contains(blocked.Output, "Gemini guardrail") {
@@ -175,6 +171,7 @@ func TestManifestScopeAndReject(t *testing.T) {
 	t.Setenv("AGENT_QUOTA_FILE", qPath)
 	t.Setenv("ROUTER_HUD_DIR", filepath.Join(repo, ".hud"))
 	t.Setenv("ROUTER_SLOTS_DIR", filepath.Join(repo, ".slots"))
+	t.Setenv("AGENT_OODA_DEPTH", "0")
 	t.Setenv("ROUTER_DEPTH", "0")
 	tasks := []worktree.TaskSpec{{ID: "t1", Prompt: "edit a.go", Files: []string{"a.go"}, Lane: "mcode"}}
 	installed := map[string]string{"mcode": "/bin/true", "grok": "/bin/true"}
@@ -230,6 +227,7 @@ func TestCorruptQuotaAndBoundedStream(t *testing.T) {
 func TestMidStreamQuotaAbortAndLine(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("ROUTER_HUD_DIR", filepath.Join(tmp, "hud"))
+	t.Setenv("AGENT_OODA_DEPTH", "0")
 	t.Setenv("ROUTER_DEPTH", "0")
 	hung := filepath.Join(tmp, "hung_quota.sh")
 	body := "#!/usr/bin/env bash\nprintf '{\"error\":\"insufficient_quota on account\"}\\n'\nsleep 30\n"
@@ -238,8 +236,7 @@ func TestMidStreamQuotaAbortAndLine(t *testing.T) {
 	res := ExecuteOnce(ExecReq{Provider: "mcode", CLIPath: hung, Prompt: "hi",
 		Worktree: tmp, SlotDir: tmp, TaskID: "q1", TimeoutSec: 25})
 	if res.ExitCode == 0 || time.Since(start) >= 5*time.Second || !strings.Contains(res.Output, "insufficient_quota") {
-		t.Fatalf("expected instant mid-stream abort (<5s, exit!=0), got dur=%.2fs %+v",
-			time.Since(start).Seconds(), res)
+		t.Fatalf("expected instant mid-stream abort, dur=%.2fs %+v", time.Since(start).Seconds(), res)
 	}
 	ok429 := filepath.Join(tmp, "plain_429.sh")
 	okBody := "#!/usr/bin/env bash\nprintf 'Handled HTTP 429 too many requests and usage limit retry cleanly.\\n'\n"
