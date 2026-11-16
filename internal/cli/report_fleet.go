@@ -205,7 +205,7 @@ func usageRow(
 		name, info.Status, reg, cycStr, info.CycleRuns, tokStr, costStr, resetCD, note)
 }
 
-// DoUsage prints cycle token/cost telemetry, E-M regimes, and live muse usage probe.
+// DoUsage prints cycle token/cost telemetry, quota state, and live muse usage probe.
 func DoUsage(w io.Writer) int {
 	if w == nil {
 		w = os.Stdout
@@ -221,7 +221,7 @@ func DoUsage(w io.Writer) int {
 	em := envelope.ComputeEMEnvelope(q, nowUTC)
 	fmt.Fprintf(w, "Cycle Usage Telemetry (%s, v%d)\n\n", fleet.QuotaFilePath(""), q.Version)
 	fmt.Fprintf(w, "%-13s %-9s %-9s %-7s %-5s %-14s %-9s %-12s %s\n",
-		"LANE", "STATUS", "E-M", "WINDOW", "RUNS", "TOKENS", "COST", "RESETS IN", "NOTE")
+		"LANE", "STATUS", "STATE", "WINDOW", "RUNS", "TOKENS", "COST", "RESETS IN", "NOTE")
 	fmt.Fprintln(w, strings.Repeat("-", 116))
 	for _, name := range fleet.ProviderOrder {
 		if info := q.Providers[name]; info != nil {
@@ -232,12 +232,12 @@ func DoUsage(w io.Writer) int {
 	if fi := q.Providers["devin-fast"]; fi != nil && fi.MaxParallel != nil && *fi.MaxParallel > 0 {
 		fastCap = *fi.MaxParallel
 	}
-	emSum := "Ps>=0 SUSTAINED (capped capacity replenished or corner-dumping)"
+	posture := "NORMAL (using expiring & 0.5x off-peak pools first)"
 	if em.ConserveCapped {
-		emSum = "Ps<0 CONSERVE (<=1 capped lane, next wake >45m; sparing capped reserves on routine work)"
+		posture = "CONSERVING (<=1 capped lane left, wake >45m; routing routine work to free/high-cap pools)"
 	}
-	fmt.Fprintf(w, "\nFleet E-M envelope      : %s | devin-fast parallel slots: %d/%d busy\n",
-		emSum, fleet.CountActiveLeases("devin-fast", fastCap), fastCap)
+	fmt.Fprintf(w, "\nQuota posture           : %s | devin-fast slots: %d/%d busy\n",
+		posture, fleet.CountActiveLeases("devin-fast", fastCap), fastCap)
 	fmt.Fprintf(w, "Live probe [muse usage] : %s\n", museProbe.Summary)
 	fmt.Fprintln(w, "Headless probes         : grok/devin/mcode omit remaining balance; "+
 		"agy-opus & vibe report exact per-run tokens")

@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>agent-ooda — Static Go OODA Multi-Agent Engine, Router &amp; Live tok/s HUD</title>
-  <meta name="description" content="Zero-dependency static Go 1.22+ (CGO_ENABLED=0) multi-call OODA agent engine, Energy-Maneuverability 8-lane router, cross-model diff verifier, and live tok/s Bubble-Canopy HUD for Antigravity (agy) and future hosts.">
+  <meta name="description" content="Zero-dependency static Go 1.22+ (CGO_ENABLED=0) multi-call OODA agent engine, zero-trust quota-aware 8-lane router, cross-model diff verifier, and live thermal tok/s HUD for Antigravity (agy) and future hosts.">
   <meta property="og:title" content="agent-ooda — Static Go OODA Multi-Agent Engine, Router &amp; Live tok/s HUD">
-  <meta property="og:description" content="Static Go multi-call OODA router, Energy-Maneuverability scheduler, cross-model diff verifier, and live ~tok/s HUD with zero-Go SHA-256 web install.">
+  <meta property="og:description" content="Static Go multi-call OODA router, zero-trust quota-aware scheduler, cross-model diff verifier, and live ~tok/s HUD with zero-Go SHA-256 web install.">
   <meta property="og:url" content="https://ubermetroid.github.io/agent-ooda/">
   <meta property="og:type" content="website">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128' fill='none'%3E%3Crect width='128' height='128' rx='24' fill='%230d1117'/%3E%3Ccircle cx='64' cy='64' r='42' stroke='%2330363d' stroke-width='4' stroke-dasharray='10 8'/%3E%3Cpath d='M64 22 A42 42 0 0 1 106 64' stroke='%2339d0d8' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M106 64 A42 42 0 0 1 64 106' stroke='%23f0b429' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M64 106 A42 42 0 0 1 22 64' stroke='%233fb950' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M22 64 A42 42 0 0 1 64 22' stroke='%23d2a8ff' stroke-width='6' stroke-linecap='round'/%3E%3Cpolygon points='64,34 86,84 64,73 42,84' fill='%23e6edf3'/%3E%3C/svg%3E">
@@ -455,7 +455,7 @@
       <nav class="nav" aria-label="Primary navigation">
         <a href="#hud">HUD</a>
         <a href="#architecture">Architecture</a>
-        <a href="#theory">OODA + E-M</a>
+        <a href="#theory">First Principles</a>
         <a href="#fleet">8-Lane Fleet</a>
         <a href="#review">Verify</a>
         <a href="#quickstart">Install</a>
@@ -467,14 +467,14 @@
   <main id="top">
     <section class="hero">
       <div class="wrap">
-        <span class="eyebrow">agent-ooda v2.1.0 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Per-Stage E-M Router (v9)</span>
+        <span class="eyebrow">agent-ooda v2.1.1 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Zero-Trust Per-Stage Router (v9)</span>
         <h1>Turn one session into a<br><span>token-routed agent fleet.</span></h1>
         <p class="lead">
           <strong>UberMetroid/agent-ooda</strong> ships one zero-dependency static Go OODA engine
           (<code>agent-ooda</code>, <code>agent-ooda-hud</code>, <code>agent-ooda-hook</code>) paired with
           host plugin adapters (<code>plugins/agent-ooda</code> for Antigravity <code>agy</code> today): v9 per-stage
           OODA routing (<code>--select</code> TUI, <code>/lane</code>, 8 <code>/agents</code> profiles),
-          <code>--orient</code> synthesis, cross-model verification, and a thermal <code>tok/s</code> Bubble-Canopy HUD.
+          <code>--orient</code> synthesis, cross-model verification, and a thermal <code>tok/s</code> statusLine HUD.
         </p>
         <div class="install-bar" role="region" aria-label="One-line web installer">
           <code id="install-cmd">curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash</code>
@@ -482,7 +482,7 @@
         </div>
         <div class="hero-actions">
           <a class="btn btn-primary" href="#quickstart">Install &amp; Quickstart</a>
-          <a class="btn" href="https://github.com/UberMetroid/agent-ooda/releases/latest">Release Binaries (v2.1.0)</a>
+          <a class="btn" href="https://github.com/UberMetroid/agent-ooda/releases/latest">Release Binaries (v2.1.1)</a>
           <a class="btn" href="#architecture">Go Architecture</a>
         </div>
         <div class="telemetry-strip">
@@ -495,7 +495,7 @@
             <div class="stat-v cyan">Go 1.22+ &bull; CGO_ENABLED=0</div>
           </div>
           <div class="stat">
-            <div class="stat-k">Live Canopy HUD</div>
+            <div class="stat-k">Live Status HUD</div>
             <div class="stat-v violet">5-Band Thermal tok/s &bull; Pins</div>
           </div>
           <div class="stat">
@@ -509,17 +509,17 @@
     <section id="hud">
       <div class="wrap">
         <div class="sec-head">
-          <h2>Bubble-Canopy HUD</h2>
+          <h2>Live Thermal tok/s HUD</h2>
           <span class="sec-tag">bin/agent-ooda-hud &bull; statusLine</span>
         </div>
         <p class="sec-sub">
-          Like an F-16 bubble canopy, <code>bin/agent-ooda-hud</code> renders live OODA phase transitions,
+          <code>bin/agent-ooda-hud</code> renders live OODA phase transitions,
           active per-stage pins (<code>│ pin ...</code>), a 5-band thermal <code>tok/s</code> heat ramp
           (Ice Blue <code>&lt;25</code> &rarr; Cyan-Green <code>25&ndash;59</code> &rarr; Solar Amber <code>60&ndash;109</code>
           &rarr; Bold Orange <code>110&ndash;179</code> &rarr; Crimson <code>&ge;180</code>), active <code>tool Xs</code>
           waits, and multi-window wake countdowns right inside Antigravity&apos;s status bar.
         </p>
-        <div class="terminal" role="region" aria-label="Bubble-Canopy HUD status states">
+        <div class="terminal" role="region" aria-label="Live thermal statusLine HUD states">
           <div class="term-bar">
             <span class="term-ws">[TTY1 &middot; OMARCHY]</span>
             <span>statusLine telemetry &bull; 5-band thermal tok/s</span>
@@ -538,7 +538,7 @@
               <span class="hud-line"><span class="c-amber">&#x280b; orient</span> <span class="c-muted">&middot;</span> <span class="c-amber">claude-opus-5-5-high</span> <span class="c-muted">&middot;</span> <span class="c-tok-cold">~18 tok/s</span> │ <span class="c-amber">fleet 7/8</span> <span class="c-muted">(next 2h59m)</span></span>
             </li>
             <li class="hud-row">
-              <span class="hud-stage">Observe (Cruise 25+)</span>
+              <span class="hud-stage">Observe (Steady 25+)</span>
               <span class="hud-line"><span class="c-cyan">&#x280b; observe</span> <span class="c-muted">&middot;</span> <span class="c-cyan">swe-2-flash-max</span> <span class="c-muted">&middot;</span> <span class="c-tok-cruise">~42 tok/s</span> │ <span class="c-green">fleet 8/8</span></span>
             </li>
             <li class="hud-row">
@@ -637,66 +637,66 @@
     <section id="theory">
       <div class="wrap">
         <div class="sec-head">
-          <h2>Boydian OODA + Energy-Maneuverability</h2>
-          <span class="sec-tag">Credits: Col. John Boyd (USAF)</span>
+          <h2>First Principles &amp; Zero-Trust Architecture</h2>
+          <span class="sec-tag">Zero Trust &bull; Quota Economics &bull; Worktree Isolation</span>
         </div>
         <p class="sec-sub">
-          Named after Col. John Boyd&apos;s fighter-tactics doctrine: tighten observation loops without sacrificing
-          orientation integrity, and allocate every model quota pool via specific excess power
-          <code>Ps = V(T &minus; D) / W</code>.
+          Built directly from first principles: fixed-clock subscriptions lose all unused quota when their
+          window resets, and under Zero Trust no model family should ever grade its own output or touch
+          paid credits unattended.
         </p>
 
         <div class="grid-3" style="margin-bottom: 18px;">
           <div class="card">
             <span class="badge b-cyan">Fast Path</span>
-            <h3>Implicit Guidance &amp; Control</h3>
+            <h3>Thin Orchestrator (&lt;10% Burn)</h3>
             <p>
-              Routine, well-understood tasks skip heavy deliberation once oriented and dispatch straight from
-              Observe into Act, keeping the top-level orchestrator thin (&lt;10% token burn).
+              Top-level chat owns planning and Decide while workers handle <code>--recon</code>,
+              <code>--orient</code>, and scoped <code>--task</code> edits, keeping Gemini orchestrator quota protected.
             </p>
           </div>
           <div class="card">
-            <span class="badge b-amber">Synthesis</span>
-            <h3>Destruction &amp; Creation</h3>
+            <span class="badge b-amber">Zero Trust</span>
+            <h3>Cross-Model Verify &amp; Rotation</h3>
             <p>
-              When an independent off-family reviewer rejects a patch, the router discards the stale mental frame
-              and pivots onto a different model family. Hard cap of 3 Act loops.
+              <code>verify</code> excludes every model family that wrote or attempted the diff and rotates
+              families on rejection or mismatch. Hard cap of 3 Act loops.
             </p>
           </div>
           <div class="card">
             <span class="badge b-green">Isolation</span>
-            <h3>Parallel Worktree Swarms</h3>
+            <h3>Isolated Worktree Swarms</h3>
             <p>
               Multi-module manifests spin up one isolated <code>git worktree</code> per task on branch
-              <code>ooda/&lt;id&gt;</code> and acquire atomic <code>flock</code> slot leases on 4-wide pools.
+              <code>ooda/&lt;id&gt;</code> gated by atomic <code>flock</code> concurrency leases.
             </p>
           </div>
         </div>
 
         <div class="grid-5">
           <div class="card">
-            <span class="badge b-green">CORNER</span>
-            <h3>Drain Expiring</h3>
-            <p>Prioritizes expiring windows (90m on 5h, 2h on 24h, 12h on 7d, 36h on 30d) and 0.5x UTC off-peak tariffs so renewable capacity is never wasted.</p>
+            <span class="badge b-green">EXPIRING</span>
+            <h3>Use Before Reset</h3>
+            <p>Prioritizes soonest-resetting windows (90m on 5h, 2h on 24h, 12h on 7d, 36h on 30d) and 0.5x UTC off-peak tariffs so capacity never goes to waste.</p>
           </div>
           <div class="card">
-            <span class="badge b-cyan">CRUISE</span>
-            <h3>Balanced Capped</h3>
-            <p>Rotates across healthy capped lanes (<code>agy-opus</code>, <code>muse</code>, <code>grok</code>, <code>mistral</code>).</p>
+            <span class="badge b-cyan">READY</span>
+            <h3>Healthy Pools</h3>
+            <p>Rotates evenly across healthy bounded pools (<code>agy-opus</code>, <code>muse</code>, <code>grok</code>, <code>mistral</code>).</p>
           </div>
           <div class="card">
-            <span class="badge b-amber">CONSERVE</span>
-            <h3>Last Capped Lane</h3>
-            <p>When only one capped lane remains active, free SWE-2 and <code>mcode</code> lanes absorb the load first.</p>
+            <span class="badge b-amber">SPARING</span>
+            <h3>Save Last Cap</h3>
+            <p>When only one bounded lane remains active, free SWE-2 and <code>mcode</code> pools handle routine tasks first.</p>
           </div>
           <div class="card">
-            <span class="badge b-violet">RESERVE</span>
-            <h3>Credit Shield</h3>
-            <p>Holds paid <code>devin-fusion</code> credits in reserve behind every renewable and free lane.</p>
+            <span class="badge b-violet">CREDITS</span>
+            <h3>Opt-In Only</h3>
+            <p>Blocks paid <code>devin-fusion</code> credits from <code>auto</code>, saved pins, and <code>--review</code> unless explicitly passed via <code>--lane</code>.</p>
           </div>
           <div class="card">
-            <span class="badge b-red">REGEN</span>
-            <h3>Cooldown &amp; Wake</h3>
+            <span class="badge b-red">COOLING</span>
+            <h3>Auto-Wake</h3>
             <p>Parses ISO and relative resets (resets in 2d 5h, Retry-After), caps transient 429 backoffs, and auto-wakes lanes when timers expire.</p>
           </div>
         </div>
@@ -778,14 +778,14 @@
                 <td><a href="https://docs.devin.ai/" target="_blank" rel="noopener">Cognition Devin</a> (<code>devin</code>)</td>
                 <td><code>swe-2</code> pool (<code>via-model</code>)</td>
                 <td>unlimited &bull; 24h + 7d ($20/mo Pro)</td>
-                <td>Conserve-mode coder &amp; heavy refactors</td>
+                <td>Sparing-mode coder &amp; heavy refactors</td>
               </tr>
               <tr>
                 <td><code>devin-fusion</code></td>
                 <td><a href="https://docs.devin.ai/" target="_blank" rel="noopener">Cognition Devin</a> (<code>devin</code>)</td>
                 <td><code>fusion</code> pool (<code>via-model</code>)</td>
-                <td>paid credits (reserve)</td>
-                <td>Protected reserve (never touched by <code>--probe</code>)</td>
+                <td>paid credits (opt-in <code>--lane</code>)</td>
+                <td>Opt-in only (blocked from <code>auto</code>, pins &amp; <code>--probe</code>)</td>
               </tr>
             </tbody>
           </table>
@@ -797,8 +797,8 @@
             <p>
               <strong>Observe (recon):</strong> <code>devin-fast &rarr; mcode &rarr; devin-pro</code><br>
               <strong>Act (default):</strong> Expiring clocks &rarr; <code>0.5x</code> off-peak &rarr; short windows &rarr; free lanes<br>
-              <strong>Parallel stripe:</strong> <code>agy-opus &rarr; muse &rarr; grok &rarr; mistral &rarr; devin-fast &rarr; devin-pro &rarr; mcode &rarr; devin-fusion</code><br>
-              <strong>Fallback chain:</strong> <code>agy-opus &rarr; muse &rarr; grok &rarr; mistral &rarr; devin-fusion &rarr; devin-fast &rarr; devin-pro &rarr; mcode</code>
+              <strong>Parallel stripe:</strong> <code>agy-opus &rarr; muse &rarr; grok &rarr; mistral &rarr; devin-fast &rarr; devin-pro &rarr; mcode</code><br>
+              <strong>Fallback chain:</strong> <code>agy-opus &rarr; muse &rarr; grok &rarr; mistral &rarr; devin-fast &rarr; devin-pro &rarr; mcode</code>
             </p>
           </div>
           <div class="card">
@@ -887,7 +887,7 @@ git clone https://github.com/UberMetroid/agent-ooda.git
 cd agent-ooda &amp;&amp; ./install.sh
 
 # restart agy so the plugin, 8 /agents profiles, /lane &amp; statusLine load
-agy plugin list       # confirm "agent-ooda" is enabled (2.1.0)
+agy plugin list       # confirm "agent-ooda" is enabled (2.1.1)
 agent-ooda --version  # print binary version
 agent-ooda --status   # OODA stage matrix, fleet tiers, resets &amp; skills
 agent-ooda --select   # arrow-key TUI configurator (-s; add --local for repo)
@@ -956,7 +956,7 @@ curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --un
 
   <footer>
     <div class="wrap foot-inner">
-      <span>Built by <a href="https://github.com/UberMetroid">UberMetroid</a> &bull; Inspired by Col. John Boyd (USAF)</span>
+      <span>Built by <a href="https://github.com/UberMetroid">UberMetroid</a> &bull; Zero-Trust OODA &amp; First-Principles Quota Routing</span>
       <span>
         <a href="https://github.com/UberMetroid/agent-ooda">UberMetroid/agent-ooda</a>
         &middot;

@@ -260,7 +260,7 @@ retire_owned_legacy "bin-ooda" "$HOME/.local/bin/ooda"
 retire_owned_legacy "bin-router" "$HOME/.local/bin/router"
 retire_legacy "bin-boyd" "$HOME/.local/bin/boyd"
 
-# 6. Bubble-canopy statusLine HUD: symlink, then point settings.json statusLine at it.
+# 6. Live thermal statusLine HUD: symlink, then point settings.json statusLine at it.
 mkdir -p "$AGY_DIR"
 link "$PLUGIN_DIR/bin/agent-ooda-hud" "$AGY_DIR/statusline.py" "statusline.py"
 SETTINGS_NOTE="$SETTINGS_JSON (statusLine -> ~/.gemini/antigravity-cli/statusline.py)"

@@ -1,6 +1,6 @@
 # agent-ooda
 
-**Static Go OODA multi-agent router, Energy-Maneuverability quota scheduler, cross-model diff verifier, and live `tok/s` Bubble-Canopy HUD.**
+**Static Go OODA multi-agent router, quota-aware scheduler, zero-trust cross-model verifier, and live thermal `tok/s` statusLine HUD.**
 
 `UberMetroid/agent-ooda` packages one zero-dependency Go 1.22+ (`CGO_ENABLED=0`, zero external `require`s) engine paired with host plugin adapters under `plugins/`—starting with [`plugins/agent-ooda`](plugins/agent-ooda) for Antigravity (`agy`) and structured so `mcode` and future coding hosts share the same fleet state, `flock` slot leases, git worktrees, and diff verifier.
 
@@ -22,7 +22,7 @@ All runtime roles compile into one static binary (`plugins/agent-ooda/bin/agent-
 | Binary / Symlink | Entrypoint (`cmd/agent-ooda`) | Responsibility |
 | --- | --- | --- |
 | `agent-ooda` | CLI dispatcher & fleet admin | `--version`, `--recon`, `--orient`, `--task`, manifests, `--review`, `--select`/`-s`, `--set-stage`, `--status`, `--discover`, `--usage`, `--probe` |
-| `agent-ooda-hud` / `statusline.py` | Bubble-Canopy HUD | Renders live ANSI statusBar telemetry from NDJSON worker markers + `quota.json` |
+| `agent-ooda-hud` / `statusline.py` | Live thermal statusLine HUD | Renders live ANSI statusBar telemetry from NDJSON worker markers + `quota.json` |
 | `agent-ooda-hook` | Antigravity lifecycle hook | Tracks injected skills per session and garbage-collects dead worker markers |
 | `__setup` / `__wire` | Installer helpers | Safe JSON validation and idempotent `settings.json` `statusLine` wiring |
 
@@ -31,30 +31,22 @@ agent-ooda/
 ├── cmd/agent-ooda/      # multi-call entrypoint (agent-ooda / agent-ooda-hud / agent-ooda-hook)
 ├── internal/
 │   ├── fleet/           # quota store (v9), stage matrix, multi-window cycles, flock leases
-│   ├── envelope/        # E-M regime selection, UTC tariffs, CLI discovery, mismatch pivot
+│   ├── envelope/        # quota-aware lane selection, UTC tariffs, CLI discovery, mismatch pivot
 │   ├── dispatch/        # io.Pipe NDJSON stream pump, tok/s rate meter, live quota kill, worktrees
 │   ├── verify/          # HeadRef/unborn diff gathering, untracked hunks, off-family review
 │   ├── worktree/        # isolated ooda/<id> git worktrees, stage resolver, scope & skill loader
-│   ├── hud/             # ANSI Bubble-Canopy line renderer, 5-band tok/s gradient, hook recorder
+│   ├── hud/             # ANSI statusLine renderer, 5-band tok/s gradient, hook recorder
 │   ├── cli/             # arg parser, --select TUI, depth guard, stage & fleet reporting
 │   └── install/         # cross-host setup/unwire helpers
 ├── plugins/agent-ooda/  # Antigravity (agy) plugin manifest, unified skill, rule, hooks & bin shims
 └── qa/gates/            # AST & repo House-Law gate suite (`make all`)
 ```
 
-## Credits: Col. John Boyd (USAF)
+## First Principles & Zero-Trust Design
 
-The scheduler borrows two principles from fighter tactician **Col. John Boyd**:
-
-- **OODA loop (Observe → Orient → Decide → Act).** *Implicit Guidance & Control*
-  provides the fast path: well-scoped work flows straight from Observe to Act while
-  keeping the top-level orchestrator thin (`<10%` token burn). *Destruction & Creation*
-  drives **cross-model mismatch pivoting**: when an off-family reviewer rejects a patch,
-  the loop discards the stale frame and pivots to a different model family (hard cap of 3 Act loops).
-- **Energy-Maneuverability theory, `Ps = V(T − D) / W`.** Every lane's renewable
-  quota acts as specific excess power. The router drains energy closest to reset (*CORNER*),
-  rotates evenly across healthy pools (*CRUISE*), shields the last capped lane (*CONSERVE*),
-  holds paid credits in *RESERVE*, and rests on 429s until reset (*REGEN*).
+- **First-Principles Quota Scheduling (`EXPIRING` / `READY` / `SPARING`):** Renewable `5h`/`7d`/`30d` subscription pools reset to zero on a clock, so `auto` spends expiring windows and `0.5x` UTC off-peak tariffs first (`EXPIRING`), balances healthy bounded pools (`READY`), and spares your final active bounded lane (`SPARING`) by shifting routine tasks to unlimited/high-cap pools (`devin-pro`, `devin-fast`, `mcode`).
+- **Thin Orchestrator & Isolated Execution:** Top-level chat stays in Decide (`<10%` token burn) while workers run read-only recon (`--recon`), deep root-cause synthesis (`--orient`), and isolated `git worktree` tasks (`ooda/<id>`) gated by atomic `flock` concurrency leases.
+- **Zero-Trust Verification & Spend Guardrails:** No model family ever grades its own code (`verify` excludes all authoring families across attempts and fails closed on `[P0-3]`, `UNKNOWN`, `SKIPPED`, or scope violations); paid `devin-fusion` (`CREDITS`) and PAYG `muse` (`PAYG`) never run unattended or in `--review`; worker lanes hard-reject `gemini*`/`orchestrator*` models and recursive sub-router calls (`exit 2`).
 
 ## The 8-Lane Fleet
 
@@ -69,7 +61,7 @@ The scheduler borrows two principles from fighter tactician **Col. John Boyd**:
 | `mcode` | [MiniMax Code](https://github.com/MiniMax-AI/minimax-code) (`mcode`, primary reviewer) | high-cap `5h + 7d`, **max 4 parallel** |
 | `devin-fast` | [Cognition Devin CLI](https://docs.devin.ai/) Fast pool (`devin`) | unlimited `$20/mo` Pro, `24h + 7d`, **max 4 parallel** |
 | `devin-pro` | [Cognition Devin CLI](https://docs.devin.ai/) Pro pool (`devin`) | unlimited `$20/mo` Pro, `24h + 7d` |
-| `devin-fusion` | [Cognition Devin CLI](https://docs.devin.ai/) Fusion pool (`devin`) | paid credits (reserve) |
+| `devin-fusion` | [Cognition Devin CLI](https://docs.devin.ai/) Fusion pool (`devin`) | paid credits (opt-in `--lane` only) |
 
 Model IDs and efforts are **discovered dynamically, not hardcoded**: `agent-ooda --status` and
 `agent-ooda --discover` inspect non-secret local CLI configs, cached CLI model lists, effort flags
@@ -82,10 +74,10 @@ on any `gemini*`/`orchestrator*` worker model and block recursive execution (`ag
 `--task`, `--review`, `--probe`, `--cleanup`, `--enable`, `--disable`, `--set-cycle`) whenever
 `AGENT_OODA_DEPTH>=1` or `ROUTER_DEPTH>=1`.
 
-**Stage clocks & Per-Stage OODA Routing (`v2.1.0`):**
+**Stage clocks & Per-Stage OODA Routing (`v2.1.1`):**
 
 - **Per-Stage Matrix (`observe`, `orient`, `act`, `verify`):** Each worker stage defaults to `auto` (`Decide` remains with you and the top-level orchestrator) and resolves via **`CLI flag > --local > --profile > global > auto`**. CLI `--lane`/`--model`/`--effort` target the primary command stage (`--recon`, `--orient`, `--task`, or standalone `--review`); post-task `verify` follows `--local`/`--profile`/global pins so `--task` worker flags never leak onto the off-family reviewer.
-- **Soft-Pin Failover & Off-Family Verify:** Pinned stages soft-failover on 429s/cooldown down their lane CSV or `E-M auto`, scrubbing primary-lane `--model`/`--effort` overrides when failing over to another lane; `verify` always enforces a non-authoring model family.
+- **Soft-Pin Failover & Off-Family Verify:** Pinned stages soft-failover on 429s/cooldown down their lane CSV or quota-aware `auto`, scrubbing primary-lane `--model`/`--effort` overrides when failing over to another lane; `verify` always enforces a non-authoring model family.
 - **3 Synchronized Arrow-Key Selectors:**
   - `agent-ooda --select` (`-s`): Interactive terminal TUI (`↑`/`↓` + `Enter`, sticky or `--until-reset`, global `quota.json` `v9` or `--local` `~/.local/state/agent-ooda/workspaces/<id>.json`).
   - `/lane`: Native Antigravity in-chat selector skill (`ask_question`) for per-stage pins, presets, and resets.
@@ -116,7 +108,7 @@ review or scope checks) are all audited fail-closed with a `240s` review budget:
 - **Inline stream audit (`> 8 KiB` or committed diffs):** `--permission smart --prompt-mode coding --max-steps 25`.
 - **Fail-closed fallback:** on cooldown, nonzero exit, `SKIPPED`, `UNKNOWN`, or `[P0-3]` findings, review rotates off-family (`mcode → devin-fast → devin-pro → grok → mistral → muse → agy-opus`) or fails non-zero.
 
-## Bubble-Canopy HUD (`bin/agent-ooda-hud`)
+## Live Thermal `tok/s` HUD (`bin/agent-ooda-hud`)
 
 `bin/agent-ooda-hud` (`statusline.py`) reads live NDJSON stream telemetry written over `io.Pipe()` and
 renders OODA phase (`○ agent-ooda`, `◐ orient/decide`, `⠋ observe`, `⠋ orient`, `⠋ act`, `⠋ verify`), active
@@ -124,10 +116,10 @@ stage pins on standby (`│ pin ...`), `tool Xs` waits, injected skills, `fleet 
 **5-band ANSI 256-color thermal `tok/s` heat ramp**:
 
 - **Cold (`<25 tok/s`):** Ice Blue (`ANSI 75`)
-- **Cruise (`25–59 tok/s`):** Cyan-Green (`ANSI 49`)
+- **Steady (`25–59 tok/s`):** Cyan-Green (`ANSI 49`)
 - **Warm (`60–109 tok/s`):** Solar Amber (`ANSI 220`)
 - **Hot (`110–179 tok/s`):** Bold Orange (`ANSI 208`)
-- **Afterburner (`>=180 tok/s`):** Bold Red-Hot Crimson (`ANSI 196`)
+- **Peak (`>=180 tok/s`):** Bold Red-Hot Crimson (`ANSI 196`)
 
 ```text
 ○ agent-ooda │ pin act:grok, verify:mcode │ fleet 8/8
@@ -151,7 +143,7 @@ agent-ooda --set-stage preset=conserve      # presets: auto, conserve, deep, dev
 agent-ooda --reset-stages                   # reset global pins to auto (--local clears repo overrides)
 agent-ooda --discover                       # refresh live CLI capability probe cache
 agent-ooda --probe                          # minimal 1-token prompt canary & muse PAYG check
-agent-ooda --usage                          # per-lane 5h/24h/7d/30d windows, UTC tariffs & E-M regime telemetry
+agent-ooda --usage                          # per-lane 5h/24h/7d/30d windows, UTC tariffs & quota state telemetry
 agent-ooda --recon "Map auth flow"          # OODA Observe: read-only recon (free lanes first)
 agent-ooda --orient "Trace cache race"      # OODA Orient: read-only root-cause & architecture plan
 agent-ooda --task "Fix parser bug" --files internal/cli/parse_args.go --skill devin

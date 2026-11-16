@@ -9,7 +9,7 @@ import (
 	"github.com/UberMetroid/agent-ooda/internal/fleet"
 )
 
-// Exact ANSI 256-color codes and spinner frames for the Bubble-canopy HUD.
+// Exact ANSI 256-color codes and spinner frames for the statusLine HUD.
 const (
 	CIdleIcon     = "\033[38;5;245m"
 	CIdleText     = "\033[1;38;5;252m"

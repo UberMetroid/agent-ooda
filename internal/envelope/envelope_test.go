@@ -28,7 +28,7 @@ func TestEMRegimesAndOrder(t *testing.T) {
 	if len(em.CornerLanes) != 1 || em.CornerLanes[0] != "agy-opus" {
 		t.Fatalf("expected agy-opus corner, got %v", em.CornerLanes)
 	}
-	if em.Regimes["agy-opus"] != "CORNER" || em.Regimes["muse"] != "CRUISE" {
+	if em.Regimes["agy-opus"] != "EXPIRING" || em.Regimes["muse"] != "READY" {
 		t.Fatalf("unexpected regimes: %v", em.Regimes)
 	}
 	qConserve := &fleet.QuotaState{Providers: map[string]*fleet.ProviderConfig{
@@ -60,7 +60,7 @@ func TestEMRegimesAndOrder(t *testing.T) {
 	pinFast, err := BuildCandidateOrder("devin-fast", "fast", dq, nil, nil)
 	if err != nil || len(pinFast) < 3 || pinFast[0] != "devin-fast" ||
 		slices.Contains(pinFast, "devin-fusion") || slices.Index(pinFast, "mcode") > slices.Index(pinFast, "agy-opus") {
-		t.Fatalf("expected pinned fast E-M fallback without credits, got %v err=%v", pinFast, err)
+		t.Fatalf("expected pinned fast quota-aware fallback without credits, got %v err=%v", pinFast, err)
 	}
 	pinPivot, _ := BuildCandidateOrder("grok", "act", dq, nil, map[string]bool{ModelFamily("grok"): true})
 	if len(pinPivot) < 2 || pinPivot[0] == "grok" {
@@ -68,6 +68,11 @@ func TestEMRegimesAndOrder(t *testing.T) {
 	}
 	if !HasLaneFamily("devin-fast,mcode", "minimax") || HasLaneFamily("devin-fast,grok", "minimax") {
 		t.Fatal("HasLaneFamily CSV check failed")
+	}
+	autoAct, _ := BuildCandidateOrder("auto", "act", dq, nil, nil)
+	autoDeep, _ := BuildCandidateOrder("auto", "deep", dq, nil, nil)
+	if slices.Contains(autoAct, "devin-fusion") || slices.Contains(autoDeep, "devin-fusion") {
+		t.Fatalf("auto order must exclude credits lane: act=%v deep=%v", autoAct, autoDeep)
 	}
 }
 
@@ -189,6 +194,14 @@ func TestTariffsAndMusePaygSkip(t *testing.T) {
 	expSel, err := SelectProvider(SelectReq{RequestedLane: "muse", Complexity: "act", Quota: dq, ResolveCLI: fakeCLI})
 	if err != nil || expSel.Lane != "muse" {
 		t.Fatalf("expected explicit --lane muse to work despite PAYG, got %+v (%v)", expSel, err)
+	}
+	if s, _ := SelectProvider(SelectReq{RequestedLane: "devin-fusion", Complexity: "act",
+		Quota: dq, ResolveCLI: fakeCLI}); s.Lane != "devin-fusion" {
+		t.Fatalf("expected explicit --lane devin-fusion on act, got %+v", s)
+	}
+	if s, _ := SelectProvider(SelectReq{RequestedLane: "devin-fusion", Complexity: "review",
+		Quota: dq, ResolveCLI: fakeCLI}); s.Lane == "devin-fusion" {
+		t.Fatalf("credits lane must stay blocked on review, got %+v", s)
 	}
 }
 

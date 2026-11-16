@@ -2,7 +2,7 @@
 name: agent-ooda
 description: >-
   Unified 4-phase Observe-Orient-Decide-Act (OODA) engineering methodology and
-  multi-agent Energy-Maneuverability CLI router (`agent-ooda`) for Antigravity
+  zero-trust, quota-aware multi-agent CLI router (`agent-ooda`) for Antigravity
   (`agy`). Governs disciplined exploration, isolated git worktrees, live fleet
   dispatch across local agent CLIs (`agy`, `devin`, `muse`, `mcode`, `grok`,
   `vibe`), dynamic `--lane`/`--model`/`--effort`/`--skill` overrides, mandatory
@@ -31,7 +31,7 @@ Determine root cause, invariants, blast radius, and file coupling (optionally of
 - **Coupled / overlapping files:** shared files or interdependent signatures -> **Sequential**.
 - **Disjoint modules:** zero overlapping `files` -> **Parallel Worktrees**.
 
-**Implicit Guidance & Control (`Orient --> Act` Fast Path):** Explicit `DECIDE` ceremony
+**Direct Orient -> Act Fast Path:** Explicit `DECIDE` ceremony
 is needed for novel trade-offs, cross-module coupling, or post-mismatch re-orientation.
 When OBSERVE + ORIENT isolate an unambiguous 1-2 file fix with known invariants and
 a clear test gate, move directly from Orient to Act while keeping the orchestrator thin
@@ -73,7 +73,7 @@ Lock in before any code edits:
 4. Merge clean accepted branches (`git merge --no-ff ooda/<id>`), clean worktrees (`agent-ooda --cleanup`),
    and re-run the repo build/test gate on the merged branch.
 
-#### Loop Exit & Mismatch Pivoting (*Destruction & Creation*)
+#### Loop Exit & Mismatch Pivoting (Zero-Trust Family Rotation)
 - If the merged gate is green and reviews return `VERDICT: ACCEPT`, stop cleanly.
 - Otherwise feed exact compiler/test failures or `REJECT` findings back into Phase 1/2,
   increment the loop counter, and pivot model families (automatic `30m` mismatch memory in
@@ -89,11 +89,11 @@ overridable via `AGENT_OODA_QUOTA_FILE`), and `--local` per-repo stage pins pers
 `~/.local/state/agent-ooda/workspaces/<id>.json` (surviving `agent-ooda --cleanup`). HUD markers and `flock`
 leases live in `/tmp/agent-ooda-hud` (`AGENT_OODA_HUD_DIR`).
 
-### Per-Stage OODA Routing Matrix & 3 Selector Surfaces (`v2.1.0`)
+### Per-Stage OODA Routing Matrix & 3 Selector Surfaces (`v2.1.1`)
 Each worker OODA stage (`observe`, `orient`, `act`, `verify`) defaults to `auto` (`Decide` stays with the user /
 top-level orchestrator) and resolves via: **`CLI flag > --local > --profile > global > auto`**.
 - **Soft Pin Failover:** When a stage's primary pinned lane hits a 429/cooldown or is omitted, execution fails over
-  down its priority CSV or `E-M auto`, scrubbing primary-lane `--model`/`--effort` overrides when failing over to another lane.
+  down its priority CSV or quota-aware `auto`, scrubbing primary-lane `--model`/`--effort` overrides when failing over to another lane.
 - **Strict Off-Family Verify:** `verify` always excludes the authoring model family even if pinned identically.
 - **3 Selector Interfaces:**
   1. `agent-ooda --select` (`-s`): Terminal arrow-key configurator (`↑`/`↓` + `Enter`, supports sticky & `--until-reset`, global & `--local`).
@@ -104,7 +104,7 @@ top-level orchestrator) and resolves via: **`CLI flag > --local > --profile > gl
 | Lane | CLI | Effort Control & Defaults | Tier | Cycle / Cap |
 |---|---|---|---|---|
 | `agy-opus` | `agy` | `--effort (low..max)` + model tier; non-Gemini Claude models | `capped` | `5h + 7d` |
-| `devin-fusion` | `devin` | `via-model` (no `--effort`); family `fusion` | `credits` | `credits` (reserve) |
+| `devin-fusion` | `devin` | `via-model` (no `--effort`); family `fusion` | `credits` | `credits` (opt-in `--lane` only) |
 | `devin-pro` | `devin` | `via-model`; family `swe-2` | `unlimited` | `24h + 7d` (`$20/mo` Pro) |
 | `devin-fast` | `devin` | `via-model`; family `swe-2-flash` · max `4` parallel | `unlimited` | `24h + 7d` |
 | `muse` | `muse` | `--reasoning-effort (none..ultra)`; default `muse-ember-1.0` (`muse-wonder-1.0` on `deep`) | `capped` | `5h + 7d` (auto-skips PAYG `api_key`) |
@@ -113,7 +113,7 @@ top-level orchestrator) and resolves via: **`CLI flag > --local > --profile > gl
 | `mistral` | `vibe` | `via-model` (`glm-5-3[high]`, etc.) | `capped` | `30d` (monthly; `0.5x` off-peak Z.ai UTC tariff) |
 
 ### Key Engine Guarantees
-- **Expiring Window Draining (`CORNER`) & Stall Shield (`CONSERVE`):** Prioritizes `0.5x` off-peak tariffs and expiring capped clocks; protects the final active capped lane by shifting routine `act` work to `devin-pro` -> `devin-fast` -> `mcode`.
+- **First-Principles Quota Scheduling:** Prioritizes `0.5x` off-peak tariffs and soonest-expiring bounded windows before they reset; spares the last active bounded lane by shifting routine coding to `devin-pro` -> `devin-fast` -> `mcode`.
 - **Auto Complexity & Skill Matching:** Omitted `--complexity` and up to 2 non-core `--skill` entries are inferred from prompt & files (`--skill none` or `OODA_NO_AUTO_SKILL=1` opts out).
 - **Gemini Worker Guardrail (`exit 2`):** Rejects `gemini*` / `orchestrator*` models across `--model`, env vars, `--set-cycle`, `--set-stage`, and manifests.
 - **Recursion Guard (`exit 2`):** Workers run with `AGENT_OODA_DEPTH>=1` and `ROUTER_DEPTH>=1`, blocking nested `agent-ooda` dispatch/admin calls.

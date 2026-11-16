@@ -170,7 +170,7 @@ func normalOrder(
 	return dedupStrings(append(raw, chain...))
 }
 
-// BuildCandidateOrder ranks candidate lanes using E-M envelope and family bias.
+// BuildCandidateOrder ranks candidate lanes using quota posture and family bias.
 func BuildCandidateOrder(
 	requestedLane, complexity string, q *fleet.QuotaState,
 	stripeIdx *int, avoidFamilies map[string]bool,
@@ -202,14 +202,16 @@ func BuildCandidateOrder(
 	} else {
 		ordered = normalOrder(comp, q, chain, pool, em, cappedActiveSorted(q, nowUTC), stripeIdx)
 	}
-	if len(lanes) != 1 || lanes[0] != "auto" {
-		var tail []string
-		for _, p := range ordered {
-			if info := q.Providers[p]; info == nil || info.Tier != "credits" {
-				tail = append(tail, p)
-			}
+	var noCreds []string
+	for _, p := range ordered {
+		if info := q.Providers[p]; info == nil || info.Tier != "credits" {
+			noCreds = append(noCreds, p)
 		}
-		ordered = dedupStrings(append(append([]string(nil), lanes...), tail...))
+	}
+	if len(lanes) != 1 || lanes[0] != "auto" {
+		ordered = dedupStrings(append(append([]string(nil), lanes...), noCreds...))
+	} else {
+		ordered = noCreds
 	}
 	if len(avoidFamilies) > 0 {
 		var head, tail []string

@@ -120,7 +120,7 @@ func tuiEditStage(
 ) error {
 	caps := envelope.DiscoverFleetCaps(envelope.DiscoverOpts{Quota: q})
 	musePayg, nowUTC := fleet.CachedMuseProbe(900).PayAsYouGo, time.Now().UTC()
-	lanes, items := []string{"auto"}, []string{"auto (E-M Fly-by-Wire)"}
+	lanes, items := []string{"auto"}, []string{"auto (quota-aware routing)"}
 	for _, name := range fleet.ProviderOrder {
 		info := q.Providers[name]
 		if info == nil || info.Tier == "credits" || (name == "muse" && musePayg) {

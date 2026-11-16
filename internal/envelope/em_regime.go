@@ -1,4 +1,4 @@
-// Package envelope implements E-M energy envelopes, lane routing, and discovery.
+// Package envelope implements quota-aware lane routing, tariffs, and discovery.
 package envelope
 
 import (
@@ -10,7 +10,7 @@ import (
 	"github.com/UberMetroid/agent-ooda/internal/fleet"
 )
 
-// EMEnvelope summarizes active/corner capped lanes and fleet conservation mode.
+// EMEnvelope summarizes active/expiring capped lanes and quota conservation state.
 type EMEnvelope struct {
 	NowUTC         time.Time
 	ActiveCapped   []string
@@ -179,21 +179,21 @@ func assignRegimes(
 		}
 		switch {
 		case info.Status != "active":
-			regimes[name] = "REGEN"
+			regimes[name] = "COOLING"
 		case info.Tier == "credits":
-			regimes[name] = "RESERVE"
+			regimes[name] = "CREDITS"
 		case cornerSet[name]:
-			regimes[name] = "CORNER"
+			regimes[name] = "EXPIRING"
 		case info.Tier == "capped" && conserve:
-			regimes[name] = "CONSERVE"
+			regimes[name] = "SPARING"
 		default:
-			regimes[name] = "CRUISE"
+			regimes[name] = "READY"
 		}
 	}
 	return regimes
 }
 
-// ComputeEMEnvelope classifies the fleet into CORNER/CRUISE/CONSERVE/RESERVE/REGEN.
+// ComputeEMEnvelope classifies each lane into EXPIRING/READY/SPARING/CREDITS/COOLING.
 func ComputeEMEnvelope(q *fleet.QuotaState, nowUTC time.Time) EMEnvelope {
 	if nowUTC.IsZero() {
 		nowUTC = time.Now().UTC()

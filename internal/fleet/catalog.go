@@ -25,7 +25,7 @@ func UsageErr(format string, args ...any) error {
 }
 
 const (
-	Version             = "2.1.0"
+	Version             = "2.1.1"
 	QuotaSchemaVersion  = 9
 	CornerWindowSecs    = 5400
 	SoonWakeSecs        = 2700
@@ -67,16 +67,16 @@ var (
 	StageNames  = []string{"observe", "orient", "act", "verify"}
 	DefaultPool = []string{
 		"agy-opus", "muse", "grok", "mistral",
-		"devin-fusion", "devin-fast", "devin-pro", "mcode",
+		"devin-fast", "devin-pro", "mcode",
 	}
 	StripePool = []string{
 		"agy-opus", "muse", "grok", "mistral",
-		"devin-fast", "devin-pro", "mcode", "devin-fusion",
+		"devin-fast", "devin-pro", "mcode",
 	}
 	FastOrder = []string{"devin-fast", "mcode", "devin-pro", "muse"}
 	DeepOrder = []string{
 		"agy-opus", "muse", "grok", "mistral",
-		"devin-fusion", "devin-pro", "devin-fast", "mcode",
+		"devin-pro", "devin-fast", "mcode",
 	}
 	ReviewOrder = []string{
 		"mcode", "devin-fast", "devin-pro", "grok", "mistral", "muse", "agy-opus",
@@ -203,7 +203,7 @@ func ProviderSpecs() map[string]ProviderSpec {
 	return map[string]ProviderSpec{
 		"agy-opus": {CLI: "agy", Tier: "capped", CycleHours: Ptr(5.0), OuterHours: Ptr(168.0),
 			Windows: w57, Role: "Antigravity Claude pool (5h rolling + 7d fixed weekly)"},
-		"devin-fusion": {CLI: "devin", Tier: "credits", Role: "Devin Fusion pool (paid credits; reserve)"},
+		"devin-fusion": {CLI: "devin", Tier: "credits", Role: "Devin Fusion pool (paid credits; opt-in --lane only)"},
 		"devin-pro": {CLI: "devin", Tier: "unlimited", CycleHours: Ptr(24.0), OuterHours: Ptr(168.0),
 			Windows: w247, Role: "Heavy implementation & refactors (Devin Pro 24h daily + 7d weekly)"},
 		"devin-fast": {CLI: "devin", Tier: "unlimited", CycleHours: Ptr(24.0), OuterHours: Ptr(168.0),

@@ -16,7 +16,7 @@ func migratePool(cur []string, def []string, oldVer int) ([]string, bool) {
 	changed := false
 	var cleaned []string
 	for _, p := range cur {
-		if p == "cursor" {
+		if p == "cursor" || p == "devin-fusion" {
 			changed = true
 			continue
 		}
@@ -76,6 +76,9 @@ func migrateProvider(name string, info *ProviderConfig, tmpl *ProviderConfig, ol
 			started := FormatLocalISO(base)
 			info.CycleStartedAt = &started
 		}
+	}
+	if name == "devin-fusion" && strings.Contains(info.Role, "reserve") {
+		info.Role, changed = tmpl.Role, true
 	}
 	return changed
 }

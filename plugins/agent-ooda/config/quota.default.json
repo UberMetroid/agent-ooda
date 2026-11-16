@@ -15,15 +15,13 @@
     "mistral",
     "devin-fast",
     "devin-pro",
-    "mcode",
-    "devin-fusion"
+    "mcode"
   ],
   "default_fallback_chain": [
     "agy-opus",
     "muse",
     "grok",
     "mistral",
-    "devin-fusion",
     "devin-fast",
     "devin-pro",
     "mcode"
@@ -57,7 +55,7 @@
       "model": null,
       "effort": null,
       "tier": "credits",
-      "role": "Devin Fusion pool (paid credits; reserve)",
+      "role": "Devin Fusion pool (paid credits; opt-in --lane only)",
       "status": "active",
       "cooldown_until": null,
       "reason": null,

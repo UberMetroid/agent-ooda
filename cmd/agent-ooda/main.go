@@ -1,4 +1,4 @@
-// Binary agent-ooda is the multi-call router, Bubble-Canopy HUD, hook, and setup entrypoint.
+// Binary agent-ooda is the multi-call router, statusLine HUD, hook, and setup entrypoint.
 package main
 
 import (

@@ -119,7 +119,7 @@ func handleTaskOutcome(st *taskState, prov string, res ExecRes) bool {
 	return true
 }
 
-// RunTaskWithFallback runs one task with leases, E-M fallback, and family pivot retries.
+// RunTaskWithFallback runs one task with leases, quota-aware fallback, and family pivot retries.
 func RunTaskWithFallback(req TaskReq) (TaskRes, error) {
 	st, err := initTaskState(req)
 	if err != nil {

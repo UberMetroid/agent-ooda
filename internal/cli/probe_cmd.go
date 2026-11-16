@@ -19,7 +19,7 @@ func shouldSkipProbe(lane string, info *fleet.ProviderConfig, nowUTC time.Time, 
 		return "not configured"
 	}
 	if info.Tier == "credits" {
-		return "credits reserve (never probed)"
+		return "paid credits (opt-in --lane only; never probed)"
 	}
 	if info.ManualDisable {
 		return "manually disabled"

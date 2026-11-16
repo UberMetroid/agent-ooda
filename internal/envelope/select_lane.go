@@ -51,8 +51,8 @@ func checkCandidate(
 	if info == nil {
 		return SelectRes{}, name + ": not configured", false
 	}
-	if req.Complexity == "review" && info.Tier == "credits" {
-		return SelectRes{}, name + ": credits tier blocked for verify/review", false
+	if (isAuto || req.SoftPin || req.Complexity == "review") && info.Tier == "credits" {
+		return SelectRes{}, name + ": paid credits require explicit --lane " + name, false
 	}
 	if info.Status != "active" {
 		why := info.Status
