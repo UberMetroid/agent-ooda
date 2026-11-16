@@ -45,6 +45,10 @@ check_clean_clone() {
   fi
 }
 
+is_shallow_clone() {
+  [ "$(git -C "$INSTALL_HOME" rev-parse --is-shallow-repository 2>/dev/null || echo false)" = "true" ]
+}
+
 if [ "${1:-}" = "--uninstall" ]; then
   shift
   purge=0
@@ -55,7 +59,12 @@ if [ "${1:-}" = "--uninstall" ]; then
   done
   if [ "$purge" -eq 1 ] && [ -d "$INSTALL_HOME/.git" ]; then
     check_clean_clone purging
+    refspec="+refs/heads/main:refs/remotes/origin/main"
     unpushed="$(git -C "$INSTALL_HOME" rev-list --count --branches --not --remotes 2>/dev/null || echo 0)"
+    if [ "$unpushed" -gt 0 ] && is_shallow_clone; then
+      git -C "$INSTALL_HOME" fetch -q --unshallow "$REPO_URL" "$refspec" >/dev/null 2>&1 || true
+      unpushed="$(git -C "$INSTALL_HOME" rev-list --count --branches --not --remotes 2>/dev/null || echo 0)"
+    fi
     if [ "$unpushed" -gt 0 ]; then
       echo "error: $INSTALL_HOME has $unpushed unpushed local commit(s); refusing --purge" >&2
       exit 1
@@ -79,7 +88,11 @@ if [ -d "$INSTALL_HOME/.git" ]; then
   check_clean_clone updating
   echo "updating $INSTALL_HOME from $REPO_URL ..."
   git -C "$INSTALL_HOME" remote set-url origin "$REPO_URL" >/dev/null 2>&1 || true
-  git -C "$INSTALL_HOME" fetch --depth=1 "$REPO_URL" +refs/heads/main:refs/remotes/origin/main
+  if is_shallow_clone; then
+    git -C "$INSTALL_HOME" fetch --unshallow "$REPO_URL" +refs/heads/main:refs/remotes/origin/main
+  else
+    git -C "$INSTALL_HOME" fetch "$REPO_URL" +refs/heads/main:refs/remotes/origin/main
+  fi
   ahead="$(git -C "$INSTALL_HOME" rev-list --count FETCH_HEAD..HEAD 2>/dev/null || echo 0)"
   if [ "$ahead" -gt 0 ]; then
     echo "error: $INSTALL_HOME has $ahead unpushed local commit(s); push or reset before updating" >&2
@@ -92,7 +105,7 @@ elif [ -e "$INSTALL_HOME" ]; then
 else
   mkdir -p "$(dirname "$INSTALL_HOME")"
   echo "cloning $REPO_URL into $INSTALL_HOME ..."
-  git clone --depth=1 "$REPO_URL" "$INSTALL_HOME"
+  git clone "$REPO_URL" "$INSTALL_HOME"
 fi
 
 exec "$INSTALL_HOME/install.sh" ${@+"$@"}
