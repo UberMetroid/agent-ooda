@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agent-ooda/internal/hud"
 )
 
 func writeExecFile(t *testing.T, dir, name, body string) string {
@@ -66,23 +67,21 @@ func TestParseArgsPermutations(t *testing.T) {
 	if err != nil || !opts.Help || !strings.Contains(helpOut.String(), "usage: agent-ooda") {
 		t.Fatalf("unexpected help parse: opts=%+v err=%v", opts, err)
 	}
-	if vOpts, err := ParseArgs("agent-ooda", []string{"--version"}, nil); err != nil || !vOpts.Version {
-		t.Fatalf("expected --version parsed, got %+v err=%v", vOpts, err)
+	if v, e := ParseArgs("agent-ooda", []string{"--version"}, nil); e != nil || !v.Version {
+		t.Fatal(v, e)
 	}
-	o1, err := ParseArgs("ooda", []string{"--review"}, nil)
-	if err != nil || o1.Review == nil || *o1.Review != "." {
-		t.Fatalf("expected --review default '.', got %+v err=%v", o1, err)
+	if o, e := ParseArgs("ooda", []string{"--review"}, nil); e != nil || o.Review == nil || *o.Review != "." {
+		t.Fatal(o, e)
 	}
 	o2, err := ParseArgs("ooda", []string{"--review", "sub", "-j6", "--files", "a.go,b.go", "--files", "c.go"}, nil)
 	if err != nil || o2.Review == nil || *o2.Review != "sub" || o2.Jobs != 6 || len(o2.Files) != 2 {
 		t.Fatalf("unexpected flag mix parse: %+v err=%v", o2, err)
 	}
-	o3, err := ParseArgs("ooda", []string{"--", "--weird-manifest"}, nil)
-	if err != nil || o3.Manifest != "--weird-manifest" {
-		t.Fatalf("unexpected -- parse: %+v err=%v", o3, err)
+	if o, e := ParseArgs("ooda", []string{"--", "--weird"}, nil); e != nil || o.Manifest != "--weird" {
+		t.Fatal(o, e)
 	}
-	if oProbe, err := ParseArgs("router", []string{"--probe"}, nil); err != nil || !oProbe.Probe {
-		t.Fatalf("expected --probe flag parsed, got %+v err=%v", oProbe, err)
+	if o, e := ParseArgs("router", []string{"--probe"}, nil); e != nil || !o.Probe {
+		t.Fatal(o, e)
 	}
 	for _, bad := range [][]string{{"--bogus-flag"}, {"--probe", "--status"},
 		{"--version", "--status"}, {"--profile", "bogus"}} {
@@ -90,83 +89,79 @@ func TestParseArgsPermutations(t *testing.T) {
 			t.Fatalf("expected parse error for %v", bad)
 		}
 	}
-	if o4, e4 := ParseArgs("ooda", []string{"--orient", "why"}, nil); e4 != nil || o4.Orient == nil || *o4.Orient != "why" {
-		t.Fatalf("expected --orient parsed, got %+v err=%v", o4, e4)
+	if o, e := ParseArgs("ooda", []string{"--orient", "why"}, nil); e != nil || o.Orient == nil || *o.Orient != "why" {
+		t.Fatal(o, e)
 	}
 }
 
 func TestStatusUsageAndQuotaAdmin(t *testing.T) {
 	_, _, _ = setupCLIEnv(t)
 	var out, errB bytes.Buffer
-	for _, tc := range []struct{ arg, want string }{
-		{"--version", "agent-ooda v" + fleet.Version},
-		{"--status", "LANE"},
-		{"--discover", "(refreshed)"},
-		{"--usage", "Cycle Usage Telemetry"},
+	for _, tc := range [][]string{
+		{"agent-ooda v" + fleet.Version, "--version"},
+		{"LANE", "--status"},
+		{"(refreshed)", "--discover"},
+		{"Cycle Usage Telemetry", "--usage"},
+		{"", "--disable", "grok", "--reason", "maint", "--hours", "1"},
+		{"", "--enable", "grok"},
+		{"configured mcode:", "--set-cycle", "mcode", "--effort", "high", "--token-budget", "5000"},
+		{"devin-pro", "--set-stage", "preset=conserve"},
 	} {
 		out, errB = bytes.Buffer{}, bytes.Buffer{}
-		if rc := RunCLI("agent-ooda", []string{tc.arg}, &out, &errB); rc != 0 || !strings.Contains(out.String(), tc.want) {
-			t.Fatalf("%s failed rc=%d out=%q err=%q", tc.arg, rc, out.String(), errB.String())
-		}
-	}
-	for _, tc := range []struct {
-		argv []string
-		want string
-	}{
-		{[]string{"--disable", "grok", "--reason", "maint", "--hours", "1"}, ""},
-		{[]string{"--enable", "grok"}, ""},
-		{[]string{"--set-cycle", "mcode", "--effort", "high", "--token-budget", "5000"}, "configured mcode:"},
-		{[]string{"--set-stage", "preset=conserve"}, "devin-pro"},
-	} {
-		out, errB = bytes.Buffer{}, bytes.Buffer{}
-		if rc := RunCLI("agent-ooda", tc.argv, &out, &errB); rc != 0 || !strings.Contains(out.String(), tc.want) {
-			t.Fatalf("%v failed rc=%d out=%q err=%q", tc.argv, rc, out.String(), errB.String())
+		if rc := RunCLI("agent-ooda", tc[1:], &out, &errB); rc != 0 || !strings.Contains(out.String(), tc[0]) {
+			t.Fatalf("%v failed rc=%d out=%q err=%q", tc[1:], rc, out.String(), errB.String())
 		}
 	}
 	out, errB = bytes.Buffer{}, bytes.Buffer{}
 	if rc := RunCLI("agent-ooda", []string{"--set-cycle", "agy-opus", "--model", "gemini-4-carbon-low"}, &out, &errB); rc != 2 {
-		t.Fatalf("expected Gemini guardrail exit 2, got %d (%q)", rc, errB.String())
+		t.Fatal(rc, errB.String())
 	}
 	out, errB = bytes.Buffer{}, bytes.Buffer{}
 	if rc := RunCLI("agent-ooda", []string{"--recon", "hi", "--model", "gemini-4-carbon-high"}, &out, &errB); rc != 2 ||
 		strings.Contains(errB.String(), "pivoting") {
-		t.Fatalf("expected clean upfront Gemini block exit 2, got rc=%d err=%q", rc, errB.String())
+		t.Fatal(rc, errB.String())
 	}
-	if trc := RunSelectTUI(CLIOpts{}, strings.NewReader("jjjjj\rq"), &out, &errB); trc != 0 {
-		t.Fatalf("RunSelectTUI failed rc=%d err=%q", trc, errB.String())
+	t.Setenv("AGENT_OODA_THEME", "light")
+	out, errB = bytes.Buffer{}, bytes.Buffer{}
+	if rc := RunSelectTUI(CLIOpts{}, strings.NewReader("b\rBjjjjj\rq"), &out, &errB); rc != 0 ||
+		!strings.Contains(out.String(), hud.PaletteFor("light").TUIHeader) ||
+		strings.Contains(out.String(), "REPO-LOCAL") || !strings.Contains(out.String(), "✓ Reset all stages to auto") {
+		t.Fatalf("RunSelectTUI b/reset failed rc=%d err=%q", rc, errB.String())
 	}
-	if q, qerr := fleet.LoadQuota(""); qerr != nil || q.Stages["act"].Lane != "auto" {
-		t.Fatalf("expected RunSelectTUI reset-all to auto, err=%v got=%+v", qerr, q)
+	out.Reset()
+	if rc := RunSelectTUI(CLIOpts{}, strings.NewReader("\tq"), &out, &errB); rc != 0 ||
+		!strings.Contains(out.String(), "REPO-LOCAL") {
+		t.Fatal(rc, out.String())
+	}
+	if q, e := fleet.LoadQuota(""); e != nil || q.Stages["act"].Lane != "auto" {
+		t.Fatal(q, e)
 	}
 }
 
 func TestRouterDepthGuard(t *testing.T) {
 	_, _, _ = setupCLIEnv(t)
-	var out, errB bytes.Buffer
-	if rc := RunCLI("router", []string{"--status", "--enable", "grok"}, &out, &errB); rc != 2 ||
-		!strings.Contains(errB.String(), "conflicting") {
-		t.Fatalf("mixed modes at ROUTER_DEPTH=0: rc=%d err=%q", rc, errB.String())
+	run := func(argv ...string) (int, string) {
+		var out, errB bytes.Buffer
+		return RunCLI("agent-ooda", argv, &out, &errB), errB.String()
+	}
+	if rc, errS := run("--status", "--enable", "grok"); rc != 2 || !strings.Contains(errS, "conflicting") {
+		t.Fatalf("mixed modes at ROUTER_DEPTH=0: rc=%d err=%q", rc, errS)
 	}
 	t.Setenv("AGENT_OODA_DEPTH", "0")
 	t.Setenv("ROUTER_DEPTH", "1")
-	blocked := [][]string{{"--recon", "hi"}, {"--task", "hi"}, {"--review", "."}, {"--probe"},
-		{"--enable", "grok"}, {"--disable", "grok"}, {"--set-cycle", "grok"}, {"--cleanup"}}
-	for _, argv := range blocked {
-		out, errB = bytes.Buffer{}, bytes.Buffer{}
-		if rc := RunCLI("agent-ooda", argv, &out, &errB); rc != 2 || !strings.Contains(errB.String(), "ROUTER_DEPTH>=1") {
-			t.Fatalf("%v under ROUTER_DEPTH=1: rc=%d err=%q", argv, rc, errB.String())
+	for _, argv := range [][]string{{"--recon", "hi"}, {"--task", "hi"}, {"--review", "."}, {"--probe"},
+		{"--enable", "grok"}, {"--disable", "grok"}, {"--set-cycle", "grok"}, {"--cleanup"}} {
+		if rc, errS := run(argv...); rc != 2 || !strings.Contains(errS, "ROUTER_DEPTH>=1") {
+			t.Fatalf("%v under ROUTER_DEPTH=1: rc=%d err=%q", argv, rc, errS)
 		}
 	}
 	t.Setenv("AGENT_OODA_DEPTH", "1")
 	t.Setenv("ROUTER_DEPTH", "0")
-	out, errB = bytes.Buffer{}, bytes.Buffer{}
-	if rc := RunCLI("agent-ooda", []string{"--recon", "hi"}, &out, &errB); rc != 2 ||
-		!strings.Contains(errB.String(), "AGENT_OODA_DEPTH>=1") {
-		t.Fatalf("--recon under AGENT_OODA_DEPTH=1: rc=%d err=%q", rc, errB.String())
+	if rc, errS := run("--recon", "hi"); rc != 2 || !strings.Contains(errS, "AGENT_OODA_DEPTH>=1") {
+		t.Fatalf("--recon under AGENT_OODA_DEPTH=1: rc=%d err=%q", rc, errS)
 	}
-	out.Reset()
-	if rc := RunCLI("agent-ooda", []string{"--status"}, &out, &errB); rc != 0 {
-		t.Fatalf("--status should work when ROUTER_DEPTH=1, got %d (%q)", rc, errB.String())
+	if rc, errS := run("--status"); rc != 0 {
+		t.Fatalf("--status should work when ROUTER_DEPTH=1, got %d (%q)", rc, errS)
 	}
 }
 
@@ -174,38 +169,39 @@ func TestSingleTaskScopeAndReject(t *testing.T) {
 	repo, _, binDir := setupCLIEnv(t)
 	_ = os.WriteFile(filepath.Join(repo, "dirty.txt"), []byte("keep me\n"), 0o644)
 	writeExecFile(t, binDir, "grok", "echo 'package main' > escape.txt\necho '{\"content\":\"done\"}'\n")
-	var out, errB bytes.Buffer
-	rc := RunCLI("agent-ooda", []string{"--task", "edit", "--lane", "grok", "--files", "a.go", "--no-review"}, &out, &errB)
-	if rc != 1 || !strings.Contains(out.String(), "SCOPE VIOLATIONS: escape.txt") ||
-		strings.Contains(out.String(), "dirty.txt") {
-		t.Fatalf("unexpected scope violation result rc=%d out=%q err=%q", rc, out.String(), errB.String())
+	run := func(argv ...string) (int, string, string) {
+		var out, errB bytes.Buffer
+		return RunCLI("agent-ooda", argv, &out, &errB), out.String(), errB.String()
+	}
+	if rc, out, errS := run("--task", "edit", "--lane", "grok", "--files", "a.go", "--no-review"); rc != 1 ||
+		!strings.Contains(out, "SCOPE VIOLATIONS: escape.txt") || strings.Contains(out, "dirty.txt") {
+		t.Fatalf("unexpected scope violation result rc=%d out=%q err=%q", rc, out, errS)
 	}
 	_ = os.Remove(filepath.Join(repo, "escape.txt"))
 	writeExecFile(t, binDir, "grok", "echo 'package a\nvar X = 1' > a.go\necho '{\"content\":\"edited a.go\"}'\n")
-	writeExecFile(t, binDir, "mcode", "printf '[P1] bad var\\nVERDICT: REJECT\\n'\n")
-	out, errB = bytes.Buffer{}, bytes.Buffer{}
-	rc = RunCLI("agent-ooda", []string{"--task", "edit a", "--lane", "grok", "--files", "a.go"}, &out, &errB)
-	if rc != 1 || !strings.Contains(out.String(), "[review verdict: REJECT]") {
-		t.Fatalf("expected review REJECT exit 1, got rc=%d out=%q err=%q", rc, out.String(), errB.String())
+	for i, tc := range [][2]string{
+		{"printf '[P1] bad var\\nVERDICT: REJECT\\n'\n", "[review verdict: REJECT]"},
+		{"printf 'Looks plausible without verdict line.\\n'\n", "[review verdict: UNKNOWN]"},
+	} {
+		_ = os.WriteFile(filepath.Join(repo, "a.go"), []byte(string(rune('a'+i))+"\n"), 0o644)
+		writeExecFile(t, binDir, "mcode", tc[0])
+		if rc, out, errS := run("--task", "edit", "--lane", "grok", "--files", "a.go"); rc != 1 ||
+			!strings.Contains(out, tc[1]) {
+			t.Fatalf("expected %s exit 1, rc=%d out=%q err=%q", tc[1], rc, out, errS)
+		}
 	}
-	// Verify inconclusive UNKNOWN review fails closed instead of exiting 0.
-	_ = os.WriteFile(filepath.Join(repo, "a.go"), []byte("package a\nvar X = 2\n"), 0o644)
-	writeExecFile(t, binDir, "mcode", "printf 'Looks plausible without verdict line.\\n'\n")
-	out, errB = bytes.Buffer{}, bytes.Buffer{}
-	rc = RunCLI("agent-ooda", []string{"--task", "edit u", "--lane", "grok", "--files", "a.go"}, &out, &errB)
-	if rc != 1 || !strings.Contains(out.String(), "[review verdict: UNKNOWN]") {
-		t.Fatalf("expected UNKNOWN review fail-closed exit 1, got rc=%d out=%q err=%q", rc, out.String(), errB.String())
-	}
-	// Verify EnsureSlot("task-review") failure fails closed instead of silently skipping review.
 	_ = os.WriteFile(filepath.Join(repo, "a.go"), []byte("package a\nvar X = 2\n"), 0o644)
 	writeExecFile(t, binDir, "mcode", "printf 'VERDICT: ACCEPT\\n'\n")
+	if rc, out, errS := run("--review", repo, "--files", "a.go", "--lane", "mcode"); rc != 0 ||
+		!strings.Contains(out, "[review verdict: ACCEPT") {
+		t.Fatalf("standalone --review --files failed: rc=%d out=%q err=%q", rc, out, errS)
+	}
 	revSlotPath := filepath.Join(os.Getenv("ROUTER_SLOTS_DIR"), "slot-task-review")
 	_ = os.RemoveAll(revSlotPath)
 	_ = os.WriteFile(revSlotPath, []byte("block"), 0o600)
-	out, errB = bytes.Buffer{}, bytes.Buffer{}
-	rc = RunCLI("agent-ooda", []string{"--task", "edit a2", "--lane", "grok", "--files", "a.go"}, &out, &errB)
-	if rc != 1 || !strings.Contains(out.String(), "failing closed") {
-		t.Fatalf("expected EnsureSlot fail-closed exit 1, got rc=%d out=%q err=%q", rc, out.String(), errB.String())
+	if rc, out, errS := run("--task", "edit a2", "--lane", "grok", "--files", "a.go"); rc != 1 ||
+		!strings.Contains(out, "failing closed") {
+		t.Fatalf("expected EnsureSlot fail-closed exit 1, got rc=%d out=%q err=%q", rc, out, errS)
 	}
 }
 
@@ -213,44 +209,46 @@ func TestSkippedReviewFailsClosed(t *testing.T) {
 	_, _, binDir := setupCLIEnv(t)
 	writeExecFile(t, binDir, "grok", "echo 'package a\nvar Y = 1' > a.go\necho '{\"content\":\"edited\"}'\n")
 	var out, errB bytes.Buffer
-	rc := RunCLI("router", []string{"--task", "edit", "--lane", "grok", "--files", "a.go"}, &out, &errB)
-	if rc != 1 || !strings.Contains(out.String(), "[review verdict: SKIPPED]") {
+	if rc := RunCLI("router", []string{"--task", "edit", "--lane", "grok", "--files", "a.go"}, &out, &errB); rc != 1 ||
+		!strings.Contains(out.String(), "[review verdict: SKIPPED]") {
 		t.Fatalf("expected SKIPPED review fail-closed exit 1, got rc=%d out=%q err=%q", rc, out.String(), errB.String())
 	}
 }
 
 func TestOrientCommand(t *testing.T) {
 	_, _, binDir := setupCLIEnv(t)
-	writeExecFile(t, binDir, "grok", "printf '{\"role\":\"assistant\",\"content\":\"architecture root cause\"}\\n'\n")
-	var out, errB bytes.Buffer
-	rc := RunCLI("agent-ooda", []string{"--orient", "trace root cause", "--lane", "grok"}, &out, &errB)
-	if rc != 0 || !strings.Contains(errB.String(), "OODA:ORIENT") || !strings.Contains(out.String(), "root cause") {
-		t.Fatalf("--orient failed rc=%d out=%q err=%q", rc, out.String(), errB.String())
+	run := func(argv ...string) (int, string, string) {
+		var out, errB bytes.Buffer
+		return RunCLI("agent-ooda", argv, &out, &errB), out.String(), errB.String()
 	}
-	for _, tc := range []struct {
-		args []string
-		want string
-	}{
-		{[]string{"--status", "--profile", "conserve"}, "profile:conserve"},
-		{[]string{"--status", "--lane", "grok"}, "act       cli            grok"},
-		{[]string{"--set-stage", "orient=grok", "--local"}, "orient   -> grok"},
-		{[]string{"--status"}, "orient    local          grok"},
+	writeExecFile(t, binDir, "grok", "printf '{\"role\":\"assistant\",\"content\":\"architecture root cause\"}\\n'\n")
+	if rc, out, errS := run("--orient", "trace root cause", "--lane", "grok"); rc != 0 ||
+		!strings.Contains(errS, "OODA:ORIENT") || !strings.Contains(out, "root cause") {
+		t.Fatalf("--orient failed rc=%d out=%q err=%q", rc, out, errS)
+	}
+	for _, tc := range [][]string{
+		{"profile:conserve", "--status", "--profile", "conserve"},
+		{"verify    auto", "--status", "--lane", "grok"},
+		{"orient   -> grok", "--set-stage", "orient=grok", "--local"},
+		{"orient    local          grok", "--status"},
 	} {
-		out.Reset()
-		if sRc := RunCLI("agent-ooda", tc.args, &out, &errB); sRc != 0 || !strings.Contains(out.String(), tc.want) {
-			t.Fatalf("%v rc=%d out=%q err=%q", tc.args, sRc, out.String(), errB.String())
+		if rc, out, errS := run(tc[1:]...); rc != 0 || !strings.Contains(out, tc[0]) {
+			t.Fatalf("%v rc=%d out=%q err=%q", tc[1:], rc, out, errS)
 		}
 	}
-	writeExecFile(t, binDir, "grok", "exit 1\n")
-	writeExecFile(t, binDir, "mcode", "printf 'softpin pivoted\\n'\n")
-	out, errB = bytes.Buffer{}, bytes.Buffer{}
-	if pRc := RunCLI("agent-ooda", []string{"--orient", "why"}, &out, &errB); pRc != 0 ||
-		!strings.Contains(out.String(), "softpin pivoted") {
-		t.Fatalf("expected SoftPin pivot rc=%d out=%q err=%q", pRc, out.String(), errB.String())
+	writeExecFile(t, binDir, "grok", "echo bad > rogue_recon.txt\necho '{\"content\":\"sneaky\"}'\n")
+	if rc, _, errS := run("--recon", "check", "--lane", "grok"); rc != 1 || !strings.Contains(errS, "zero-trust") {
+		t.Fatalf("expected rogue write during --recon to fail closed, rc=%d err=%q", rc, errS)
 	}
-	out.Reset()
-	if rRc := RunCLI("agent-ooda", []string{"--reset-stages", "--local"}, &out, &errB); rRc != 0 ||
-		!strings.Contains(out.String(), "(inherit)") {
-		t.Fatalf("expected (inherit) on local reset, rc=%d out=%q", rRc, out.String())
+	writeExecFile(t, binDir, "grok", "exit 1\n")
+	writeExecFile(t, binDir, "mcode", "printf 'softpin pivoted %s\\n' \"$*\"\n")
+	if rc, out, errS := run("--orient", "why", "--files", "a.go"); rc != 0 || !strings.Contains(out, "softpin pivoted") {
+		t.Fatalf("expected SoftPin pivot rc=%d out=%q err=%q", rc, out, errS)
+	}
+	if rc, out, errS := run("--orient", "why", "--files", "b.go"); rc != 0 || !strings.Contains(out, "b.go") {
+		t.Fatalf("cache leaked across different --files scope: rc=%d out=%q err=%q", rc, out, errS)
+	}
+	if rc, out, _ := run("--reset-stages", "--local"); rc != 0 || !strings.Contains(out, "(inherit)") {
+		t.Fatalf("expected (inherit) on local reset, rc=%d out=%q", rc, out)
 	}
 }

@@ -24,14 +24,8 @@ func (tb *tailBuf) Write(p []byte) (int, error) {
 		limit = maxStreamBytes
 	}
 	tb.buf = append(tb.buf, p...)
-	if len(tb.buf) > limit {
-		start := len(tb.buf) - limit
-		for start < len(tb.buf) && (tb.buf[start]&0xC0) == 0x80 {
-			start++
-		}
-		kept := make([]byte, len(tb.buf)-start)
-		copy(kept, tb.buf[start:])
-		tb.buf = kept
+	if len(tb.buf) > 2*limit {
+		tb.buf = []byte(tb.str())
 	}
 	return len(p), nil
 }
@@ -43,7 +37,19 @@ func (tb *tailBuf) addStr(s string) {
 }
 
 func (tb *tailBuf) str() string {
-	return string(tb.buf)
+	limit := tb.max
+	if limit <= 0 {
+		limit = maxStreamBytes
+	}
+	b := tb.buf
+	if len(b) > limit {
+		start := len(b) - limit
+		for start < len(b) && (b[start]&0xC0) == 0x80 {
+			start++
+		}
+		b = b[start:]
+	}
+	return string(b)
 }
 
 // TaskAttempt captures telemetry for a single provider execution attempt.
@@ -105,13 +111,18 @@ type taskState struct {
 	skipped  string
 }
 
-// UsedLanes returns all attempted lanes plus the final winning lane.
+// UsedLanes returns deduplicated non-empty attempted lanes plus the winning lane.
 func (r TaskRes) UsedLanes() []string {
-	out := make([]string, 0, len(r.Attempts)+1)
+	seen, out := make(map[string]bool, len(r.Attempts)+1), make([]string, 0, len(r.Attempts)+1)
 	for _, a := range r.Attempts {
-		out = append(out, a.Lane)
+		if a.Lane != "" && !seen[a.Lane] {
+			seen[a.Lane], out = true, append(out, a.Lane)
+		}
 	}
-	return append(out, r.Lane)
+	if r.Lane != "" && !seen[r.Lane] {
+		out = append(out, r.Lane)
+	}
+	return out
 }
 
 func (st *taskState) canDeferCap() bool {
@@ -200,57 +211,46 @@ func initTaskState(req TaskReq) (*taskState, error) {
 }
 
 func acquireTaskLease(st *taskState, sel envelope.SelectRes, q *fleet.QuotaState) (*os.File, string, *TaskRes) {
-	maxP := 0
-	if sel.Info != nil && sel.Info.MaxParallel != nil {
-		maxP = *sel.Info.MaxParallel
-	}
-	if maxP <= 0 {
+	if sel.Info == nil || sel.Info.MaxParallel == nil || *sel.Info.MaxParallel <= 0 {
 		return nil, "", nil
 	}
-	var lease *os.File
+	maxP := *sel.Info.MaxParallel
 	if st.canDeferCap() {
-		lease, _, _ = fleet.AcquireParallelLease(sel.Lane, maxP, false, 0)
-		if lease == nil {
-			ex := map[string]bool{sel.Lane: true}
-			for k, v := range st.tried {
-				ex[k] = v
-			}
-			alt, _ := envelope.SelectProvider(envelope.SelectReq{
-				RequestedLane: st.canonReq, Complexity: st.req.Task.Complexity, Quota: q,
-				Exclude: ex, StripeIndex: st.req.StripeIdx, AvoidFamilies: st.avoid,
-				DeferAtCap: true, SoftPin: st.req.SoftPin, ResolveCLI: st.req.ResolveCLI,
-			})
-			if alt.Lane != "" {
-				st.tried[sel.Lane] = true
-				st.notes = append(st.notes, fmt.Sprintf("%s: %d/%d parallel slots busy", sel.Lane, maxP, maxP))
-				return nil, "retry", nil
-			}
-			if st.req.LogWriter != nil {
-				fmt.Fprintf(st.req.LogWriter, "[%s] waiting for free %s slot (%d/%d busy)\n",
-					st.req.Task.ID, sel.Lane, maxP, maxP)
-			}
+		if lease, _, _ := fleet.AcquireParallelLease(sel.Lane, maxP, false, 0); lease != nil {
+			return lease, "", nil
+		}
+		ex := map[string]bool{sel.Lane: true}
+		for k, v := range st.tried {
+			ex[k] = v
+		}
+		alt, _ := envelope.SelectProvider(envelope.SelectReq{
+			RequestedLane: st.canonReq, Complexity: st.req.Task.Complexity, Quota: q,
+			Exclude: ex, StripeIndex: st.req.StripeIdx, AvoidFamilies: st.avoid,
+			DeferAtCap: true, SoftPin: st.req.SoftPin, ResolveCLI: st.req.ResolveCLI,
+		})
+		if alt.Lane != "" {
+			st.tried[sel.Lane] = true
+			st.notes = append(st.notes, fmt.Sprintf("%s: %d/%d parallel slots busy", sel.Lane, maxP, maxP))
+			return nil, "retry", nil
+		}
+		if st.req.LogWriter != nil {
+			fmt.Fprintf(st.req.LogWriter, "[%s] waiting for free %s slot (%d/%d busy)\n",
+				st.req.Task.ID, sel.Lane, maxP, maxP)
 		}
 	}
-	if lease == nil {
-		var timedOut bool
-		var lerr error
-		lease, timedOut, lerr = fleet.AcquireParallelLease(sel.Lane, maxP, true, st.timeout)
-		if timedOut {
-			msg := fmt.Sprintf("<PARALLEL SLOT TIMEOUT after %ds waiting on %s (%d/%d busy)>",
-				st.timeout, sel.Lane, maxP, maxP)
-			return nil, "timeout", &TaskRes{
-				RequestedLane: st.canonReq, Lane: sel.Lane, CLI: sel.Info.CLI,
-				Attempts: st.attempts, ExitCode: -1, TimedOut: true,
-				Output: msg, DurationS: float64(st.timeout),
-			}
+	lease, timedOut, lerr := fleet.AcquireParallelLease(sel.Lane, maxP, true, st.timeout)
+	if timedOut {
+		msg := fmt.Sprintf("<PARALLEL SLOT TIMEOUT after %ds waiting on %s (%d/%d busy)>",
+			st.timeout, sel.Lane, maxP, maxP)
+		return nil, "timeout", &TaskRes{
+			RequestedLane: st.canonReq, Lane: sel.Lane, CLI: sel.Info.CLI,
+			Attempts: st.attempts, ExitCode: -1, TimedOut: true, Output: msg, DurationS: float64(st.timeout),
 		}
-		if lerr != nil {
-			msg := fmt.Sprintf("error: acquire %s parallel lease: %v", sel.Lane, lerr)
-			return nil, "error", &TaskRes{
-				RequestedLane: st.canonReq, Lane: sel.Lane, CLI: sel.Info.CLI,
-				Attempts: st.attempts, ExitCode: 1, Output: msg,
-			}
-		}
+	}
+	if lerr != nil {
+		msg := fmt.Sprintf("error: acquire %s parallel lease: %v", sel.Lane, lerr)
+		return nil, "error", &TaskRes{RequestedLane: st.canonReq, Lane: sel.Lane,
+			CLI: sel.Info.CLI, Attempts: st.attempts, ExitCode: 1, Output: msg}
 	}
 	return lease, "", nil
 }

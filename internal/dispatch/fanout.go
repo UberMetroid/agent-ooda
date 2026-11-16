@@ -73,6 +73,10 @@ func reviewWorktreeTask(
 	task worktree.TaskSpec, wt string, slotNum int,
 	changed, viols []string, opts BatchOpts, authors []string, dc verify.DiffContext,
 ) BatchReview {
+	if len(viols) > 0 {
+		return BatchReview{Model: fleet.ReviewModelEnv(), Verdict: "REJECT", ExitCode: fleet.Ptr(1),
+			Reason: "scope violation", Output: "[P0] scope violation: " + strings.Join(viols, ", ")}
+	}
 	if opts.NoReview || (task.Review != nil && !*task.Review) {
 		return BatchReview{Model: fleet.ReviewModelEnv(), Verdict: "SKIPPED", Reason: "disabled"}
 	}
@@ -81,16 +85,15 @@ func reviewWorktreeTask(
 	}
 	revSlot, err := worktree.EnsureSlot(fmt.Sprintf("review-%d", slotNum))
 	if err != nil {
-		rc := 1
-		return BatchReview{Ran: true, Model: fleet.ReviewModelEnv(), Verdict: "UNKNOWN", ExitCode: &rc, Reason: err.Error()}
+		return BatchReview{Ran: true, Model: fleet.ReviewModelEnv(), Verdict: "UNKNOWN",
+			ExitCode: fleet.Ptr(1), Reason: err.Error()}
 	}
 	res := ExecReview(verify.ReviewReq{TargetDir: wt, SlotDir: revSlot, DiffCtx: dc,
 		TimeoutSec: fleet.ReviewTimeout, ScopeViols: viols, Declared: task.Files, LogWriter: opts.LogWriter,
 		ReqLane: opts.VerifyLane, Model: opts.VerifyModel, Effort: opts.VerifyEffort,
 		AuthorLanes: authors, QuotaPath: opts.QuotaPath, Runner: opts.ReviewRunner, ResolveCLI: opts.ResolveCLI})
-	rc := res.ExitCode
 	return BatchReview{Ran: res.Ran, Lane: res.Lane, Model: res.Model, Verdict: res.Verdict,
-		ExitCode: &rc, Reason: res.Reason, Output: res.Output}
+		ExitCode: fleet.Ptr(res.ExitCode), Reason: res.Reason, Output: tailRunes(res.Output, 4000)}
 }
 
 func dedupMerge(a, b []string) []string {
@@ -126,9 +129,9 @@ func processBatchTask(slotPool chan int, job batchJob, opts BatchOpts) BatchReco
 	rawSkills := dedupMerge(job.task.Skills, worktree.ParseCSVArg(opts.Skills))
 	tCopy.Skills = worktree.ResolveTaskSkills(rawSkills, tCopy.Prompt, tCopy.Files, job.root)
 	excl := dedupMerge(job.task.ExcludeLanes, worktree.ParseCSVArg(opts.ExcludeLanes))
-	stripe := &job.idx
-	if opts.NoStripe {
-		stripe = nil
+	var stripe *int
+	if !opts.NoStripe {
+		stripe = &job.idx
 	}
 	res, runErr := RunTaskWithFallback(TaskReq{Task: tCopy, Worktree: job.wt, SlotDir: slotDir,
 		Lane: opts.Lane, Model: opts.Model, Effort: opts.Effort, TimeoutRaw: opts.Timeout, QuotaPath: opts.QuotaPath,
@@ -137,18 +140,18 @@ func processBatchTask(slotPool chan int, job batchJob, opts BatchOpts) BatchReco
 	if runErr != nil {
 		res = TaskRes{ExitCode: -1, Output: runErr.Error(), RequestedLane: opts.Lane}
 	}
-	var changed []string
 	var dc verify.DiffContext
-	stat := worktree.DiffStat(job.wt)
 	if job.baseRef != "" && verify.HeadRef(job.wt) != job.baseRef {
 		dc = verify.CollectDiffContext(job.wt, false, job.baseRef)
-		changed, stat = dc.ChangedFiles, dc.DiffStat
 	} else {
-		changed = worktree.ChangedFilesIn(job.wt, nil)
 		dc = verify.CollectDiffContext(job.wt, false)
 	}
+	changed, stat := dc.ChangedFiles, dc.DiffStat
 	viols := worktree.FindScopeViolations(changed, job.task.Files)
-	rev := reviewWorktreeTask(job.task, job.wt, slotNum, changed, viols, opts, res.UsedLanes(), dc)
+	rev := BatchReview{Model: fleet.ReviewModelEnv(), Verdict: "SKIPPED", Reason: "worker exited non-zero"}
+	if res.ExitCode == 0 {
+		rev = reviewWorktreeTask(job.task, job.wt, slotNum, changed, viols, opts, res.UsedLanes(), dc)
+	}
 	relWT := filepath.Base(job.wt)
 	if r, rerr := filepath.Rel(job.root, job.wt); rerr == nil {
 		relWT = r
@@ -157,7 +160,7 @@ func processBatchTask(slotPool chan int, job batchJob, opts BatchOpts) BatchReco
 		RequestedLane: res.RequestedLane, Lane: res.Lane, CLI: res.CLI, Model: res.Model, Effort: res.Effort,
 		FallbackFrom: res.FallbackFrom, Attempts: res.Attempts, ExitCode: res.ExitCode, TimedOut: res.TimedOut,
 		DurationS: res.DurationS, ChangedFiles: changed, ScopeViolations: viols, DiffStat: stat,
-		Output: res.Output, Review: rev}
+		Output: tailRunes(res.Output, 4000), Review: rev}
 }
 
 func runBatchWorkers(root string, tasks []worktree.TaskSpec, opts BatchOpts, jobs int, outW io.Writer) []BatchRecord {

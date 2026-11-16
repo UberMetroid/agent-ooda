@@ -35,7 +35,6 @@ const (
 var (
 	ansiRe        = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	BrailleFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-	OrientFrames  = []string{"◐", "◓", "◑", "◒"}
 	IgnoredSkills = copyIgnoredSkills()
 )
 
@@ -54,22 +53,6 @@ func copyIgnoredSkills() map[string]bool {
 	return out
 }
 
-// TokRateColor maps live tok/s throughput across a 5-band thermal gradient.
-func TokRateColor(tokS float64) string {
-	switch {
-	case tokS >= 180:
-		return CTokRedHot
-	case tokS >= 110:
-		return CTokHot
-	case tokS >= 60:
-		return CTokWarm
-	case tokS >= 25:
-		return CTokCruise
-	default:
-		return CTokCold
-	}
-}
-
 // Colorize wraps text in ANSI color sequences unless color output is disabled.
 func Colorize(text, code string, useColor bool) string {
 	if !useColor {
@@ -78,9 +61,25 @@ func Colorize(text, code string, useColor bool) string {
 	return code + text + Reset
 }
 
-// VisibleLen returns printable rune width after stripping ANSI SGR escapes.
+// VisibleLen returns printable rune width after skipping ANSI CSI escapes without allocations.
 func VisibleLen(text string) int {
-	return utf8.RuneCountInString(ansiRe.ReplaceAllString(text, ""))
+	n := 0
+	for i := 0; i < len(text); {
+		if text[i] == 0x1b && i+1 < len(text) && text[i+1] == '[' {
+			i += 2
+			for i < len(text) && (text[i] < 0x40 || text[i] > 0x7e) {
+				i++
+			}
+			if i < len(text) {
+				i++
+			}
+			continue
+		}
+		_, sz := utf8.DecodeRuneInString(text[i:])
+		i += sz
+		n++
+	}
+	return n
 }
 
 // TruncateANSI clips ANSI-colored text to at most maxWidth visible runes.

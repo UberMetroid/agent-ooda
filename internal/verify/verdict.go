@@ -2,15 +2,22 @@ package verify
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agent-ooda/internal/worktree"
 )
 
 const pTagPat = `\[P[0-3](?:-[0-3])?\]`
 
 var (
+	docExts = map[string]bool{
+		".md": true, ".html": true, ".css": true, ".toml": true, ".yaml": true, ".yml": true, ".json": true, ".txt": true,
+	}
 	acceptLineRe = regexp.MustCompile(
 		`(?i)^\s*(?:\*\*|__)?VERDICT(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*ACCEPT\s*(?:\*\*|__)?\.?\s*$`,
 	)
@@ -81,9 +88,9 @@ func BuildReviewPrompt(
 	}
 	return fmt.Sprintf(
 		"Read-only independent code review of %s changes in %s. "+
-			"The complete git status, diff stat, and patch are provided inline below. "+
-			"Do NOT modify, create, or delete any files, and do NOT execute shell commands "+
-			"or crawl unrelated repository files.\n\n"+
+			"The git status, diff stat, and prioritized patch are inline below. "+
+			"Do NOT modify/create/delete files or run shell/node/build commands; "+
+			"if the patch is capped, read <=8 omitted files and reserve steps for VERDICT.\n\n"+
 			"Declared files in scope: %s\n"+
 			"Detected scope violations: %s\n"+
 			"git status --short:\n%s\n\n"+
@@ -98,7 +105,29 @@ func BuildReviewPrompt(
 	)
 }
 
-// BuildNativeReviewNote builds the bounded contract + patch note for mcode native review.
+func untrackedOnlyDiff(diff string) string {
+	if !strings.Contains(diff, "--- /dev/null") && !strings.Contains(diff, "new file mode ") &&
+		!strings.Contains(diff, "Binary files /dev/null") {
+		return "(tracked changes inspected natively by mcode)"
+	}
+	var b strings.Builder
+	for _, part := range strings.Split("\n"+diff, "\ndiff --git ")[1:] {
+		if strings.Contains(part, "--- /dev/null") || strings.Contains(part, "new file mode ") ||
+			strings.Contains(part, "Binary files /dev/null") {
+			b.WriteString("diff --git ")
+			b.WriteString(part)
+			if !strings.HasSuffix(part, "\n") {
+				b.WriteByte('\n')
+			}
+		}
+	}
+	if b.Len() == 0 {
+		return "(tracked changes inspected natively by mcode)"
+	}
+	return b.String()
+}
+
+// BuildNativeReviewNote builds the bounded contract + untracked hunks for mcode native review.
 func BuildNativeReviewNote(
 	targetDir string, dc DiffContext, scopeViol, declared []string,
 ) string {
@@ -118,13 +147,10 @@ func BuildNativeReviewNote(
 	if stat == "" {
 		stat = "(no tracked diff)"
 	}
-	diff := dc.Diff
-	if diff == "" {
-		diff = "(empty)"
-	}
+	diff := untrackedOnlyDiff(dc.Diff)
 	return fmt.Sprintf(
 		"Read-only independent code review of %s changes in %s. "+
-			"The assembled patch below includes untracked files as synthetic hunks. "+
+			"Tracked diffs are audited natively by mcode; untracked files appear below as synthetic hunks. "+
 			"You may read surrounding lines of touched files if needed, but do NOT modify, "+
 			"create, or delete any files; do NOT run state-mutating or arbitrary shell "+
 			"commands; and do NOT crawl unrelated repository files.\n\n"+
@@ -132,9 +158,96 @@ func BuildNativeReviewNote(
 			"Detected scope violations: %s\n"+
 			"git status --short:\n%s\n\n"+
 			"git diff --stat:\n%s\n\n"+
-			"Patch:\n%s\n\n"+
+			"Untracked hunks:\n%s\n\n"+
 			"Tag any findings with [P0], [P1], [P2], or [P3] concisely. "+
 			"Final line MUST be exactly: VERDICT: ACCEPT  or  VERDICT: REJECT - <reason>",
 		dc.Source, targetDir, scopeNote, violNote, status, stat, diff,
 	)
+}
+
+func diffChunkMeta(chunk string, declared map[string]bool) (string, int) {
+	hdr := strings.SplitN(chunk, "\n", 2)[0]
+	rel := ""
+	if idx := strings.LastIndex(hdr, " b/"); idx >= 0 {
+		rel = strings.TrimSpace(hdr[idx+3:])
+	}
+	if declared[rel] {
+		return rel, 0
+	}
+	base := strings.ToLower(filepath.Base(rel))
+	ext := strings.ToLower(filepath.Ext(base))
+	if base == "go.sum" || base == "package-lock.json" || base == "pnpm-lock.yaml" || base == "cargo.lock" ||
+		ext == ".lock" || ext == ".sum" || ext == ".svg" ||
+		strings.HasSuffix(base, ".min.js") || strings.HasSuffix(base, ".min.css") {
+		return rel, 3
+	}
+	if docExts[ext] {
+		return rel, 2
+	}
+	return rel, 1
+}
+
+// PrioritizeDiff caps rawDiff at maxRunes while keeping declared & code files ahead of docs/locks.
+func PrioritizeDiff(rawDiff string, declared []string, maxRunes int) string {
+	if maxRunes <= 0 || utf8.RuneCountInString(rawDiff) <= maxRunes {
+		return rawDiff
+	}
+	if !strings.HasPrefix(rawDiff, "diff --git ") && !strings.Contains(rawDiff, "\ndiff --git ") {
+		return string([]rune(rawDiff)[:maxRunes]) + "\n... <diff capped; inspect files in cwd if needed> ...\n"
+	}
+	declSet := make(map[string]bool, len(declared))
+	for _, d := range declared {
+		if n, err := worktree.NormalizeRelPath(d); err == nil && n != "" {
+			declSet[n] = true
+		}
+	}
+	parts := strings.Split("\n"+rawDiff, "\ndiff --git ")
+	type sec struct {
+		idx, score int
+		rel, body  string
+	}
+	items := make([]sec, 0, len(parts)-1)
+	for i, p := range parts[1:] {
+		full := "diff --git " + p
+		if !strings.HasSuffix(full, "\n") {
+			full += "\n"
+		}
+		rel, sc := diffChunkMeta(full, declSet)
+		items = append(items, sec{idx: i, score: sc, rel: rel, body: full})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].score < items[j].score ||
+			(items[i].score == items[j].score && items[i].idx < items[j].idx)
+	})
+	var b strings.Builder
+	if pre := strings.TrimSpace(strings.TrimPrefix(parts[0], "\n")); pre != "" {
+		b.WriteString(pre + "\n")
+	}
+	used, omitted := utf8.RuneCountInString(b.String()), []string(nil)
+	for _, it := range items {
+		rc := utf8.RuneCountInString(it.body)
+		if used+rc <= maxRunes {
+			b.WriteString(it.body)
+			used += rc
+			continue
+		}
+		tag := it.rel
+		if rem := maxRunes - used; rem >= 512 {
+			s := string([]rune(it.body)[:rem])
+			if nl := strings.LastIndexByte(s, '\n'); nl > 0 {
+				s = s[:nl+1]
+			}
+			b.WriteString(s)
+			used, tag = maxRunes, tag+" (partial)"
+		}
+		if it.rel != "" {
+			omitted = append(omitted, tag)
+		}
+	}
+	note := "\n... <diff capped; inspect remaining lines in cwd if needed> ...\n"
+	if len(omitted) > 0 {
+		note = fmt.Sprintf("\n... <diff capped at %d runes; omitted: %s — inspect in cwd if needed> ...\n",
+			maxRunes, strings.Join(omitted, ", "))
+	}
+	return b.String() + note
 }

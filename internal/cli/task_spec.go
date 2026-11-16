@@ -9,13 +9,17 @@ import (
 	"github.com/UberMetroid/agent-ooda/internal/dispatch"
 	"github.com/UberMetroid/agent-ooda/internal/envelope"
 	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agent-ooda/internal/verify"
 	"github.com/UberMetroid/agent-ooda/internal/worktree"
 )
 
 func buildTaskSpec(
 	id, rawPrompt, comp string, files []string, opts CLIOpts, cwd string, ro bool,
 ) worktree.TaskSpec {
-	skills := worktree.ResolveTaskSkills(worktree.ParseCSVArg(opts.Skills), rawPrompt, files, cwd)
+	skills := worktree.ParseCSVArg(opts.Skills)
+	if !ro || len(skills) > 0 {
+		skills = worktree.ResolveTaskSkills(skills, rawPrompt, files, cwd)
+	}
 	prompt := rawPrompt
 	if ro {
 		if id == "orient" {
@@ -58,7 +62,11 @@ func printStageMatrix(w io.Writer, cwd string, opts CLIOpts, q *fleet.QuotaState
 		"verify":  "Cross-model diff review (--review / post-task)",
 	}
 	for _, st := range fleet.StageNames {
-		sp := cliResolveStage(st, opts, cwd, q)
+		stOpts := opts
+		if st == "verify" && opts.Review == nil && !strings.EqualFold(opts.Complexity, "review") {
+			stOpts.Lane, stOpts.LaneSet, stOpts.Model, stOpts.Effort = "", false, "", ""
+		}
+		sp := cliResolveStage(st, stOpts, cwd, q)
 		mode := sp.Source
 		route := "auto (quota-aware)"
 		if sp.Lane != "auto" {
@@ -117,14 +125,17 @@ func handleStageFlags(opts CLIOpts, outW, errW io.Writer) (int, bool) {
 	return 0, true
 }
 
-// DoOrient runs a read-only root-cause and architecture orientation pass.
-func DoOrient(opts CLIOpts, outW, errW io.Writer) int {
+func runReadOnlyStage(stage, prompt string, opts CLIOpts, outW, errW io.Writer) int {
+	slotName, banner, defComp := "recon", "OBSERVE", "recon"
+	if stage == "orient" {
+		slotName, banner, defComp = "orient", "ORIENT", "deep"
+	}
 	_, _, files, err := validateRunArgs(opts, fleet.DefaultTimeout, true)
 	if err != nil {
 		fmt.Fprintln(errW, err)
 		return 2
 	}
-	slot, err := worktree.EnsureSlot("orient")
+	slot, err := worktree.EnsureSlot(slotName)
 	if err != nil {
 		fmt.Fprintln(errW, err)
 		return 1
@@ -133,28 +144,54 @@ func DoOrient(opts CLIOpts, outW, errW io.Writer) int {
 	if !ok {
 		return 1
 	}
-	comp := nonEmptyOr(opts.Complexity, "deep")
-	st := cliResolveStage("orient", opts, cwd, nil)
+	comp := nonEmptyOr(opts.Complexity, defComp)
+	st := cliResolveStage(stage, opts, cwd, nil)
 	opts.Lane, opts.Model, opts.Effort = st.Lane, st.Model, st.Effort
-	task := buildTaskSpec("orient", *opts.Orient, comp, files, opts, cwd, true)
+	task := buildTaskSpec(slotName, prompt, comp, files, opts, cwd, true)
+	preSnap := verify.SnapshotRepo(cwd)
+	excl := worktree.ParseCSVArg(opts.ExcludeLanes)
+	skBlocks, _ := worktree.LoadSkillBlocks(task.Skills, cwd)
+	cPay := fmt.Sprintf("%s|%s|%s|%t|%s|%v|%t|%v|%v|%s|%s", st.Lane, st.Model, st.Effort,
+		st.Source != "cli", comp, excl, opts.NoPivot, task.Files, task.Skills, skBlocks, task.Prompt)
+	cKey := verify.CacheKey(stage, cPay, preSnap)
+	if hit, ok := verify.LoadStageCache(cKey, opts.NoCache); ok {
+		fmt.Fprintf(errW, "[OODA:%s lane=%s model=%s effort=%s 0.0s exit=0 cache=hit]\n",
+			banner, hit.Lane, hit.Model, nonEmptyOr(hit.Effort, "default"))
+		fmt.Fprintln(outW, hit.Output)
+		return 0
+	}
 	res, err := dispatch.RunTaskWithFallback(dispatch.TaskReq{
-		Task: task, Worktree: cwd, SlotDir: slot, Lane: st.Lane, Model: st.Model,
-		Effort: st.Effort, TimeoutRaw: opts.Timeout,
-		Exclude: worktree.ParseCSVArg(opts.ExcludeLanes), NoPivot: opts.NoPivot, SoftPin: st.Source != "cli", LogWriter: errW,
+		Task: task, Worktree: cwd, SlotDir: slot, Lane: st.Lane, Model: st.Model, Effort: st.Effort,
+		TimeoutRaw: opts.Timeout, Exclude: excl, NoPivot: opts.NoPivot, SoftPin: st.Source != "cli", LogWriter: errW,
 	})
 	if err != nil {
 		fmt.Fprintln(errW, err)
 		return 2
 	}
-	fmt.Fprintf(errW, "[OODA:ORIENT lane=%s model=%s effort=%s %.1fs exit=%d]\n",
-		res.Lane, res.Model, res.Effort, res.DurationS, res.ExitCode)
+	fmt.Fprintf(errW, "[OODA:%s lane=%s model=%s effort=%s %.1fs exit=%d]\n",
+		banner, res.Lane, res.Model, res.Effort, res.DurationS, res.ExitCode)
 	if res.Output != "" {
 		fmt.Fprintln(outW, res.Output)
 	}
-	if res.ExitCode >= 0 {
+	if drift := verify.SnapshotDrift(preSnap, verify.SnapshotRepo(cwd)); len(drift) > 0 {
+		fmt.Fprintf(errW, "[P0] zero-trust: read-only %s modified files: %s\n", slotName, strings.Join(drift, ", "))
+		return 1
+	}
+	if res.ExitCode == 0 && !res.TimedOut {
+		verify.SaveStageCache(cKey, verify.CacheEntry{
+			Stage: stage, Lane: res.Lane, Model: res.Model, Effort: res.Effort, Output: res.Output,
+		}, opts.NoCache)
+		return 0
+	}
+	if res.ExitCode > 0 {
 		return res.ExitCode
 	}
 	return 1
+}
+
+// DoOrient runs a read-only root-cause and architecture orientation pass.
+func DoOrient(opts CLIOpts, outW, errW io.Writer) int {
+	return runReadOnlyStage("orient", *opts.Orient, opts, outW, errW)
 }
 
 func printDiscoveryFooter(
@@ -195,4 +232,18 @@ func printDiscoveryFooter(
 		}
 		fmt.Fprintf(w, "  %-10s : %s%s\n", s.Name, nonEmptyOr(s.Desc, "(no description)"), tag)
 	}
+}
+
+func tuiLaneModels(lane string, lc envelope.LaneCap) []string {
+	out, seen := []string{"cli-default (auto/configured)"}, map[string]bool{}
+	for _, m := range lc.Models {
+		if m != "" && !fleet.GeminiModelRe.MatchString(m) && !seen[m] {
+			seen[m] = true
+			out = append(out, m)
+		}
+	}
+	if len(out) == 1 && lane != "auto" && lc.EffectiveModel != "" && !fleet.GeminiModelRe.MatchString(lc.EffectiveModel) {
+		out = append(out, lc.EffectiveModel)
+	}
+	return out
 }

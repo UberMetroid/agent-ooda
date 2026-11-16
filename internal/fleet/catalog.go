@@ -25,7 +25,7 @@ func UsageErr(format string, args ...any) error {
 }
 
 const (
-	Version             = "2.1.1"
+	Version             = "2.2.0"
 	QuotaSchemaVersion  = 9
 	CornerWindowSecs    = 5400
 	SoonWakeSecs        = 2700
@@ -37,10 +37,10 @@ const (
 	ReviewTimeout       = 240
 	DefaultAgyOpusModel = "claude-opus-5-5-high"
 	DefaultFusionModel  = "fusion-claude-opus-5-5-high-sidekick-swe-2-medium"
-	ReconPrefix         = "READ-ONLY RECONNAISSANCE: Do NOT modify, create, or delete any files. " +
+	ReconPrefix         = "READ-ONLY RECONNAISSANCE: Do NOT modify, create, or delete files, and do NOT run builds or tests. " +
 		"Answer concisely with exact file paths, line numbers, and findings:\n\n"
-	OrientPrefix = "READ-ONLY ORIENT & ARCHITECTURE: Do NOT modify, create, or delete any files. " +
-		"Analyze root causes, invariants, coupling, trade-offs, and propose a concrete step-by-step plan:\n\n"
+	OrientPrefix = "READ-ONLY ORIENT & ARCHITECTURE: Do NOT modify, create, or delete files, and do NOT run builds or tests. " +
+		"Inspect only relevant files and propose a concise root-cause & step-by-step plan:\n\n"
 )
 
 var (
@@ -142,6 +142,7 @@ type ProviderConfig struct {
 	CycleCostBudget  *float64 `json:"cycle_cost_budget_usd"`
 	ConsecCooldowns  int      `json:"consec_cooldowns,omitempty"`
 	LastProbedAt     *string  `json:"last_probed_at,omitempty"`
+	HealthEWMA       *float64 `json:"health_ewma,omitempty"`
 }
 
 // StageRoute pins or defaults one OODA stage (observe, orient, act, verify).

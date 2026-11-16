@@ -163,6 +163,14 @@ func RecordUsage(name, prompt, output string, exp *ExportUsage, qPath string) (*
 		if exp != nil && exp.CostUSD != nil {
 			entry.CycleCostUSD = math.Round((entry.CycleCostUSD+*exp.CostUSD)*1e6) / 1e6
 		}
+		sH, pH := 1.0, 1.0
+		if exp != nil && exp.Failed {
+			sH = 0
+		}
+		if entry.HealthEWMA != nil {
+			pH = *entry.HealthEWMA
+		}
+		entry.HealthEWMA = Ptr(math.Round((0.65*pH+0.35*sH)*1000) / 1000)
 		var hit string
 		if entry.CycleTokenBudget != nil && entry.CycleTokens >= *entry.CycleTokenBudget {
 			hit = fmt.Sprintf("Cycle token budget (%d) reached", *entry.CycleTokenBudget)
@@ -210,16 +218,15 @@ func ConfigureCycle(p CyclePatch) (string, *ProviderConfig, error) {
 		if p.Hours != nil {
 			applyCycleHours(entry, *p.Hours)
 		}
-		if p.TokenBudget != nil && *p.TokenBudget > 0 {
-			entry.CycleTokenBudget = Ptr(*p.TokenBudget)
-		} else if p.TokenBudget != nil {
-			entry.CycleTokenBudget = nil
+		setInt := func(d **int, v *int) {
+			if v != nil && *v > 0 {
+				*d = Ptr(*v)
+			} else if v != nil {
+				*d = nil
+			}
 		}
-		if p.MaxParallel != nil && *p.MaxParallel > 0 {
-			entry.MaxParallel = Ptr(*p.MaxParallel)
-		} else if p.MaxParallel != nil {
-			entry.MaxParallel = nil
-		}
+		setInt(&entry.CycleTokenBudget, p.TokenBudget)
+		setInt(&entry.MaxParallel, p.MaxParallel)
 		if p.CostBudget != nil && *p.CostBudget > 0 {
 			entry.CycleCostBudget = Ptr(*p.CostBudget)
 		} else if p.CostBudget != nil {
@@ -240,7 +247,7 @@ func ConfigureCycle(p CyclePatch) (string, *ProviderConfig, error) {
 		}
 		if p.ResetNow {
 			entry.CycleRuns, entry.CycleTokens, entry.CycleTokensExact, entry.CycleCostUSD = 0, 0, false, 0
-			entry.CycleStartedAt, entry.NextResetAt, entry.Status = nil, nil, "active"
+			entry.CycleStartedAt, entry.NextResetAt, entry.Status, entry.HealthEWMA = nil, nil, "active", nil
 			entry.OuterTokens, entry.OuterStartedAt, entry.OuterResetAt, entry.ConsecCooldowns = 0, nil, nil, 0
 			entry.CooldownUntil, entry.Reason, entry.ManualDisable = nil, nil, false
 		}

@@ -3,6 +3,7 @@ package verify
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,18 +35,18 @@ type ReviewRunner func(req ReviewExecReq) ReviewExecRes
 
 // ReviewReq configures calibrated cross-model diff review with fallback.
 type ReviewReq struct {
-	TargetDir, SlotDir, AuthorLane    string
-	ReqLane, Model, Effort            string
-	QuotaPath                         string
-	DiffCtx                           DiffContext
-	ScopeViols, Declared, AuthorLanes []string
-	TimeoutSec                        int
-	LogWriter                         io.Writer
-	Exclude                           map[string]bool
-	Runner                            ReviewRunner
-	ResolveCLI                        func(string) string
-	OnStart                           func(mode, tid, lane, cli, mod, eff string, sk []string, cwd string) string
-	OnFinish                          func(mark, mode, lane, mod, eff string, sk []string, rc int, dur float64)
+	TargetDir, SlotDir, AuthorLane, ReqLane string
+	Model, Effort, QuotaPath                string
+	NoCache                                 bool
+	DiffCtx                                 DiffContext
+	ScopeViols, Declared, AuthorLanes       []string
+	TimeoutSec                              int
+	LogWriter                               io.Writer
+	Exclude                                 map[string]bool
+	Runner                                  ReviewRunner
+	ResolveCLI                              func(string) string
+	OnStart                                 func(mode, tid, lane, cli, mod, eff string, sk []string, cwd string) string
+	OnFinish                                func(mark, mode, lane, mod, eff string, sk []string, rc int, dur float64)
 }
 
 // ReviewResult reports final review verdict, chosen lane, model, and output.
@@ -56,28 +57,28 @@ type ReviewResult struct {
 	Output                       string
 }
 
+func hasAltReviewer(q *fleet.QuotaState, tried, avoid map[string]bool, cur string, res func(string) string) bool {
+	ex := map[string]bool{cur: true}
+	maps.Copy(ex, tried)
+	alt, _ := envelope.SelectProvider(envelope.SelectReq{
+		RequestedLane: "auto", Complexity: "review", Quota: q, Exclude: ex,
+		AvoidFamilies: avoid, StrictAvoid: true, DeferAtCap: true, ResolveCLI: res,
+	})
+	return alt.Lane != "" && !avoid[envelope.ModelFamily(alt.Lane)]
+}
+
 func reviewLease(
 	prov string, info *fleet.ProviderConfig, q *fleet.QuotaState,
 	tried, avoid map[string]bool, timeout int, req ReviewReq,
 ) (*os.File, bool) {
-	maxP := 0
-	if info != nil && info.MaxParallel != nil {
-		maxP = *info.MaxParallel
-	}
-	if maxP <= 0 {
+	if info == nil || info.MaxParallel == nil || *info.MaxParallel <= 0 {
 		return nil, false
 	}
-	lease, _, _ := fleet.AcquireParallelLease(prov, maxP, false, 0)
-	if lease != nil {
+	maxP := *info.MaxParallel
+	if lease, _, _ := fleet.AcquireParallelLease(prov, maxP, false, 0); lease != nil {
 		return lease, false
 	}
-	ex := copyBoolMap(tried)
-	ex[prov] = true
-	alt, _ := envelope.SelectProvider(envelope.SelectReq{
-		RequestedLane: "auto", Complexity: "review", Quota: q, Exclude: ex,
-		AvoidFamilies: avoid, StrictAvoid: true, DeferAtCap: true, ResolveCLI: req.ResolveCLI,
-	})
-	if alt.Lane != "" {
+	if hasAltReviewer(q, tried, avoid, prov, req.ResolveCLI) {
 		tried[prov] = true
 		return nil, true
 	}
@@ -92,31 +93,18 @@ func reviewLease(
 	return lease, false
 }
 
-func copyBoolMap(src map[string]bool) map[string]bool {
-	out := make(map[string]bool, len(src)+1)
-	for k, v := range src {
-		if v {
-			out[k] = true
-		}
-	}
-	return out
-}
-
 func resolveReviewModel(prov string, req ReviewReq) string {
 	if req.Model != "" {
 		return req.Model
 	}
-	if prov == "mcode" {
-		if envMod := fleet.ReviewModelEnv(); envMod != "" && envMod != "cli-default" {
-			return envMod
-		}
+	if envMod := fleet.ReviewModelEnv(); prov == "mcode" && envMod != "" && envMod != "cli-default" {
+		return envMod
 	}
 	return ""
 }
 
 func invokeReviewer(
-	req ReviewReq, sel envelope.SelectRes, lease *os.File,
-	prompt, scopeNote string, nativeEligible bool,
+	req ReviewReq, sel envelope.SelectRes, lease *os.File, prompt string,
 ) (ReviewExecRes, string) {
 	rawM, rawEff := resolveReviewModel(sel.Lane, req), req.Effort
 	if prim := strings.Split(req.ReqLane, ",")[0]; req.ReqLane != "" && req.ReqLane != "auto" {
@@ -140,26 +128,23 @@ func invokeReviewer(
 		fmt.Fprintf(req.LogWriter, "▸ [OODA:ACT verify] agent=%s (%s:%s) | effort=%s\n",
 			sel.Lane, sel.Info.CLI, filepath.Base(spec.DisplayModel), spec.DisplayEffort)
 	}
-	marker, revExit, start := "", -1, time.Now()
+	marker, dm, de, revExit, start := "", spec.DisplayModel, spec.DisplayEffort, -1, time.Now()
 	defer func() {
 		fleet.ReleaseParallelLease(lease)
 		if req.OnFinish != nil {
-			req.OnFinish(marker, "act:verify", sel.Lane, spec.DisplayModel, spec.DisplayEffort,
-				nil, revExit, time.Since(start).Seconds())
+			req.OnFinish(marker, "act:verify", sel.Lane, dm, de, nil, revExit, time.Since(start).Seconds())
 		}
 	}()
 	if req.OnStart != nil {
-		marker = req.OnStart("act:verify", taskID, sel.Lane, sel.Info.CLI,
-			spec.DisplayModel, spec.DisplayEffort, nil, req.TargetDir)
+		marker = req.OnStart("act:verify", taskID, sel.Lane, sel.Info.CLI, dm, de, nil, req.TargetDir)
 	}
 	rmode, callPrompt := "inline", prompt
-	if sel.Lane == "mcode" && nativeEligible {
-		rmode, callPrompt = "native", scopeNote
+	if sel.Lane == "mcode" && req.DiffCtx.Source == "working-tree" && len(req.DiffCtx.Diff) <= NativeReviewMaxBytes {
+		rmode, callPrompt = "native", BuildNativeReviewNote(req.TargetDir, req.DiffCtx, req.ScopeViols, req.Declared)
 	}
 	res := req.Runner(ReviewExecReq{
-		Provider: sel.Lane, Info: sel.Info, CLIPath: sel.CLIPath,
-		Model: spec.ArgvModel, Effort: spec.ArgvEffort, Prompt: callPrompt,
-		TargetDir: req.TargetDir, SlotDir: req.SlotDir, TaskID: taskID,
+		Provider: sel.Lane, Info: sel.Info, CLIPath: sel.CLIPath, Model: spec.ArgvModel, Effort: spec.ArgvEffort,
+		Prompt: callPrompt, TargetDir: req.TargetDir, SlotDir: req.SlotDir, TaskID: taskID,
 		TimeoutSec: max(1, req.TimeoutSec), ReviewMode: rmode, MarkerPath: marker,
 	})
 	revExit = res.ExitCode
@@ -170,20 +155,37 @@ func shouldRetryReview(
 	sel envelope.SelectRes, res ReviewExecRes, verdict string,
 	q *fleet.QuotaState, tried, avoid map[string]bool, req ReviewReq,
 ) bool {
-	if verdict == "REJECT" || (!res.TimedOut && res.ExitCode == 0 && verdict != "UNKNOWN") {
+	if verdict == "REJECT" || (!res.TimedOut && res.ExitCode == 0 && verdict != "UNKNOWN") ||
+		!hasAltReviewer(q, tried, avoid, sel.Lane, req.ResolveCLI) {
 		return false
 	}
-	ex := copyBoolMap(tried)
-	ex[sel.Lane] = true
-	nxt, _ := envelope.SelectProvider(envelope.SelectReq{
-		RequestedLane: "auto", Complexity: "review", Quota: q, Exclude: ex,
-		AvoidFamilies: avoid, StrictAvoid: true, DeferAtCap: true, ResolveCLI: req.ResolveCLI,
-	})
-	if nxt.Lane == "" || avoid[envelope.ModelFamily(nxt.Lane)] {
+	tried[sel.Lane], avoid[envelope.ModelFamily(sel.Lane)] = true, true
+	if req.LogWriter != nil {
+		fmt.Fprintf(req.LogWriter, "[verify] retrying off-family after %s (exit=%d timedOut=%t verdict=%s)\n",
+			sel.Lane, res.ExitCode, res.TimedOut, verdict)
+	}
+	return true
+}
+
+func handleReviewErr(
+	lane, prompt, verdict string, res ReviewExecRes, qPath string, tried map[string]bool,
+) bool {
+	u := fleet.ExportUsage{}
+	if res.ExportInfo != nil {
+		u = *res.ExportInfo
+	}
+	u.Failed = res.ExitCode != 0 || res.TimedOut || verdict == "UNKNOWN"
+	_, _ = fleet.RecordUsage(lane, prompt, res.Output, &u, qPath)
+	qHit := fleet.HasErrorPattern(res.Output, res.ExitCode, fleet.QuotaErrorPats)
+	if !qHit && !fleet.HasErrorPattern(res.Output, res.ExitCode, fleet.AuthErrorPats) {
 		return false
 	}
-	tried[sel.Lane] = true
-	avoid[envelope.ModelFamily(sel.Lane)] = true
+	kind := "auth"
+	if qHit {
+		kind = "quota/rate-limit"
+	}
+	_, _ = fleet.MarkProviderCooldown(lane, "Auto-detected "+kind+" error on "+fleet.NowISO(), qHit, res.Output, qPath)
+	tried[lane] = true
 	return true
 }
 
@@ -192,19 +194,26 @@ func RunReview(req ReviewReq) ReviewResult {
 	if req.Runner == nil {
 		return ReviewResult{Verdict: "SKIPPED", Reason: "no review runner configured"}
 	}
+	if len(req.ScopeViols) > 0 {
+		msg := "[P0] scope violation: " + strings.Join(req.ScopeViols, ", ") + "\nVERDICT: REJECT - scope violation"
+		return ReviewResult{Verdict: "REJECT", ExitCode: 1, Reason: "scope violation", Output: msg}
+	}
 	if req.TimeoutSec <= 0 {
 		req.TimeoutSec = fleet.ReviewTimeout
 	}
-	timeout, avoid := req.TimeoutSec, map[string]bool{}
+	avoid, tried, preSnap := map[string]bool{}, make(map[string]bool), SnapshotRepo(req.TargetDir, req.QuotaPath)
+	maps.Copy(tried, req.Exclude)
 	for _, a := range append([]string{req.AuthorLane}, req.AuthorLanes...) {
 		if a != "" {
 			avoid[envelope.ModelFamily(a)] = true
 		}
 	}
-	tried := copyBoolMap(req.Exclude)
+	req.DiffCtx.Diff = PrioritizeDiff(req.DiffCtx.Diff, req.Declared, MaxDiffRunes)
 	prompt := BuildReviewPrompt(req.TargetDir, req.DiffCtx, req.ScopeViols, req.Declared)
-	note := BuildNativeReviewNote(req.TargetDir, req.DiffCtx, req.ScopeViols, req.Declared)
-	native := req.DiffCtx.Source == "working-tree" && len(req.DiffCtx.Diff) <= NativeReviewMaxBytes
+	cKey, hit, ok := TryReviewCache(req, prompt, preSnap)
+	if ok {
+		return hit
+	}
 	for {
 		q, qerr := fleet.LoadQuota(req.QuotaPath)
 		if qerr != nil {
@@ -215,39 +224,32 @@ func RunReview(req ReviewReq) ReviewResult {
 			AvoidFamilies: avoid, StrictAvoid: true, DeferAtCap: true, ResolveCLI: req.ResolveCLI,
 		})
 		if err != nil || sel.Lane == "" {
-			why := sel.SkippedNote
 			if err != nil {
-				why = err.Error()
+				sel.SkippedNote = err.Error()
 			}
-			return ReviewResult{Model: fleet.ReviewModelEnv(), Verdict: "SKIPPED", Reason: why}
+			return ReviewResult{Model: fleet.ReviewModelEnv(), Verdict: "SKIPPED", Reason: sel.SkippedNote}
 		}
-		lease, retry := reviewLease(sel.Lane, sel.Info, q, tried, avoid, timeout, req)
+		lease, retry := reviewLease(sel.Lane, sel.Info, q, tried, avoid, req.TimeoutSec, req)
 		if retry {
 			continue
 		}
-		res, model := invokeReviewer(req, sel, lease, prompt, note, native)
-		_, _ = fleet.RecordUsage(sel.Lane, prompt, res.Output, res.ExportInfo, req.QuotaPath)
-		qHit := fleet.HasErrorPattern(res.Output, res.ExitCode, fleet.QuotaErrorPats)
-		if qHit || fleet.HasErrorPattern(res.Output, res.ExitCode, fleet.AuthErrorPats) {
-			kind := "auth"
-			if qHit {
-				kind = "quota/rate-limit"
-			}
-			_, _ = fleet.MarkProviderCooldown(sel.Lane,
-				"Auto-detected "+kind+" error on "+fleet.NowISO(), qHit, res.Output, req.QuotaPath)
-			tried[sel.Lane] = true
-			continue
+		res, model := invokeReviewer(req, sel, lease, prompt)
+		if drift := SnapshotDrift(preSnap, SnapshotRepo(req.TargetDir, req.QuotaPath)); len(drift) > 0 {
+			msg := "[P0] zero-trust: reviewer mutated: " + strings.Join(drift, ", ") + "\nVERDICT: REJECT"
+			return ReviewResult{Ran: true, Lane: sel.Lane, Model: model, Verdict: "REJECT", ExitCode: 1,
+				Reason: "reviewer mutated workspace", Output: msg}
 		}
 		verdict := ParseReviewVerdict(res.Output)
 		if res.ExitCode != 0 && verdict == "ACCEPT" {
 			verdict = "UNKNOWN"
 		}
+		if handleReviewErr(sel.Lane, prompt, verdict, res, req.QuotaPath, tried) {
+			continue
+		}
 		if shouldRetryReview(sel, res, verdict, q, tried, avoid, req) {
 			continue
 		}
-		if len(req.ScopeViols) > 0 {
-			verdict = "REJECT"
-		}
+		SaveReviewCache(cKey, req, sel.Lane, model, verdict, res)
 		return ReviewResult{Ran: true, Lane: sel.Lane, Model: model, Verdict: verdict,
 			ExitCode: res.ExitCode, TimedOut: res.TimedOut, Output: res.Output}
 	}

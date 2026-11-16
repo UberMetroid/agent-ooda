@@ -61,8 +61,14 @@ func TestSkillsAndFrontmatter(t *testing.T) {
 		t.Fatalf("expected discovered demo-skill with folded description, got %+v", skills)
 	}
 	block, err := LoadSkillBlocks([]string{"ooda:demo-skill"}, ws)
-	if err != nil || !strings.Contains(block, "Body text.") {
-		t.Fatalf("LoadSkillBlocks failed: %v", err)
+	if err != nil || !strings.Contains(block, "Body text.") || strings.Contains(block, "First line") {
+		t.Fatalf("expected stripped frontmatter body in LoadSkillBlocks, err=%v got=%q", err, block)
+	}
+	bigDir := filepath.Join(ws, ".agents", "skills", "big-skill")
+	_ = os.MkdirAll(bigDir, 0o755)
+	_ = os.WriteFile(filepath.Join(bigDir, "SKILL.md"), []byte(strings.Repeat("x", 9000)), 0o644)
+	if big, berr := LoadSkillBlocks([]string{"big-skill"}, ws); berr != nil || !strings.Contains(big, "...[truncated]...") {
+		t.Fatalf("expected 8192-rune truncation on huge skill, err=%v len=%d", berr, len(big))
 	}
 	if _, err := LoadSkillBlocks([]string{"../bad"}, ws); err == nil {
 		t.Fatal("expected invalid skill name error")
@@ -101,8 +107,39 @@ func TestDirtyStateAndScope(t *testing.T) {
 	if len(changed) != 1 || changed[0] != "pre space.txt" {
 		t.Fatalf("expected mutated pre-dirty file detected, got %v", changed)
 	}
+	_ = os.Remove(pre)
+	if del := ChangedFilesIn(repo, base); len(del) != 1 || del[0] != "pre space.txt" {
+		t.Fatalf("expected deletion of pre-dirty file detected symmetrically, got %v", del)
+	}
+	if err := os.WriteFile(pre, []byte("v2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if viols := FindScopeViolations(changed, []string{"other.txt"}); len(viols) != 1 {
 		t.Fatalf("expected scope violation, got %v", viols)
+	}
+	if _, _, err := EnsureWorktree(repo, "../bad"); err == nil {
+		t.Fatal("expected EnsureWorktree to refuse unsafe task id")
+	}
+	wt, _, err := EnsureWorktree(repo, "wt-clean")
+	if err != nil {
+		t.Fatalf("EnsureWorktree failed: %v", err)
+	}
+	// Make stale commit on branch ooda/wt-clean, then verify fresh clean recreation resets to HEAD.
+	_ = os.WriteFile(filepath.Join(wt, "old.txt"), []byte("stale\n"), 0o644)
+	_, _ = fleet.RunCmd(fleet.CmdSpec{Argv: []string{"git", "add", "old.txt"}, Cwd: wt})
+	_, _ = fleet.RunCmd(fleet.CmdSpec{Argv: []string{"git", "-c", "user.email=t@e.com", "-c", "user.name=T",
+		"commit", "-m", "stale"}, Cwd: wt})
+	wt2, _, err := EnsureWorktree(repo, "wt-clean")
+	if err != nil {
+		t.Fatalf("recreate clean worktree failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(wt2, "old.txt")); !os.IsNotExist(err) {
+		t.Fatalf("expected -B HEAD to reset stale branch commit, stat=%v", err)
+	}
+	// Dirty existing worktree must fail closed.
+	_ = os.WriteFile(filepath.Join(wt2, "wip.txt"), []byte("unsaved\n"), 0o644)
+	if _, _, err := EnsureWorktree(repo, "wt-clean"); err == nil {
+		t.Fatal("expected dirty worktree refusal")
 	}
 }
 

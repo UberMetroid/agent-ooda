@@ -3,6 +3,8 @@ package worktree
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -23,8 +25,11 @@ func EnsureSlot(slotKey string) (string, error) {
 	return slot, nil
 }
 
-// EnsureWorktree creates .worktrees/<taskID> on branch ooda/<taskID>.
+// EnsureWorktree creates .worktrees/<taskID> on a clean branch ooda/<taskID> at HEAD.
 func EnsureWorktree(repoRoot, taskID string) (string, string, error) {
+	if !fleet.SafeIDRe.MatchString(taskID) {
+		return "", "", fleet.UsageErr("error: invalid task id %q", taskID)
+	}
 	rootAbs, err := filepath.Abs(repoRoot)
 	if err != nil {
 		return "", "", err
@@ -36,20 +41,16 @@ func EnsureWorktree(repoRoot, taskID string) (string, string, error) {
 	wtPath := filepath.Join(wtRoot, taskID)
 	branch := "ooda/" + taskID
 	if _, err := os.Stat(wtPath); err == nil {
+		if len(ChangedFilesIn(wtPath, nil)) > 0 {
+			return "", "", fleet.UsageErr("error: existing worktree %s has uncommitted changes", wtPath)
+		}
 		_, _ = fleet.RunCmd(fleet.CmdSpec{
 			Argv: []string{"git", "worktree", "remove", "--force", wtPath},
 			Cwd:  rootAbs, TimeoutSec: gitTimeoutSec,
 		})
 		_ = os.RemoveAll(wtPath)
 	}
-	chk, _ := fleet.RunCmd(fleet.CmdSpec{
-		Argv: []string{"git", "rev-parse", "--verify", "--quiet", "refs/heads/" + branch},
-		Cwd:  rootAbs, TimeoutSec: gitTimeoutSec,
-	})
-	argv := []string{"git", "worktree", "add", "-b", branch, wtPath}
-	if chk.ExitCode == 0 {
-		argv = []string{"git", "worktree", "add", wtPath, branch}
-	}
+	argv := []string{"git", "worktree", "add", "-B", branch, wtPath, "HEAD"}
 	res, runErr := fleet.RunCmd(fleet.CmdSpec{Argv: argv, Cwd: rootAbs, TimeoutSec: gitTimeoutSec})
 	if runErr != nil || res.ExitCode != 0 {
 		return "", "", fleet.UsageErr("error: worktree add failed for %s:\n%s", taskID, res.Combined)
@@ -76,13 +77,20 @@ func DirtyState(wt string) map[string]string {
 			snap[rel] = "missing"
 			continue
 		}
-		data, rerr := os.ReadFile(target)
+		f, rerr := os.Open(target)
 		if rerr != nil {
 			snap[rel] = "missing"
 			continue
 		}
-		sum := sha256.Sum256(data)
-		snap[rel] = hex.EncodeToString(sum[:])
+		h := sha256.New()
+		_, cerr := io.Copy(h, io.LimitReader(f, 8<<20))
+		_ = f.Close()
+		if cerr != nil {
+			snap[rel] = "missing"
+			continue
+		}
+		fmt.Fprintf(h, ":%d", st.Size())
+		snap[rel] = hex.EncodeToString(h.Sum(nil))
 	}
 	return snap
 }
@@ -94,6 +102,11 @@ func ChangedFilesIn(wt string, base map[string]string) []string {
 		var diff []string
 		for rel, sig := range now {
 			if old, ok := base[rel]; !ok || old != sig {
+				diff = append(diff, rel)
+			}
+		}
+		for rel, old := range base {
+			if _, ok := now[rel]; !ok && old != "missing" {
 				diff = append(diff, rel)
 			}
 		}

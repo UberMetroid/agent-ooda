@@ -17,7 +17,7 @@ func testLane(tier, status string, resetAt, cool *string) *fleet.ProviderConfig 
 	}
 }
 
-func TestEMRegimesAndOrder(t *testing.T) {
+func TestRegimesAndOrder(t *testing.T) {
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	ts60 := now.Add(60 * time.Minute).Format(time.RFC3339)
 	qCorner := &fleet.QuotaState{Providers: map[string]*fleet.ProviderConfig{
@@ -185,11 +185,15 @@ func TestTariffsAndMusePaygSkip(t *testing.T) {
 	dq := fleet.DefaultQuotaData()
 	fakeCLI := func(string) string { return "/opt/fake/cli" }
 	excl := map[string]bool{"agy-opus": true, "mcode": true, "grok": true, "mistral": true}
-	autoSel, err := SelectProvider(SelectReq{
-		RequestedLane: "auto", Complexity: "act", Quota: dq, Exclude: excl, ResolveCLI: fakeCLI,
-	})
-	if err != nil || autoSel.Lane == "muse" || !strings.Contains(autoSel.SkippedNote, "muse") {
-		t.Fatalf("expected auto to skip PAYG muse, got %+v (%v)", autoSel, err)
+	selAct := func(l string) (SelectRes, error) {
+		return SelectProvider(SelectReq{RequestedLane: l, Complexity: "act", Quota: dq, Exclude: excl, ResolveCLI: fakeCLI})
+	}
+	if s, err := selAct("auto"); err != nil || s.Lane == "muse" || !strings.Contains(s.SkippedNote, "muse") {
+		t.Fatalf("expected auto to skip PAYG muse, got %+v (%v)", s, err)
+	}
+	if s, err := selAct("grok"); err != nil || s.Lane == "muse" || s.Lane == "devin-fusion" ||
+		!strings.Contains(s.SkippedNote, "muse") {
+		t.Fatalf("expected fallback off explicit grok to skip PAYG muse & credits, got %+v (%v)", s, err)
 	}
 	expSel, err := SelectProvider(SelectReq{RequestedLane: "muse", Complexity: "act", Quota: dq, ResolveCLI: fakeCLI})
 	if err != nil || expSel.Lane != "muse" {
@@ -226,5 +230,27 @@ func TestRegimeModelAndEffort(t *testing.T) {
 	spec, err := EffectiveLaneSpec("agy-opus", fleet.DefaultQuotaData().Providers["agy-opus"], "", "", "deep", home)
 	if err != nil || spec.ArgvEffort != "" {
 		t.Fatalf("expected agy-opus deep not to emit redundant --effort flag, got %+v (%v)", spec, err)
+	}
+}
+
+func TestEWMAHealthDemotion(t *testing.T) {
+	qp := filepath.Join(t.TempDir(), "q.json")
+	_ = fleet.AtomicWriteJSON(qp, fleet.DefaultQuotaData(), false, true)
+	rec := func(fail bool) (*fleet.QuotaState, []string) {
+		_, _ = fleet.RecordUsage("mcode", "p", "x", &fleet.ExportUsage{Failed: fail}, qp)
+		q, _ := fleet.LoadQuota(qp)
+		ord, _ := BuildCandidateOrder("auto", "review", q, nil, nil)
+		return q, ord
+	}
+	if q, ord := rec(true); ord[0] != "mcode" || *q.Providers["mcode"].HealthEWMA != 0.65 {
+		t.Fatalf("1st fail stayed healthy: ord=%v ewma=%v", ord, q.Providers["mcode"].HealthEWMA)
+	}
+	if q, ord := rec(true); ord[0] == "mcode" {
+		t.Fatalf("2nd fail (%.3f) must demote: ord=%v", *q.Providers["mcode"].HealthEWMA, ord)
+	} else if exp, _ := BuildCandidateOrder("mcode", "review", q, nil, nil); exp[0] != "mcode" {
+		t.Fatalf("explicit --lane mcode should stay first: %v", exp)
+	}
+	if q, ord := rec(false); *q.Providers["mcode"].HealthEWMA < 0.55 || ord[0] != "mcode" {
+		t.Fatalf("clean run should recover >= 0.55 to head: ord=%v", ord)
 	}
 }

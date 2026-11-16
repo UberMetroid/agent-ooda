@@ -89,14 +89,14 @@ overridable via `AGENT_OODA_QUOTA_FILE`), and `--local` per-repo stage pins pers
 `~/.local/state/agent-ooda/workspaces/<id>.json` (surviving `agent-ooda --cleanup`). HUD markers and `flock`
 leases live in `/tmp/agent-ooda-hud` (`AGENT_OODA_HUD_DIR`).
 
-### Per-Stage OODA Routing Matrix & 3 Selector Surfaces (`v2.1.1`)
+### Per-Stage OODA Routing Matrix & 3 Selector Surfaces (`v2.2.0`)
 Each worker OODA stage (`observe`, `orient`, `act`, `verify`) defaults to `auto` (`Decide` stays with the user /
 top-level orchestrator) and resolves via: **`CLI flag > --local > --profile > global > auto`**.
 - **Soft Pin Failover:** When a stage's primary pinned lane hits a 429/cooldown or is omitted, execution fails over
   down its priority CSV or quota-aware `auto`, scrubbing primary-lane `--model`/`--effort` overrides when failing over to another lane.
 - **Strict Off-Family Verify:** `verify` always excludes the authoring model family even if pinned identically.
 - **3 Selector Interfaces:**
-  1. `agent-ooda --select` (`-s`): Terminal arrow-key configurator (`↑`/`↓` + `Enter`, supports sticky & `--until-reset`, global & `--local`).
+  1. `agent-ooda --select` (`-s`): Terminal arrow-key configurator (`↑`/`↓`, `Enter`, `b`/Backspace back, `q` quit, `Tab` scope; live `agy` theme colors, sticky & `--until-reset`, global & `--local`).
   2. `/lane`: Interactive in-chat stage/preset selector skill (`ask_question`).
   3. `/agents`: `8` native `agy` workflow profiles under `plugins/agent-ooda/agents/`:
      `ooda-auto`, `ooda-conserve`, `ooda-deep`, `ooda-devin`, `ooda-grok`, `ooda-mcode`, `ooda-muse`, `ooda-mistral`.
@@ -113,11 +113,11 @@ top-level orchestrator) and resolves via: **`CLI flag > --local > --profile > gl
 | `mistral` | `vibe` | `via-model` (`glm-5-3[high]`, etc.) | `capped` | `30d` (monthly; `0.5x` off-peak Z.ai UTC tariff) |
 
 ### Key Engine Guarantees
-- **First-Principles Quota Scheduling:** Prioritizes `0.5x` off-peak tariffs and soonest-expiring bounded windows before they reset; spares the last active bounded lane by shifting routine coding to `devin-pro` -> `devin-fast` -> `mcode`.
-- **Auto Complexity & Skill Matching:** Omitted `--complexity` and up to 2 non-core `--skill` entries are inferred from prompt & files (`--skill none` or `OODA_NO_AUTO_SKILL=1` opts out).
+- **First-Principles Quota Scheduling:** Prioritizes `0.5x` off-peak tariffs and soonest-expiring bounded windows before they reset, applies EWMA health scoring to demote repeatedly failing lanes while recovering on clean runs, and spares the last active bounded lane by shifting routine coding to `devin-pro` -> `devin-fast` -> `mcode`.
+- **Auto Complexity & Skill Matching:** Omitted `--complexity` and up to 2 non-core `--skill` entries are inferred from prompt & files (`--skill none` or `OODA_NO_AUTO_SKILL=1` opts out); `--recon`/`--orient` skip auto-skills unless `--skill` is passed.
 - **Gemini Worker Guardrail (`exit 2`):** Rejects `gemini*` / `orchestrator*` models across `--model`, env vars, `--set-cycle`, `--set-stage`, and manifests.
 - **Recursion Guard (`exit 2`):** Workers run with `AGENT_OODA_DEPTH>=1` and `ROUTER_DEPTH>=1`, blocking nested `agent-ooda` dispatch/admin calls.
-- **Live Quota Kill & Cross-Model Review:** Unambiguous mid-stream quota errors trigger `SIGKILL` (<100ms failover); `--review` excludes the authoring family and never spends `devin-fusion` credits.
+- **Live Quota/Stall Kill, Merkle Cache & Cross-Model Review:** Unambiguous mid-stream quota errors and idle NDJSON stream stalls trigger `SIGKILL` failover; read-only `--recon`, `--orient`, and `--review` snapshot the repo, fail closed (`REJECT`/`exit 1`) on unexpected writes, and cache identical Merkle-matched trees (`--no-cache` to bypass); `mcode` inline `--review` scales `--max-steps` (`35`/`45`), excludes the authoring family, and never spends `devin-fusion` or fallback PAYG `muse` funds. HUD & TUI colors follow `agy` themes (`AGENT_OODA_THEME`) with velocity animations and a 4s finish flash.
 
 ### CLI Command Reference
 

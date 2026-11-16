@@ -18,7 +18,7 @@ const (
 	// NativeReviewMaxBytes caps working-tree patches eligible for native review.
 	NativeReviewMaxBytes = 8192
 	// MaxDiffRunes caps combined inline patch runes sent to a reviewer.
-	MaxDiffRunes = 60000
+	MaxDiffRunes = 32000
 	gitTimeout   = 60
 	sniffBytes   = 8192
 	maxUntracked = 65536
@@ -196,8 +196,10 @@ func CollectDiffContext(targetDir string, includeCommit bool, baseRefOpt ...stri
 	if customBase {
 		baseRef = strings.TrimSpace(baseRefOpt[0])
 		source = "commit..working-tree"
+	}
+	if baseRef != "" {
 		changed = changedAgainst(targetDir, baseRef)
-	} else if baseRef == "" {
+	} else {
 		baseRef = "HEAD"
 	}
 	rawStatus, _ := gitOutOK(targetDir, "status", "--short", "--", ".")
@@ -206,7 +208,7 @@ func CollectDiffContext(targetDir string, includeCommit bool, baseRefOpt ...stri
 	diffStatOut := strings.TrimSpace(rawStat)
 	diffOut, _ := gitOutOK(targetDir, "diff", baseRef, "--", ".")
 	if statusOut != "" {
-		diffOut += untrackedDiff(targetDir, MaxDiffRunes-utf8.RuneCountInString(diffOut))
+		diffOut += untrackedDiff(targetDir, 4*MaxDiffRunes)
 	}
 	if !customBase && statusOut == "" && strings.TrimSpace(diffOut) == "" && includeCommit {
 		if _, ok := gitOutOK(targetDir, "rev-parse", "--verify", "--quiet", "HEAD~1"); ok {
@@ -227,10 +229,6 @@ func CollectDiffContext(targetDir string, includeCommit bool, baseRefOpt ...stri
 	}
 	if diffStatOut == "" {
 		diffStatOut = "(no tracked diff)"
-	}
-	if utf8.RuneCountInString(diffOut) > MaxDiffRunes {
-		runes := []rune(diffOut)
-		diffOut = string(runes[:MaxDiffRunes]) + "\n... <diff truncated; inspect files in cwd> ...\n"
 	}
 	return DiffContext{
 		Source: source, Status: statusOut, DiffStat: diffStatOut,

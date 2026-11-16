@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"math"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/UberMetroid/agent-ooda/internal/fleet"
 )
@@ -21,12 +22,12 @@ type streamSample struct {
 }
 
 type streamTracker struct {
-	phase, finalResp, errText           string
-	sawDelta, hasFinal, isError, qAbort bool
-	cleanBuf, turnBuf, rawBuf           tailBuf
-	usage                               fleet.ExportUsage
-	samples                             []streamSample
-	lastDelta                           float64
+	phase, finalResp, errText                    string
+	sawDelta, hasFinal, isError, qAbort, stalled bool
+	cleanBuf, turnBuf, rawBuf                    tailBuf
+	usage                                        fleet.ExportUsage
+	samples                                      []streamSample
+	firstDelta, lastDelta, lastIO                float64
 }
 
 func (st *streamTracker) addRateBytes(now float64, n int, isDelta bool) {
@@ -38,8 +39,10 @@ func (st *streamTracker) addRateBytes(now float64, n int, isDelta bool) {
 	} else if st.sawDelta {
 		return
 	}
-	st.phase = "stream"
-	st.lastDelta = now
+	if st.firstDelta == 0 || (now-st.lastDelta) > rateStaleSec {
+		st.firstDelta = now
+	}
+	st.phase, st.lastDelta = "stream", now
 	st.samples = append(st.samples, streamSample{at: now, bytes: n})
 }
 
@@ -62,7 +65,7 @@ func (st *streamTracker) currentRate(now float64) (float64, bool) {
 	if tot < rateMinBytes {
 		return 0, false
 	}
-	span := max(now-st.samples[0].at, rateMinSpan)
+	span := min(rateWindowSec, max(now-st.firstDelta, rateMinSpan))
 	return math.Round((float64(tot) / 4.0) / span), false
 }
 
@@ -122,7 +125,7 @@ func (st *streamTracker) consumeDelta(ev map[string]any, now float64) bool {
 		return false
 	}
 	st.cleanBuf.addStr(txt)
-	st.addRateBytes(now, len(txt)+len(think), true)
+	st.addRateBytes(now, utf8.RuneCountInString(txt)+utf8.RuneCountInString(think), true)
 	return true
 }
 
@@ -139,7 +142,7 @@ func (st *streamTracker) consumeContentItems(items []any, now float64) {
 			hasTool = true
 		case "thinking", "reasoning":
 			if th, ok := blk["thinking"].(string); ok && th != "" {
-				st.addRateBytes(now, len(th), false)
+				st.addRateBytes(now, utf8.RuneCountInString(th), false)
 				hasText = true
 			}
 		case "text", "output_text", "":
@@ -148,7 +151,7 @@ func (st *streamTracker) consumeContentItems(items []any, now float64) {
 					st.turnBuf.addStr("\n")
 				}
 				st.turnBuf.addStr(txt)
-				st.addRateBytes(now, len(txt), false)
+				st.addRateBytes(now, utf8.RuneCountInString(txt), false)
 				hasText = true
 			}
 		}
@@ -161,11 +164,10 @@ func (st *streamTracker) consumeContentItems(items []any, now float64) {
 func (st *streamTracker) consumeMeta(ev map[string]any) {
 	resMap, _ := ev["result"].(map[string]any)
 	u, _ := ev["usage"].(map[string]any)
-	if u == nil {
-		u, _ = ev["stats"].(map[string]any)
-	}
-	if u == nil {
-		u, _ = resMap["usage"].(map[string]any)
+	for _, alt := range []any{ev["stats"], resMap["usage"]} {
+		if u == nil {
+			u, _ = alt.(map[string]any)
+		}
 	}
 	if n, ok := extractUsageTokens(u); ok && (st.usage.Tokens == nil || n > *st.usage.Tokens) {
 		st.usage.Tokens = fleet.Ptr(n)
@@ -206,7 +208,7 @@ func (st *streamTracker) consumeAssistantContent(content any, now float64) {
 			st.turnBuf.addStr("\n")
 		}
 		st.turnBuf.addStr(s)
-		st.addRateBytes(now, len(s), false)
+		st.addRateBytes(now, utf8.RuneCountInString(s), false)
 	}
 }
 

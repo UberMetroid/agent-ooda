@@ -25,9 +25,7 @@ func runGit(t *testing.T, cwd string, args ...string) {
 func TestCollectDiffContext(t *testing.T) {
 	repo := t.TempDir()
 	runGit(t, repo, "init", "-q")
-	if err := os.MkdirAll(filepath.Join(repo, ".worktrees"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	_ = os.MkdirAll(filepath.Join(repo, ".worktrees"), 0o755)
 	_ = os.WriteFile(filepath.Join(repo, ".worktrees", "junk.go"), []byte("package junk\n"), 0o644)
 	_ = os.WriteFile(filepath.Join(repo, "new.txt"), []byte("héllo wörld\nsecond\n"), 0o644)
 	_ = os.WriteFile(filepath.Join(repo, "bin.dat"), []byte{0x00, 0x01, 0x02, 'x'}, 0o644)
@@ -54,7 +52,6 @@ func TestCollectDiffContext(t *testing.T) {
 	if stagedCtx := CollectDiffContext(repo, false); !strings.Contains(stagedCtx.Diff, "+++ b/staged.txt") {
 		t.Fatalf("expected unborn HEAD staged diff, got %q", stagedCtx.Diff)
 	}
-
 	_ = os.WriteFile(filepath.Join(repo, "tracked.go"), []byte("a := 1\n"), 0o644)
 	runGit(t, repo, "add", "tracked.go")
 	runGit(t, repo, "commit", "-q", "-m", "seed")
@@ -112,32 +109,28 @@ func fakeCLIResolver(installed map[string]string) func(string) string {
 func TestReviewFallbackAndUTF8Inline(t *testing.T) {
 	tmp := t.TempDir()
 	qPath := filepath.Join(tmp, "quota.json")
-	t.Setenv("AGENT_QUOTA_FILE", qPath)
-	t.Setenv("ROUTER_HUD_DIR", filepath.Join(tmp, "hud"))
-	t.Setenv("AGENT_OODA_DEPTH", "0")
-	t.Setenv("ROUTER_DEPTH", "0")
-	t.Setenv("OODA_NO_AUTO_PROBE", "1")
+	for k, v := range map[string]string{
+		"AGENT_QUOTA_FILE": qPath, "ROUTER_HUD_DIR": filepath.Join(tmp, "hud"),
+		"AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "0", "OODA_NO_AUTO_PROBE": "1",
+	} {
+		t.Setenv(k, v)
+	}
 	_ = fleet.AtomicWriteJSON(qPath, fleet.DefaultQuotaData(), false, true)
 	installed := map[string]string{"devin": "/bin/true", "mcode": "/bin/true", "grok": "/bin/true"}
-
 	var calls []ReviewExecReq
 	idx := 0
 	outputs := []ReviewExecRes{
 		{ExitCode: 1, Output: "HTTP 429 Too Many Requests: rate limit exceeded"},
 		{ExitCode: 0, Output: "No issues found.\nVERDICT: ACCEPT"},
 	}
-	smallDiff := DiffContext{
-		Source: "working-tree", Status: "M a.go", DiffStat: "a.go | 2 +-",
-		Diff: "-a = 1\n+a = 2\n", HasChanges: true,
-	}
+	smallDiff := DiffContext{Source: "working-tree", Status: "M a.go", DiffStat: "a.go", Diff: "-a\n+b\n", HasChanges: true}
 	res := RunReview(ReviewReq{
 		TargetDir: tmp, SlotDir: filepath.Join(tmp, "slot"), DiffCtx: smallDiff,
 		AuthorLane: "devin-pro", QuotaPath: qPath, ResolveCLI: fakeCLIResolver(installed),
 		Runner: func(r ReviewExecReq) ReviewExecRes {
 			calls = append(calls, r)
-			out := outputs[idx]
 			idx++
-			return out
+			return outputs[idx-1]
 		},
 	})
 	if len(calls) != 2 || calls[0].Provider != "mcode" || calls[1].Provider != "grok" {
@@ -153,12 +146,8 @@ func TestReviewFallbackAndUTF8Inline(t *testing.T) {
 	if after.Providers["mcode"].Status != "cooldown" {
 		t.Fatalf("expected mcode in cooldown, got %s", after.Providers["mcode"].Status)
 	}
-
 	// Multibyte UTF-8 diff (>8192 bytes, <8192 runes) must stay inline, and [P1] must halt fallback.
-	mbDiff := DiffContext{
-		Source: "working-tree", Status: "M u.go", DiffStat: "u.go",
-		Diff: "+" + strings.Repeat("é", 5000), HasChanges: true,
-	}
+	mbDiff := DiffContext{Source: "working-tree", Status: "M u.go", Diff: "+" + strings.Repeat("é", 5000), HasChanges: true}
 	calls = nil
 	res2 := RunReview(ReviewReq{
 		TargetDir: tmp, SlotDir: filepath.Join(tmp, "slot2"), DiffCtx: mbDiff,
@@ -177,9 +166,7 @@ func TestReviewFallbackAndUTF8Inline(t *testing.T) {
 func TestCorruptQuotaReviewFails(t *testing.T) {
 	tmp := t.TempDir()
 	badQuota := filepath.Join(tmp, "corrupt.json")
-	if err := os.WriteFile(badQuota, []byte("{not-json"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	_ = os.WriteFile(badQuota, []byte("{not-json"), 0o600)
 	res := RunReview(ReviewReq{
 		TargetDir: tmp, SlotDir: tmp, QuotaPath: badQuota,
 		DiffCtx: DiffContext{HasChanges: true, Source: "working-tree", Diff: "+x\n"},
@@ -194,10 +181,7 @@ func TestCorruptQuotaReviewFails(t *testing.T) {
 	selfRes := RunReview(ReviewReq{
 		TargetDir: tmp, SlotDir: tmp, DiffCtx: DiffContext{HasChanges: true, Source: "working-tree", Diff: "+x\n"},
 		AuthorLane: "mcode", QuotaPath: goodQ, ResolveCLI: fakeCLIResolver(map[string]string{"mcode": "/bin/true"}),
-		Runner: func(ReviewExecReq) ReviewExecRes {
-			t.Fatal("self-family reviewer must never run")
-			return ReviewExecRes{}
-		},
+		Runner: func(ReviewExecReq) ReviewExecRes { t.Fatal("self-family reviewer ran"); return ReviewExecRes{} },
 	})
 	if selfRes.Ran || selfRes.Verdict != "SKIPPED" {
 		t.Fatalf("expected strict avoid-family SKIPPED, got %+v", selfRes)
@@ -216,8 +200,7 @@ func TestCorruptQuotaReviewFails(t *testing.T) {
 }
 
 func TestVerifyPinOffFamilyScrub(t *testing.T) {
-	tmp := t.TempDir()
-	qPath := filepath.Join(tmp, "quota.json")
+	tmp, qPath := t.TempDir(), filepath.Join(t.TempDir(), "quota.json")
 	t.Setenv("OODA_NO_AUTO_PROBE", "1")
 	_ = fleet.AtomicWriteJSON(qPath, fleet.DefaultQuotaData(), false, true)
 	installed := map[string]string{"mcode": "/bin/true", "devin": "/bin/true"}
@@ -252,5 +235,21 @@ func TestVerifyPinOffFamilyScrub(t *testing.T) {
 	})
 	if !res3.Ran || res3.Lane != "devin-fast" {
 		t.Fatalf("expected earlier attempt family grok excluded from verify, got res=%+v", res3)
+	}
+	// Scope violations short-circuit with 0 LLM calls; rogue writes during review REJECT.
+	repo2 := t.TempDir()
+	runGit(t, repo2, "init", "-q")
+	calls = nil
+	sv := RunReview(ReviewReq{TargetDir: repo2, ScopeViols: []string{"bad.go"}, QuotaPath: qPath, Runner: run})
+	if sv.Verdict != "REJECT" || sv.ExitCode != 1 || len(calls) != 0 {
+		t.Fatalf("expected scope short-circuit 0 calls, got res=%+v calls=%d", sv, len(calls))
+	}
+	rogue := RunReview(ReviewReq{TargetDir: repo2, SlotDir: tmp, QuotaPath: qPath, DiffCtx: diff,
+		ResolveCLI: fakeCLIResolver(installed), Runner: func(ReviewExecReq) ReviewExecRes {
+			_ = os.WriteFile(filepath.Join(repo2, "rogue.txt"), []byte("x"), 0o644)
+			return ReviewExecRes{ExitCode: 0, Output: "VERDICT: ACCEPT"}
+		}})
+	if rogue.Verdict != "REJECT" || !strings.Contains(rogue.Output, "rogue.txt") {
+		t.Fatalf("expected rogue write REJECT, got %+v", rogue)
 	}
 }

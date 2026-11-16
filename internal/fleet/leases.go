@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const leasePollInterval = 150 * time.Millisecond
+const leasePollInterval = 100 * time.Millisecond
 
 var (
 	relResetRe = regexp.MustCompile(
@@ -180,9 +180,8 @@ func ParseRelativeReset(out string, now time.Time) *string {
 func leaseDir() string {
 	base := HudDirPath()
 	ldir := filepath.Join(base, "leases")
-	_ = os.MkdirAll(base, 0o700)
-	_ = os.Chmod(base, 0o700)
 	_ = os.MkdirAll(ldir, 0o700)
+	_ = os.Chmod(base, 0o700)
 	_ = os.Chmod(ldir, 0o700)
 	return ldir
 }
@@ -220,16 +219,18 @@ func AcquireParallelLease(provider string, maxPar int, blocking bool, timeoutSec
 	if blocking && timeoutSec <= 0 {
 		timeoutSec = DefaultTimeout
 	}
-	ldir, start := leaseDir(), time.Now()
+	ldir, pid, start := leaseDir(), os.Getpid(), time.Now()
+	base, jitter := pid%maxPar, time.Duration(pid%7)*15*time.Millisecond
 	for {
 		for i := 0; i < maxPar; i++ {
-			path := filepath.Join(ldir, fmt.Sprintf("%s-%d.lock", SafeID(provider), i))
+			idx := (base + i) % maxPar
+			path := filepath.Join(ldir, fmt.Sprintf("%s-%d.lock", SafeID(provider), idx))
 			fh, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
 			if err != nil {
 				return nil, false, err
 			}
-			_ = os.Chmod(path, 0o600)
 			if ferr := syscall.Flock(int(fh.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); ferr == nil {
+				_ = os.Chmod(path, 0o600)
 				return fh, false, nil
 			}
 			_ = fh.Close()
@@ -240,7 +241,7 @@ func AcquireParallelLease(provider string, maxPar int, blocking bool, timeoutSec
 		if timeoutSec > 0 && time.Since(start) >= time.Duration(timeoutSec)*time.Second {
 			return nil, true, nil
 		}
-		time.Sleep(leasePollInterval)
+		time.Sleep(leasePollInterval + jitter)
 	}
 }
 

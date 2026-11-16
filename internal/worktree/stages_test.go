@@ -141,6 +141,26 @@ func TestStagesExpiryPresetAndRefusal(t *testing.T) {
 	if _, err := os.Stat(WorkspaceStagesPath(tmp)); !os.IsNotExist(err) {
 		t.Fatalf("expected workspace file deleted after reset-all, stat=%v", err)
 	}
+}
+
+func TestStageRefusalsAndPAYG(t *testing.T) {
+	tmp, hudDir := t.TempDir(), t.TempDir()
+	qPath := filepath.Join(tmp, "quota.json")
+	t.Setenv("AGENT_QUOTA_FILE", qPath)
+	t.Setenv("ROUTER_HUD_DIR", hudDir)
+	mainRepo, wtExt := filepath.Join(tmp, "main-repo"), filepath.Join(tmp, "wt-ext")
+	_ = os.MkdirAll(filepath.Join(mainRepo, ".git", "worktrees", "wt-ext"), 0o755)
+	_ = os.MkdirAll(wtExt, 0o755)
+	_ = os.WriteFile(filepath.Join(wtExt, ".git"), []byte("gitdir: ../main-repo/.git/worktrees/wt-ext\n"), 0o644)
+	if got, want := WorkspaceStagesPath(wtExt), WorkspaceStagesPath(mainRepo); got != want {
+		t.Fatalf("external .git-file worktree stage path mismatch: %q != %q", got, want)
+	}
+	_ = fleet.AtomicWriteJSON(filepath.Join(hudDir, "muse_usage.json"),
+		map[string]any{"pay_as_you_go": true, "checked_at": fleet.NowISO()}, true, true)
+	if _, err := ConfigureStage(StagePatch{Stage: "preset", Lane: "muse", Cwd: tmp}); err == nil {
+		t.Fatalf("expected preset=muse rejected when muse PAYG active")
+	}
+	_ = os.Remove(filepath.Join(hudDir, "muse_usage.json"))
 
 	bads := []StagePatch{
 		{Stage: "bogus", Lane: "mcode", Cwd: tmp},

@@ -125,7 +125,7 @@ func TestStatusLineTelemetryANSI(t *testing.T) {
 				Mode: "act", Model: "swe-2-flash-max",
 				Phase: "wait", StartedAt: 994.0, UpdatedAt: 994.0,
 			}},
-			"⠋ act · swe-2-flash-max · 6s",
+			"◜ act · swe-2-flash-max · 6s",
 		},
 	}
 	for _, tc := range cases {
@@ -143,6 +143,7 @@ func TestStatusLineTelemetryANSI(t *testing.T) {
 	}
 
 	t.Setenv("NO_COLOR", "")
+	t.Setenv("AGENT_OODA_THEME", "dark")
 	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{
 		{Mode: "act:verify", Model: "minimax/MiniMax-M3.1-Flash"},
 	})
@@ -158,6 +159,7 @@ func TestThermalTokSAndIdlePins(t *testing.T) {
 	hudDir := filepath.Join(tmp, "hud")
 	t.Setenv("ROUTER_HUD_DIR", hudDir)
 	t.Setenv("NO_COLOR", "")
+	t.Setenv("AGENT_OODA_THEME", "dark")
 	sum, now := FleetSummary{Active: 5, Total: 8, WakeCD: "1h05m"}, 1000.0
 	thermalCases := []struct {
 		tokS float64
@@ -180,15 +182,42 @@ func TestThermalTokSAndIdlePins(t *testing.T) {
 	if got := RenderStatusLine("{}", true, &now, &sum); got != "○ agent-ooda │ pin act:devin-pro │ fleet 5/8 (next 1h05m)" {
 		t.Fatalf("expected idle pin summary, got %q", got)
 	}
+	// Verify dynamic agy settings theme swap, velocity spin, and 4s completion flash.
+	home := t.TempDir()
+	cfgDir := filepath.Join(home, ".gemini", "antigravity-cli")
+	_ = os.MkdirAll(cfgDir, 0o755)
+	_ = os.WriteFile(filepath.Join(cfgDir, "settings.json"), []byte(`{"colorScheme":"tokyo night"}`), 0o600)
+	t.Setenv("HOME", home)
+	t.Setenv("AGENT_OODA_THEME", "")
+	t.Setenv("NO_COLOR", "")
+	_ = fleet.AtomicWriteJSON(filepath.Join(hudDir, "last.json"), dispatch.LastRunMarker{
+		Mode: "act", Model: "grok-4.7", ExitCode: 0, DurationS: 2.5, FinishedAt: 998.0,
+	}, true, true)
+	flash := RenderStatusLine("{}", true, &now, &sum)
+	if !strings.Contains(flash, PaletteFor("tokyo night").FleetFull+"✓ act") {
+		t.Fatalf("expected tokyo night completion flash, got %q", flash)
+	}
+	_ = os.WriteFile(filepath.Join(cfgDir, "settings.json"), []byte(`{"colorScheme":"light"}`), 0o600)
+	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{{Mode: "act", Model: "grok-4.7"}})
+	light := RenderStatusLine("{}", true, &now, &sum)
+	if !strings.Contains(light, PaletteFor("light").Act+"⠋ act") {
+		t.Fatalf("expected live light theme swap, got %q", light)
+	}
+	if WorkerSpin("wait", 0, 1000.35) == WorkerSpin("stream", 190, 1000.35) {
+		t.Fatalf("expected phase/velocity spinner frames to differ")
+	}
+	if PaletteFor("colorblind-friendly-dark").Name != "colorblind-friendly dark" ||
+		PaletteFor("halloween-2026").Name != "halloween" ||
+		VisibleLen("\033[1;38;5;75mh\033[Ké") != 2 {
+		t.Fatalf("theme slug or VisibleLen mismatch")
+	}
 }
-
 func TestHookAndDeadWorkerGC(t *testing.T) {
 	tmp := t.TempDir()
 	hudDir := filepath.Join(tmp, "hud")
-	t.Setenv("ROUTER_HUD_DIR", hudDir)
-	t.Setenv("AGENT_OODA_DEPTH", "0")
-	t.Setenv("ROUTER_DEPTH", "0")
-
+	for k, v := range map[string]string{"ROUTER_HUD_DIR": hudDir, "AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "0"} {
+		t.Setenv(k, v)
+	}
 	stalePath := filepath.Join(hudDir, "active", "stale.json")
 	_ = fleet.AtomicWriteJSON(stalePath, dispatch.WorkerMarker{PID: 9999999, Mode: "act", Model: "x"}, true, true)
 	if live := LoadActiveWorkers(hudDir); len(live) != 0 {
@@ -197,7 +226,6 @@ func TestHookAndDeadWorkerGC(t *testing.T) {
 	if _, err := os.Stat(stalePath); !os.IsNotExist(err) {
 		t.Fatalf("expected dead marker deleted")
 	}
-
 	callHook := func(payload string, depth string) string {
 		t.Setenv("AGENT_OODA_DEPTH", depth)
 		t.Setenv("ROUTER_DEPTH", depth)
@@ -205,17 +233,16 @@ func TestHookAndDeadWorkerGC(t *testing.T) {
 		HandleHookStdin(strings.NewReader(payload), &out)
 		return out.String()
 	}
-	p1 := `{"conversationId":"c1","hookEventName":"PostToolUse",` +
-		`"toolCall":{"name":"read_file","args":{"Path":"~/.agents/skills/readskill/SKILL.md"}}}`
-	if out := callHook(p1, "0"); out != "{}\n" {
-		t.Fatalf("hook output: %q", out)
+	pfx := `{"conversationId":"c1","hookEventName":"PostToolUse","toolCall":{"name":`
+	for _, p := range []string{
+		pfx + `"read_file","args":{"Path":"~/.agents/skills/readskill/SKILL.md"}}}`,
+		pfx + `"run_command","args":{"CommandLine":"agent-ooda --status"}}}`,
+		pfx + `"run_command","args":{"CommandLine":"agent-ooda --task fix --skill newskill"}}}`,
+	} {
+		if out := callHook(p, "0"); out != "{}\n" {
+			t.Fatalf("hook output: %q", out)
+		}
 	}
-	p2 := `{"conversationId":"c1","hookEventName":"PostToolUse",` +
-		`"toolCall":{"name":"run_command","args":{"CommandLine":"agent-ooda --status"}}}`
-	_ = callHook(p2, "0")
-	p3 := `{"conversationId":"c1","hookEventName":"PostToolUse",` +
-		`"toolCall":{"name":"run_command","args":{"CommandLine":"agent-ooda --task fix --skill newskill"}}}`
-	_ = callHook(p3, "0")
 	raw, _ := os.ReadFile(filepath.Join(hudDir, "sessions", "c1.json"))
 	var rec sessionRecord
 	if json.Unmarshal(raw, &rec) != nil || len(rec.Skills) != 2 ||

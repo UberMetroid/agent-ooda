@@ -74,16 +74,16 @@ on any `gemini*`/`orchestrator*` worker model and block recursive execution (`ag
 `--task`, `--review`, `--probe`, `--cleanup`, `--enable`, `--disable`, `--set-cycle`) whenever
 `AGENT_OODA_DEPTH>=1` or `ROUTER_DEPTH>=1`.
 
-**Stage clocks & Per-Stage OODA Routing (`v2.1.1`):**
+**Stage clocks & Per-Stage OODA Routing (`v2.2.0`):**
 
 - **Per-Stage Matrix (`observe`, `orient`, `act`, `verify`):** Each worker stage defaults to `auto` (`Decide` remains with you and the top-level orchestrator) and resolves via **`CLI flag > --local > --profile > global > auto`**. CLI `--lane`/`--model`/`--effort` target the primary command stage (`--recon`, `--orient`, `--task`, or standalone `--review`); post-task `verify` follows `--local`/`--profile`/global pins so `--task` worker flags never leak onto the off-family reviewer.
-- **Soft-Pin Failover & Off-Family Verify:** Pinned stages soft-failover on 429s/cooldown down their lane CSV or quota-aware `auto`, scrubbing primary-lane `--model`/`--effort` overrides when failing over to another lane; `verify` always enforces a non-authoring model family.
+- **Soft-Pin Failover & Off-Family Verify:** Pinned stages soft-failover on 429s/cooldown down their lane CSV or quota-aware `auto`, scrubbing primary-lane `--model`/`--effort` overrides when failing over to another lane (and never falling back onto `devin-fusion` credits or PAYG `muse`); `verify` always enforces a non-authoring model family.
 - **3 Synchronized Arrow-Key Selectors:**
-  - `agent-ooda --select` (`-s`): Interactive terminal TUI (`↑`/`↓` + `Enter`, sticky or `--until-reset`, global `quota.json` `v9` or `--local` `~/.local/state/agent-ooda/workspaces/<id>.json`).
+  - `agent-ooda --select` (`-s`): Interactive terminal TUI (`↑`/`↓`, `Enter`, `b`/Backspace to go back, `q` to quit, `Tab` to switch scope; live `agy` theme colors, sticky or `--until-reset`, global `quota.json` `v9` or `--local` `~/.local/state/agent-ooda/workspaces/<id>.json`).
   - `/lane`: Native Antigravity in-chat selector skill (`ask_question`) for per-stage pins, presets, and resets.
   - `/agents`: `8` native `agy` workflow profiles (`ooda-auto`, `ooda-conserve`, `ooda-deep`, `ooda-devin`, `ooda-grok`, `ooda-mcode`, `ooda-muse`, `ooda-mistral`).
-- **Observe & Orient:** `--recon` (`observe`) dispatches read-only lookup to free lanes (`devin-fast`, `mcode`); `--orient` (`orient`) runs deep read-only root-cause & architecture synthesis (`OODA:ORIENT`).
-- **Act & Parallel:** Soonest-resetting capped lanes drain first; manifest batches isolate `git worktree` stripes with atomic `flock` slot leases.
+- **Observe & Orient (Token-Lean & Read-Only Guarded):** `--recon` (`observe`) and `--orient` (`orient`) skip auto-matched workspace skills unless `--skill` is passed, run `mcode` read-only recon/orient with `--max-steps 20` (while inline `mcode` `--review` scales dynamically up to `35`/`45` steps), cache identical Merkle-hashed read-only results across `--recon`/`--orient`/`--review` (`--no-cache` to bypass), strip `GH_TOKEN`/`GITHUB_TOKEN` (plus `ANTIGRAVITY_*`) from read-only workers, snapshot the repo before/after to fail closed on any unexpected file write, and isolate clean worktrees via `git worktree add -B`.
+- **Act & Parallel:** Soonest-resetting capped lanes drain first with EWMA health scoring (`health_ewma` demoting flaky lanes and recovering on clean runs) plus an NDJSON stream stall watchdog (`180s` idle kill + immediate failover); manifest batches isolate `git worktree` stripes with atomic `flock` slot leases.
 - **Conserve & Verify:** When one capped lane remains, free `devin-*` and `mcode` absorb routine work; every non-empty diff runs through an independent model family.
 
 ### Other Agent CLIs (Not Currently Configured)
@@ -108,18 +108,11 @@ review or scope checks) are all audited fail-closed with a `240s` review budget:
 - **Inline stream audit (`> 8 KiB` or committed diffs):** `--permission smart --prompt-mode coding --max-steps 25`.
 - **Fail-closed fallback:** on cooldown, nonzero exit, `SKIPPED`, `UNKNOWN`, or `[P0-3]` findings, review rotates off-family (`mcode → devin-fast → devin-pro → grok → mistral → muse → agy-opus`) or fails non-zero.
 
-## Live Thermal `tok/s` HUD (`bin/agent-ooda-hud`)
+## Live Theme-Synced `tok/s` HUD (`bin/agent-ooda-hud`)
 
-`bin/agent-ooda-hud` (`statusline.py`) reads live NDJSON stream telemetry written over `io.Pipe()` and
-renders OODA phase (`○ agent-ooda`, `◐ orient/decide`, `⠋ observe`, `⠋ orient`, `⠋ act`, `⠋ verify`), active
-stage pins on standby (`│ pin ...`), `tool Xs` waits, injected skills, `fleet X/8 (next …)` wake countdowns, and a
-**5-band ANSI 256-color thermal `tok/s` heat ramp**:
+`bin/agent-ooda-hud` (`statusline.py`) reads live NDJSON stream telemetry and matches `agy`'s live theme (`colorScheme` in `~/.gemini/antigravity-cli/settings.json` — `dark`, `light`, `tokyo night`, `solarized dark`/`light`, `colorblind-friendly dark`/`light`, seasonal `halloween`, `COLORFGBG` terminal auto-detect, or `AGENT_OODA_THEME`), swapping colors immediately when `agy` swaps themes.
 
-- **Cold (`<25 tok/s`):** Ice Blue (`ANSI 75`)
-- **Steady (`25–59 tok/s`):** Cyan-Green (`ANSI 49`)
-- **Warm (`60–109 tok/s`):** Solar Amber (`ANSI 220`)
-- **Hot (`110–179 tok/s`):** Bold Orange (`ANSI 208`)
-- **Peak (`>=180 tok/s`):** Bold Red-Hot Crimson (`ANSI 196`)
+It renders OODA phase (`○ agent-ooda`, `◐ orient/decide`, `⠋ observe`, `⠋ orient`, `⠋ act`, `⠋ verify`), velocity-coupled streaming spinners + tool-scan pulses, a 4-second `✓`/`✗` completion flash when a worker finishes, active stage pins on standby (`│ pin ...`), `tool Xs` waits, injected skills, `fleet X/8 (next …)` wake countdowns, and a **5-band ANSI 256-color thermal `tok/s` heat ramp** (blue `<25` → teal → amber → orange → red `>=180`).
 
 ```text
 ○ agent-ooda │ pin act:grok, verify:mcode │ fleet 8/8

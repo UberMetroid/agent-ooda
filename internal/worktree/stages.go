@@ -48,9 +48,25 @@ func WorkspaceStagesPath(cwd string) string {
 		root = r
 	}
 	for d := root; d != filepath.Dir(d); d = filepath.Dir(d) {
-		if fi, err := os.Stat(filepath.Join(d, ".git")); err == nil && fi.IsDir() {
+		gp := filepath.Join(d, ".git")
+		fi, err := os.Stat(gp)
+		if err == nil && fi.IsDir() {
 			root = d
 			break
+		}
+		if err != nil || !fi.Mode().IsRegular() {
+			continue
+		}
+		raw, _ := os.ReadFile(gp)
+		if gd, ok := strings.CutPrefix(strings.SplitN(string(raw), "\n", 2)[0], "gitdir:"); ok {
+			if gd = strings.TrimSpace(gd); !filepath.IsAbs(gd) {
+				gd = filepath.Join(d, gd)
+			}
+			if gd = filepath.Clean(gd); filepath.Base(filepath.Dir(gd)) == "worktrees" &&
+				filepath.Base(filepath.Dir(filepath.Dir(gd))) == ".git" {
+				root = filepath.Dir(filepath.Dir(filepath.Dir(gd)))
+				break
+			}
 		}
 	}
 	sum := sha256.Sum256([]byte(root))
@@ -61,10 +77,6 @@ func WorkspaceStagesPath(cwd string) string {
 // LoadWorkspaceStages reads repo-scoped overrides and ignores expired pins.
 func LoadWorkspaceStages(cwd string) map[string]fleet.StageRoute {
 	out := make(map[string]fleet.StageRoute, len(fleet.StageNames))
-	wsDir := filepath.Join(filepath.Dir(fleet.QuotaFilePath("")), "workspaces")
-	if ents, derr := os.ReadDir(wsDir); derr != nil || len(ents) == 0 {
-		return out
-	}
 	p, parsed := WorkspaceStagesPath(cwd), map[string]fleet.StageRoute(nil)
 	if raw, err := os.ReadFile(p); err != nil {
 		return out
@@ -145,7 +157,7 @@ func validateStagePatch(p StagePatch, q *fleet.QuotaState) (fleet.StageRoute, er
 }
 
 // ConfigureStage validates and stores global or repo-local stage routes/presets.
-func ConfigureStage(p StagePatch) (map[string]fleet.StageRoute, error) {
+func ConfigureStage(p StagePatch) (saved map[string]fleet.StageRoute, err error) {
 	q, err := fleet.LoadQuota(p.QuotaPath)
 	if err != nil {
 		return nil, err
@@ -155,13 +167,14 @@ func ConfigureStage(p StagePatch) (map[string]fleet.StageRoute, error) {
 		if p.Model != "" || p.Effort != "" || p.UntilReset {
 			return nil, fleet.UsageErr("error: --model/--effort/--until-reset require a single stage")
 		}
-		var ok bool
-		updates, ok = PresetStages(p.Lane)
-		if !ok {
+		if updates, _ = PresetStages(p.Lane); len(updates) == 0 {
 			return nil, fleet.UsageErr("error: unknown stage preset %q", p.Lane)
 		}
-		if updates["act"].Lane == "muse" && fleet.CachedMuseProbe(900).PayAsYouGo {
-			return nil, fleet.UsageErr("error: muse PAYG active; pass --lane muse")
+		for _, sr := range updates {
+			if (strings.Contains(sr.Lane, "muse") && fleet.CachedMuseProbe(900).PayAsYouGo) ||
+				strings.Contains(sr.Lane, "devin-fusion") {
+				return nil, fleet.UsageErr("error: paid/PAYG lane in preset %q; pass --lane explicitly", p.Lane)
+			}
 		}
 	} else if route, rerr := validateStagePatch(p, q); rerr != nil {
 		return nil, rerr
@@ -184,7 +197,6 @@ func ConfigureStage(p StagePatch) (map[string]fleet.StageRoute, error) {
 		}
 		return cur, SaveWorkspaceStages(p.Cwd, cur)
 	}
-	var saved map[string]fleet.StageRoute
 	err = fleet.WithQuotaLock(p.QuotaPath, func(path string) error {
 		var state fleet.QuotaState
 		if raw, rerr := os.ReadFile(path); rerr != nil || json.Unmarshal(raw, &state) != nil {
@@ -234,22 +246,10 @@ func ResolveStage(stage, cliLane, cliModel, cliEffort, cliProfile, cwd string, q
 
 // ActivePinsSummary formats non-auto stage pins concisely for the HUD line.
 func ActivePinsSummary(cwd, profile string, q *fleet.QuotaState) string {
-	if profile == "" {
-		profile = os.Getenv("AGENT_OODA_PROFILE")
-	}
-	ws := LoadWorkspaceStages(cwd)
-	pre, _ := PresetStages(profile)
 	var parts []string
 	for _, st := range fleet.StageNames {
-		lane := ws[st].Lane
-		if lane == "" {
-			lane = pre[st].Lane
-		}
-		if (lane == "" || lane == "auto") && q != nil && q.Stages != nil && ws[st].Lane == "" {
-			lane = q.Stages[st].Lane
-		}
-		if lane != "" && lane != "auto" {
-			parts = append(parts, st+":"+strings.Split(lane, ",")[0])
+		if sp := ResolveStage(st, "", "", "", profile, cwd, q); sp.Primary != "" && sp.Primary != "auto" {
+			parts = append(parts, st+":"+sp.Primary)
 		}
 	}
 	return strings.Join(parts, ", ")

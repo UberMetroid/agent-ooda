@@ -219,9 +219,18 @@ func LoadSkillBlocks(names []string, cwd string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		txt := strings.ReplaceAll(strings.TrimSpace(string(body)), "\r\n", "\n")
+		if strings.HasPrefix(txt, "---\n") {
+			if end := strings.Index(txt[4:], "\n---"); end >= 0 {
+				txt = strings.TrimSpace(txt[4+end+4:])
+			}
+		}
+		if r := []rune(txt); len(r) > 8192 {
+			txt = string(r[:8192]) + "\n...[truncated]..."
+		}
 		blocks = append(blocks, fmt.Sprintf(
 			"=== Skill Guidance: %s ===\n%s\n=== End Skill: %s ===",
-			name, strings.TrimSpace(string(body)), name,
+			name, txt, name,
 		))
 	}
 	return strings.Join(blocks, "\n\n") + "\n\n", nil

@@ -37,7 +37,7 @@ func DoStandaloneReview(targetArg string, opts CLIOpts, outW, errW io.Writer) in
 		fmt.Fprintf(errW, "error: review target is not a directory: %s\n", absT)
 		return 2
 	}
-	_, timeout, _, err := validateRunArgs(opts, fleet.ReviewTimeout, false)
+	_, timeout, files, err := validateRunArgs(opts, fleet.ReviewTimeout, true)
 	if err != nil {
 		fmt.Fprintln(errW, err)
 		return 2
@@ -70,7 +70,8 @@ func DoStandaloneReview(targetArg string, opts CLIOpts, outW, errW io.Writer) in
 	fmt.Fprintf(outW, "Reviewing %s in %s (cross-model, lane=%s)...\n", dc.Source, root, verSt.Lane)
 	res := dispatch.ExecReview(verify.ReviewReq{
 		TargetDir: root, SlotDir: slot, DiffCtx: dc, TimeoutSec: timeout,
-		LogWriter: outW, Exclude: excl, ReqLane: verSt.Lane, Model: verSt.Model, Effort: verSt.Effort,
+		Declared: files, LogWriter: outW, Exclude: excl,
+		ReqLane: verSt.Lane, Model: verSt.Model, Effort: verSt.Effort, NoCache: opts.NoCache,
 	})
 	if res.Verdict == "SKIPPED" && res.Lane == "" {
 		fmt.Fprintf(errW, "error: no review provider available (%s)\n", res.Reason)
@@ -89,42 +90,7 @@ func DoStandaloneReview(targetArg string, opts CLIOpts, outW, errW io.Writer) in
 
 // DoRecon runs a single read-only observation query in CWD.
 func DoRecon(opts CLIOpts, outW, errW io.Writer) int {
-	_, _, files, err := validateRunArgs(opts, fleet.DefaultTimeout, true)
-	if err != nil {
-		fmt.Fprintln(errW, err)
-		return 2
-	}
-	slot, err := worktree.EnsureSlot("recon")
-	if err != nil {
-		fmt.Fprintln(errW, err)
-		return 1
-	}
-	cwd, ok := requireCWD(errW)
-	if !ok {
-		return 1
-	}
-	comp := nonEmptyOr(opts.Complexity, "recon")
-	st := cliResolveStage("observe", opts, cwd, nil)
-	opts.Lane, opts.Model, opts.Effort = st.Lane, st.Model, st.Effort
-	task := buildTaskSpec("recon", *opts.Recon, comp, files, opts, cwd, true)
-	res, err := dispatch.RunTaskWithFallback(dispatch.TaskReq{
-		Task: task, Worktree: cwd, SlotDir: slot, Lane: st.Lane, Model: st.Model,
-		Effort: st.Effort, TimeoutRaw: opts.Timeout,
-		Exclude: worktree.ParseCSVArg(opts.ExcludeLanes), NoPivot: opts.NoPivot, SoftPin: st.Source != "cli", LogWriter: errW,
-	})
-	if err != nil {
-		fmt.Fprintln(errW, err)
-		return 2
-	}
-	fmt.Fprintf(errW, "[OODA:OBSERVE lane=%s model=%s effort=%s %.1fs exit=%d]\n",
-		res.Lane, res.Model, res.Effort, res.DurationS, res.ExitCode)
-	if res.Output != "" {
-		fmt.Fprintln(outW, res.Output)
-	}
-	if res.ExitCode >= 0 {
-		return res.ExitCode
-	}
-	return 1
+	return runReadOnlyStage("observe", *opts.Recon, opts, outW, errW)
 }
 
 func reviewAndTrackTask(
@@ -141,30 +107,27 @@ func reviewAndTrackTask(
 			changed = dc.ChangedFiles
 		} else {
 			changed = worktree.ChangedFilesIn(cwd, baseline)
-			dc = verify.CollectDiffContext(cwd, false)
 		}
-		viols = worktree.FindScopeViolations(changed, files)
-		if len(viols) > 0 {
+		if viols = worktree.FindScopeViolations(changed, files); len(viols) > 0 {
 			fmt.Fprintf(outW, "SCOPE VIOLATIONS: %s\n", strings.Join(viols, ", "))
 		}
-		if !opts.NoReview && len(changed) > 0 {
-			revSlot, err := worktree.EnsureSlot("task-review")
-			if err != nil {
+		if !opts.NoReview && res.ExitCode == 0 && len(viols) == 0 && len(changed) > 0 {
+			if revSlot, err := worktree.EnsureSlot("task-review"); err != nil {
 				fmt.Fprintf(outW, "error: review slot setup failed (%v) — failing closed\n", err)
 				revFailed = true
 			} else {
+				if dc.Source == "" {
+					dc = verify.CollectDiffContext(cwd, false)
+				}
 				verSt := cliResolveStage("verify", CLIOpts{Profile: opts.Profile}, cwd, nil)
 				rev := dispatch.ExecReview(verify.ReviewReq{
 					TargetDir: cwd, SlotDir: revSlot, DiffCtx: dc, TimeoutSec: fleet.ReviewTimeout,
-					ScopeViols: viols, Declared: files, LogWriter: outW,
-					AuthorLane: res.Lane, AuthorLanes: res.UsedLanes(),
-					ReqLane: verSt.Lane, Model: verSt.Model, Effort: verSt.Effort,
+					ScopeViols: viols, Declared: files, LogWriter: outW, AuthorLane: res.Lane,
+					AuthorLanes: res.UsedLanes(), ReqLane: verSt.Lane, Model: verSt.Model, Effort: verSt.Effort,
 				})
 				verdict = rev.Verdict
-				if verdict != "REJECT" && (verdict != "ACCEPT" || rev.ExitCode != 0) {
-					revFailed = true
-					revReason = "failed, skipped, or inconclusive verify"
-				}
+				revFailed = verdict != "REJECT" && (verdict != "ACCEPT" || rev.ExitCode != 0)
+				revReason = "failed, skipped, or inconclusive verify"
 				fmt.Fprintf(outW, "\n--- Verify [%s] (%s) ---\n%s\n[review verdict: %s]\n",
 					rev.Lane, rev.Verdict, rev.Output, rev.Verdict)
 			}

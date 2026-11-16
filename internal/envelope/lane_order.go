@@ -211,7 +211,7 @@ func BuildCandidateOrder(
 	if len(lanes) != 1 || lanes[0] != "auto" {
 		ordered = dedupStrings(append(append([]string(nil), lanes...), noCreds...))
 	} else {
-		ordered = noCreds
+		ordered = demoteUnhealthy(noCreds, q)
 	}
 	if len(avoidFamilies) > 0 {
 		var head, tail []string
@@ -225,4 +225,23 @@ func BuildCandidateOrder(
 		ordered = append(head, tail...)
 	}
 	return ordered, nil
+}
+
+func demoteUnhealthy(order []string, q *fleet.QuotaState) []string {
+	if q == nil {
+		return order
+	}
+	var okL, weak []string
+	for _, name := range order {
+		info := q.Providers[name]
+		if info != nil && info.HealthEWMA != nil && *info.HealthEWMA < 0.55 {
+			weak = append(weak, name)
+		} else {
+			okL = append(okL, name)
+		}
+	}
+	sort.SliceStable(weak, func(i, j int) bool {
+		return *q.Providers[weak[i]].HealthEWMA > *q.Providers[weak[j]].HealthEWMA
+	})
+	return append(okL, weak...)
 }

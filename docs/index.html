@@ -467,14 +467,14 @@
   <main id="top">
     <section class="hero">
       <div class="wrap">
-        <span class="eyebrow">agent-ooda v2.1.1 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Zero-Trust Per-Stage Router (v9)</span>
+        <span class="eyebrow">agent-ooda v2.2.0 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Zero-Trust Per-Stage Router (v9)</span>
         <h1>Turn one session into a<br><span>token-routed agent fleet.</span></h1>
         <p class="lead">
           <strong>UberMetroid/agent-ooda</strong> ships one zero-dependency static Go OODA engine
           (<code>agent-ooda</code>, <code>agent-ooda-hud</code>, <code>agent-ooda-hook</code>) paired with
           host plugin adapters (<code>plugins/agent-ooda</code> for Antigravity <code>agy</code> today): v9 per-stage
           OODA routing (<code>--select</code> TUI, <code>/lane</code>, 8 <code>/agents</code> profiles),
-          <code>--orient</code> synthesis, cross-model verification, and a thermal <code>tok/s</code> statusLine HUD.
+          <code>--orient</code> synthesis, cross-model verification, and an <code>agy</code>-theme-synced thermal <code>tok/s</code> HUD.
         </p>
         <div class="install-bar" role="region" aria-label="One-line web installer">
           <code id="install-cmd">curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash</code>
@@ -482,7 +482,7 @@
         </div>
         <div class="hero-actions">
           <a class="btn btn-primary" href="#quickstart">Install &amp; Quickstart</a>
-          <a class="btn" href="https://github.com/UberMetroid/agent-ooda/releases/latest">Release Binaries (v2.1.1)</a>
+          <a class="btn" href="https://github.com/UberMetroid/agent-ooda/releases/latest">Release Binaries (v2.2.0)</a>
           <a class="btn" href="#architecture">Go Architecture</a>
         </div>
         <div class="telemetry-strip">
@@ -513,11 +513,11 @@
           <span class="sec-tag">bin/agent-ooda-hud &bull; statusLine</span>
         </div>
         <p class="sec-sub">
-          <code>bin/agent-ooda-hud</code> renders live OODA phase transitions,
-          active per-stage pins (<code>│ pin ...</code>), a 5-band thermal <code>tok/s</code> heat ramp
-          (Ice Blue <code>&lt;25</code> &rarr; Cyan-Green <code>25&ndash;59</code> &rarr; Solar Amber <code>60&ndash;109</code>
-          &rarr; Bold Orange <code>110&ndash;179</code> &rarr; Crimson <code>&ge;180</code>), active <code>tool Xs</code>
-          waits, and multi-window wake countdowns right inside Antigravity&apos;s status bar.
+          <code>bin/agent-ooda-hud</code> and <code>--select</code> dynamically follow Antigravity&apos;s live
+          <code>colorScheme</code> (<code>dark</code>, <code>light</code>, <code>tokyo night</code>,
+          <code>solarized</code>, <code>colorblind-friendly</code>, seasonal, or <code>AGENT_OODA_THEME</code>).
+          Watch velocity-scaled spinners, tool-scan pulses, 4s <code>✓</code>/<code>✗</code> finish flashes,
+          stage pins (<code>│ pin ...</code>), and the 5-band thermal <code>tok/s</code> ramp right in the status bar.
         </p>
         <div class="terminal" role="region" aria-label="Live thermal statusLine HUD states">
           <div class="term-bar">
@@ -887,7 +887,7 @@ git clone https://github.com/UberMetroid/agent-ooda.git
 cd agent-ooda &amp;&amp; ./install.sh
 
 # restart agy so the plugin, 8 /agents profiles, /lane &amp; statusLine load
-agy plugin list       # confirm "agent-ooda" is enabled (2.1.1)
+agy plugin list       # confirm "agent-ooda" is enabled (2.2.0)
 agent-ooda --version  # print binary version
 agent-ooda --status   # OODA stage matrix, fleet tiers, resets &amp; skills
 agent-ooda --select   # arrow-key TUI configurator (-s; add --local for repo)

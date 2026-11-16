@@ -16,6 +16,7 @@ var safeIDSubRe = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 type ExportUsage struct {
 	Tokens  *int
 	CostUSD *float64
+	Failed  bool `json:"-"`
 }
 
 // PluginRootPath resolves the plugins/agent-ooda directory dynamically at call time.

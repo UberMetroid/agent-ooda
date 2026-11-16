@@ -30,7 +30,7 @@ type SelectRes struct {
 }
 
 func checkCandidate(
-	name string, req SelectReq, depth int, isAuto bool, resolver func(string) string,
+	name string, req SelectReq, depth int, expSet map[string]bool, resolver func(string) string,
 ) (SelectRes, string, bool) {
 	if req.Exclude != nil && req.Exclude[name] {
 		return SelectRes{}, name + ": already attempted", false
@@ -41,7 +41,7 @@ func checkCandidate(
 	if req.StrictAvoid && req.AvoidFamilies != nil && req.AvoidFamilies[ModelFamily(name)] {
 		return SelectRes{}, name + ": excluded family (" + ModelFamily(name) + ")", false
 	}
-	if (isAuto || req.SoftPin) && name == "muse" && fleet.CachedMuseProbe(900).PayAsYouGo {
+	if !expSet["muse"] && name == "muse" && fleet.CachedMuseProbe(900).PayAsYouGo {
 		return SelectRes{}, "muse: skipped (pay-as-you-go api_key active; Power subscription inactive)", false
 	}
 	var info *fleet.ProviderConfig
@@ -51,7 +51,7 @@ func checkCandidate(
 	if info == nil {
 		return SelectRes{}, name + ": not configured", false
 	}
-	if (isAuto || req.SoftPin || req.Complexity == "review") && info.Tier == "credits" {
+	if (!expSet[name] || req.Complexity == "review") && info.Tier == "credits" {
 		return SelectRes{}, name + ": paid credits require explicit --lane " + name, false
 	}
 	if info.Status != "active" {
@@ -81,7 +81,13 @@ func SelectProvider(req SelectReq) (SelectRes, error) {
 	if err != nil {
 		return SelectRes{}, err
 	}
-	isAuto := len(lanes) == 1 && lanes[0] == "auto"
+	var expSet map[string]bool
+	if !(len(lanes) == 1 && lanes[0] == "auto") && !req.SoftPin {
+		expSet = make(map[string]bool, len(lanes))
+		for _, l := range lanes {
+			expSet[l] = true
+		}
+	}
 	cands, err := BuildCandidateOrder(laneArg, req.Complexity, req.Quota, req.StripeIndex, req.AvoidFamilies)
 	if err != nil {
 		return SelectRes{}, err
@@ -94,7 +100,7 @@ func SelectProvider(req SelectReq) (SelectRes, error) {
 	var skipped []string
 	var atCap []SelectRes
 	for _, name := range cands {
-		cand, skipMsg, ok := checkCandidate(name, req, depth, isAuto, resolver)
+		cand, skipMsg, ok := checkCandidate(name, req, depth, expSet, resolver)
 		if !ok {
 			skipped = append(skipped, skipMsg)
 			continue
