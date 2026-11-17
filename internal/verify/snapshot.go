@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
-	"github.com/UberMetroid/agent-ooda/internal/worktree"
+	"github.com/UberMetroid/agy-router/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/worktree"
 )
 
 const snapMaxTotalBytes, snapMaxFileBytes, maxAnchorFiles = int64(2 << 30), int64(512 << 20), 512

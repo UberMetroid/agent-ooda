@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/UberMetroid/agent-ooda/internal/dispatch"
-	"github.com/UberMetroid/agent-ooda/internal/envelope"
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
-	"github.com/UberMetroid/agent-ooda/internal/worktree"
+	"github.com/UberMetroid/agy-router/internal/dispatch"
+	"github.com/UberMetroid/agy-router/internal/envelope"
+	"github.com/UberMetroid/agy-router/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/worktree"
 )
 
 func clipStr(s string, maxLen int) string {

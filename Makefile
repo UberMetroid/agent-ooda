@@ -6,9 +6,9 @@ AGY ?= agy
 all: build portable line-cap density vocab shape plugin-check test dogfood
 
 build:
-	CGO_ENABLED=0 $(GO) build -trimpath -ldflags="-s -w" -o plugins/agent-ooda/bin/agent-ooda ./cmd/agent-ooda
-	ln -sfn agent-ooda plugins/agent-ooda/bin/agent-ooda-hud
-	ln -sfn agent-ooda plugins/agent-ooda/bin/agent-ooda-hook
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags="-s -w" -o plugins/agy-router/bin/agy-router ./cmd/agy-router
+	ln -sfn agy-router plugins/agy-router/bin/agy-router-hud
+	ln -sfn agy-router plugins/agy-router/bin/agy-router-hook
 
 portable:
 	$(GO) run ./qa/gates --gate portable
@@ -33,21 +33,21 @@ test: build
 
 dogfood: build
 	@set -e; tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
-	export AGENT_OODA_QUOTA_FILE="$$tmp/quota.json" AGENT_OODA_DISCOVERY_FILE="$$tmp/discovery.json" \
-	  OODA_NO_AUTO_PROBE=1 AGENT_OODA_HUD_DIR="$$tmp/hud" AGENT_OODA_DEPTH=0 ROUTER_DEPTH=0; \
-	ver=$$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' plugins/agent-ooda/plugin.json); \
-	./plugins/agent-ooda/bin/agent-ooda --version | grep -q "agent-ooda v$$ver"; \
-	./plugins/agent-ooda/bin/agent-ooda --status >/dev/null; \
-	./plugins/agent-ooda/bin/agent-ooda --discover >/dev/null; \
-	./plugins/agent-ooda/bin/agent-ooda --usage >/dev/null; \
-	test "$$(printf '{"terminal_width":120}\n' | NO_COLOR=1 ./plugins/agent-ooda/bin/agent-ooda-hud)" = "OODA"; \
-	printf '{"terminal_width":120,"agent_state":"working","cycle_mode":"plan"}\n' | NO_COLOR=1 ./plugins/agent-ooda/bin/agent-ooda-hud | grep -q "◈ orient"; \
-	printf '{"conversationId":"dogfood","hookEventName":"SessionStart"}\n' | ./plugins/agent-ooda/bin/agent-ooda-hook >/dev/null; \
+	export AGY_ROUTER_QUOTA_FILE="$$tmp/quota.json" AGY_ROUTER_DISCOVERY_FILE="$$tmp/discovery.json" \
+	  AGY_ROUTER_NO_AUTO_PROBE=1 AGY_ROUTER_HUD_DIR="$$tmp/hud" AGY_ROUTER_DEPTH=0 AGENT_OODA_DEPTH=0 ROUTER_DEPTH=0; \
+	ver=$$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' plugins/agy-router/plugin.json); \
+	./plugins/agy-router/bin/agy-router --version | grep -q "agy-router v$$ver"; \
+	./plugins/agy-router/bin/agy-router --status >/dev/null; \
+	./plugins/agy-router/bin/agy-router --discover >/dev/null; \
+	./plugins/agy-router/bin/agy-router --usage >/dev/null; \
+	test "$$(printf '{"terminal_width":120}\n' | NO_COLOR=1 ./plugins/agy-router/bin/agy-router-hud)" = "ROUTER"; \
+	printf '{"terminal_width":120,"agent_state":"working","cycle_mode":"plan"}\n' | NO_COLOR=1 ./plugins/agy-router/bin/agy-router-hud | grep -q "◈ orient"; \
+	printf '{"conversationId":"dogfood","hookEventName":"SessionStart"}\n' | ./plugins/agy-router/bin/agy-router-hook >/dev/null; \
 	test -f "$$tmp/hud/current_session.json"; \
-	out=$$(AGENT_OODA_DEPTH=0 ROUTER_DEPTH=1 ./plugins/agent-ooda/bin/agent-ooda --recon "probe" 2>&1 || true); \
-	printf '%s\n' "$$out" | grep -q "recursive agent-ooda dispatch blocked"; \
-	out=$$(AGENT_OODA_DEPTH=1 ROUTER_DEPTH=0 ./plugins/agent-ooda/bin/agent-ooda --recon "probe" 2>&1 || true); \
-	printf '%s\n' "$$out" | grep -q "recursive agent-ooda dispatch blocked"; \
+	out=$$(AGY_ROUTER_DEPTH=0 AGENT_OODA_DEPTH=0 ROUTER_DEPTH=1 ./plugins/agy-router/bin/agy-router --recon "probe" 2>&1 || true); \
+	printf '%s\n' "$$out" | grep -q "recursive agy-router dispatch blocked"; \
+	out=$$(AGY_ROUTER_DEPTH=1 AGENT_OODA_DEPTH=0 ROUTER_DEPTH=0 ./plugins/agy-router/bin/agy-router --recon "probe" 2>&1 || true); \
+	printf '%s\n' "$$out" | grep -q "recursive agy-router dispatch blocked"; \
 	echo "dogfood: ok (cli version/status/usage + hud + hook + recursion guard)"
 
 # Not part of `all`: these mutate $HOME (symlinks, settings.json statusLine).

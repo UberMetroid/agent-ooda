@@ -173,11 +173,11 @@ func TestInstallLegacyMigration(t *testing.T) {
 		filepath.Join(fakeHome, ".local", "bin", "router"))
 	_ = os.Symlink(filepath.Join(staged, "plugins", "ooda"),
 		filepath.Join(fakeHome, ".gemini", "config", "plugins", "ooda"))
-	vendorBin := filepath.Join(tmp, "vendor", "agent-ooda", "bin", "ooda")
+	vendorBin := filepath.Join(tmp, "vendor", "agy-router", "bin", "ooda")
 	_ = os.Symlink(vendorBin, filepath.Join(fakeHome, ".local", "bin", "ooda"))
 	env := []string{
 		"HOME=" + fakeHome, "XDG_STATE_HOME=" + stateBase,
-		"AGENT_OODA_NO_BUILD=1", "AGENT_OODA_NO_STATUSLINE=1", "PATH=" + os.Getenv("PATH"),
+		"AGY_ROUTER_NO_BUILD=1", "AGY_ROUTER_NO_STATUSLINE=1", "PATH=" + os.Getenv("PATH"),
 	}
 	_ = runBash(t, staged, env, filepath.Join(staged, "install.sh"))
 	if got, err := os.Readlink(filepath.Join(fakeHome, ".local", "bin", "ooda")); err != nil || got != vendorBin {
@@ -191,7 +191,7 @@ func TestInstallLegacyMigration(t *testing.T) {
 			t.Fatalf("expected legacy owned symlink archived: %s", gone)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(stateBase, "agent-ooda", "quota.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(stateBase, "agy-router", "quota.json")); err != nil {
 		t.Fatalf("expected migrated quota.json: %v", err)
 	}
 }

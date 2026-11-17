@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 const cacheTTLSecs int64 = 21600
@@ -27,7 +27,8 @@ type CacheEntry struct {
 }
 
 func cacheEnabled(noCache bool) bool {
-	return !noCache && os.Getenv("OODA_NO_CACHE") != "1" && os.Getenv("AGENT_OODA_NO_CACHE") != "1"
+	return !noCache && os.Getenv("AGY_ROUTER_NO_CACHE") != "1" &&
+		os.Getenv("AGENT_OODA_NO_CACHE") != "1" && os.Getenv("OODA_NO_CACHE") != "1"
 }
 
 // CacheKey builds a content-addressed key binding stage inputs and workspace snapshot.
@@ -118,7 +119,7 @@ func TryReviewCache(req ReviewReq, prompt string, snap map[string]string) (strin
 		return cKey, ReviewResult{}, false
 	}
 	if req.LogWriter != nil {
-		fmt.Fprintf(req.LogWriter, "▸ [OODA:ACT verify] cache=hit (%s, merkle match, 0 tokens)\n", hit.Lane)
+		fmt.Fprintf(req.LogWriter, "▸ [ROUTER:ACT verify] cache=hit (%s, merkle match, 0 tokens)\n", hit.Lane)
 	}
 	return cKey, ReviewResult{
 		Ran: true, Lane: hit.Lane, Model: hit.Model, Verdict: hit.Verdict, ExitCode: 0, Output: hit.Output,

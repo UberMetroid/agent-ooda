@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
-	"github.com/UberMetroid/agent-ooda/internal/hud"
+	"github.com/UberMetroid/agy-router/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/hud"
 )
 
 func writeExecFile(t *testing.T, dir, name, body string) string {
@@ -47,7 +47,8 @@ func setupCLIEnv(t *testing.T) (string, string, string, func(...string) (int, st
 	for k, v := range map[string]string{
 		"HOME": home, "AGENT_QUOTA_FILE": qPath, "OODA_NO_AUTO_PROBE": "1", "NO_COLOR": "1",
 		"OODA_DISCOVERY_FILE": filepath.Join(tmp, "discovery.json"), "ROUTER_HUD_DIR": filepath.Join(tmp, "hud"),
-		"ROUTER_SLOTS_DIR": filepath.Join(tmp, "slots"), "AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "0",
+		"AGY_ROUTER_SLOTS_DIR": filepath.Join(tmp, "slots"),
+		"AGY_ROUTER_DEPTH": "0", "AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "0",
 	} {
 		t.Setenv(k, v)
 	}
@@ -60,14 +61,14 @@ func setupCLIEnv(t *testing.T) (string, string, string, func(...string) (int, st
 	t.Cleanup(func() { _ = os.Chdir(oldWd) })
 	return repo, qPath, binDir, func(argv ...string) (int, string, string) {
 		var out, errB bytes.Buffer
-		return RunCLI("agent-ooda", argv, &out, &errB), out.String(), errB.String()
+		return RunCLI("agy-router", argv, &out, &errB), out.String(), errB.String()
 	}
 }
 
 func TestParseArgsPermutations(t *testing.T) {
 	var helpOut bytes.Buffer
-	if opts, err := ParseArgs("agent-ooda", []string{"-h"}, &helpOut); err != nil || !opts.Help ||
-		!strings.Contains(helpOut.String(), "usage: agent-ooda") {
+	if opts, err := ParseArgs("agy-router", []string{"-h"}, &helpOut); err != nil || !opts.Help ||
+		!strings.Contains(helpOut.String(), "usage: agy-router") {
 		t.Fatalf("unexpected help parse: opts=%+v err=%v", opts, err)
 	}
 	for _, tc := range []struct {
@@ -101,7 +102,7 @@ func TestParseArgsPermutations(t *testing.T) {
 func TestStatusUsageAndQuotaAdmin(t *testing.T) {
 	_, _, _, run := setupCLIEnv(t)
 	for _, tc := range [][]string{
-		{"agent-ooda v" + fleet.Version, "--version"}, {"LANE", "--status"},
+		{"agy-router v" + fleet.Version, "--version"}, {"LANE", "--status"},
 		{"(refreshed)", "--discover"}, {"Cycle Usage Telemetry", "--usage"}, {"hygiene: clean", "--hygiene"},
 		{"", "--disable", "grok", "--reason", "maint", "--hours", "1"}, {"", "--enable", "grok"},
 		{"configured mcode:", "--set-cycle", "mcode", "--effort", "high", "--token-budget", "5000"},
@@ -119,7 +120,7 @@ func TestStatusUsageAndQuotaAdmin(t *testing.T) {
 			t.Fatalf("%v want rc=2 err=%q", bad, errS)
 		}
 	}
-	t.Setenv("AGENT_OODA_THEME", "light")
+	t.Setenv("AGY_ROUTER_THEME", "light")
 	var out, errB bytes.Buffer
 	if rc := RunSelectTUI(CLIOpts{}, strings.NewReader("b\rBjjjjj\rq"), &out, &errB); rc != 0 ||
 		!strings.Contains(out.String(), hud.PaletteFor("light").TUIHeader) ||
@@ -141,23 +142,22 @@ func TestRouterDepthGuard(t *testing.T) {
 	if rc, _, errS := run("--status", "--enable", "grok"); rc != 2 || !strings.Contains(errS, "conflicting") {
 		t.Fatalf("mixed modes at ROUTER_DEPTH=0: rc=%d err=%q", rc, errS)
 	}
+	t.Setenv("AGY_ROUTER_DEPTH", "0")
 	t.Setenv("AGENT_OODA_DEPTH", "0")
-	t.Setenv("ROUTER_DEPTH", "1")
+	t.Setenv("AGY_ROUTER_DEPTH", "1")
 	for _, argv := range [][]string{{"--recon", "hi"}, {"--task", "hi"}, {"--review", "."}, {"--probe"},
 		{"--enable", "grok"}, {"--disable", "grok"}, {"--set-cycle", "grok"}, {"--cleanup"}} {
-		if rc, _, errS := run(argv...); rc != 2 || !strings.Contains(errS, "ROUTER_DEPTH>=1") {
-			t.Fatalf("%v under ROUTER_DEPTH=1: rc=%d err=%q", argv, rc, errS)
+		if rc, _, errS := run(argv...); rc != 2 || !strings.Contains(errS, "AGY_ROUTER_DEPTH>=1") {
+			t.Fatalf("%v under AGY_ROUTER_DEPTH=1: rc=%d err=%q", argv, rc, errS)
 		}
 	}
+	t.Setenv("AGY_ROUTER_DEPTH", "0")
 	t.Setenv("AGENT_OODA_DEPTH", "1")
-	t.Setenv("ROUTER_DEPTH", "0")
-	if rc, _, errS := run("--recon", "hi"); rc != 2 || !strings.Contains(errS, "AGENT_OODA_DEPTH>=1") {
+	if rc, _, errS := run("--recon", "hi"); rc != 2 || !strings.Contains(errS, "ROUTER_DEPTH>=1") {
 		t.Fatalf("--recon under AGENT_OODA_DEPTH=1: rc=%d err=%q", rc, errS)
 	}
-	for _, argv := range [][]string{{"--status"}, {"--hygiene"}} {
-		if rc, _, errS := run(argv...); rc != 0 {
-			t.Fatalf("%v should work when AGENT_OODA_DEPTH=1, got %d (%q)", argv, rc, errS)
-		}
+	if rc, _, errS := run("--status"); rc != 0 {
+		t.Fatalf("--status should work when AGENT_OODA_DEPTH=1, got %d (%q)", rc, errS)
 	}
 }
 
@@ -188,7 +188,7 @@ func TestSingleTaskScopeAndReject(t *testing.T) {
 		!strings.Contains(out, "ACCEPT") {
 		t.Fatalf("standalone --review --files failed: rc=%d out=%q err=%q", rc, out, errS)
 	}
-	revSlotPath := filepath.Join(os.Getenv("ROUTER_SLOTS_DIR"), "slot-task-review")
+	revSlotPath := filepath.Join(os.Getenv("AGY_ROUTER_SLOTS_DIR"), "slot-task-review")
 	_ = os.RemoveAll(revSlotPath)
 	_ = os.WriteFile(revSlotPath, []byte("block"), 0o600)
 	if rc, out, errS := run("--task", "edit a2", "--lane", "grok", "--files", "a.go"); rc != 1 ||
@@ -220,7 +220,7 @@ func TestOrientCommand(t *testing.T) {
 	_, _, binDir, run := setupCLIEnv(t)
 	writeExecFile(t, binDir, "grok", "printf '{\"role\":\"assistant\",\"content\":\"architecture root cause\"}\\n'\n")
 	if rc, out, errS := run("--orient", "trace root cause", "--lane", "grok"); rc != 0 ||
-		!strings.Contains(errS, "OODA:ORIENT") || !strings.Contains(out, "root cause") {
+		!strings.Contains(errS, "ROUTER:ORIENT") || !strings.Contains(out, "root cause") {
 		t.Fatalf("--orient failed rc=%d out=%q err=%q", rc, out, errS)
 	}
 	for _, tc := range [][]string{

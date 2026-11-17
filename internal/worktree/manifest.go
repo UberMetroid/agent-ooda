@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 var ignoredCacheDirs = []string{".pytest_cache", ".ruff_cache", ".mypy_cache"}

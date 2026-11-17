@@ -15,8 +15,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/UberMetroid/agent-ooda/internal/envelope"
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/envelope"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 const outputTailRunes, streamTick = 20000, 1 * time.Second

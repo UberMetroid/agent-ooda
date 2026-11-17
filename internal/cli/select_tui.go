@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/UberMetroid/agent-ooda/internal/envelope"
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
-	"github.com/UberMetroid/agent-ooda/internal/hud"
-	"github.com/UberMetroid/agent-ooda/internal/worktree"
+	"github.com/UberMetroid/agy-router/internal/envelope"
+	"github.com/UberMetroid/agy-router/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/hud"
+	"github.com/UberMetroid/agy-router/internal/worktree"
 )
 
 func readTUIKey(r io.Reader) string {
@@ -45,7 +45,7 @@ func tuiPick(in io.Reader, out io.Writer, title, hint string, items []string) (i
 	}
 	for {
 		pal := hud.ResolvePalette(nil, "")
-		fmt.Fprintf(out, "\033[H\033[2J%s[AGENT-OODA v%s] %s\033[0m\n%s%s\n",
+		fmt.Fprintf(out, "\033[H\033[2J%s[AGY-ROUTER v%s] %s\033[0m\n%s%s\n",
 			pal.TUIHeader, fleet.Version, title, hint, pal.Muted+strings.Repeat("-", 72)+"\033[0m")
 		for i, item := range items {
 			mark := "  "
@@ -194,7 +194,7 @@ func openTUIInput() (*os.File, func(), error) {
 	return tty, restore, nil
 }
 
-// RunSelectTUI runs the arrow-key OODA stage/lane/model selector interactively.
+// RunSelectTUI runs the arrow-key router stage/lane/model selector interactively.
 func RunSelectTUI(opts CLIOpts, in io.Reader, outW, errW io.Writer) int {
 	if outW == nil {
 		outW = os.Stdout
@@ -232,7 +232,7 @@ func RunSelectTUI(opts CLIOpts, in io.Reader, outW, errW io.Writer) int {
 			hint += "  " + col + status + "\033[0m"
 			status = ""
 		}
-		idx, act := tuiPick(in, outW, "OODA Stage Matrix", hint, tuiStageRows(cwd, local, q))
+		idx, act := tuiPick(in, outW, "Router Stage Matrix", hint, tuiStageRows(cwd, local, q))
 		if act == "tab" {
 			local = !local
 			continue

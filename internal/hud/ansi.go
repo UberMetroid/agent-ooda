@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 // Exact ANSI 256-color codes and spinner frames for the statusLine HUD.
@@ -43,6 +43,11 @@ func copyIgnoredSkills() map[string]bool {
 	for k, v := range fleet.CoreHiddenSkills {
 		out[k] = v
 	}
+	out["agy-router"] = true
+	out["agy-router:agy-router"] = true
+	out["agy-router:lane"] = true
+	out["agy-router:ooda"] = true
+	out["agy-router:harden"] = true
 	out["agent-ooda"] = true
 	out["agent-ooda:agent-ooda"] = true
 	out["lane"] = true

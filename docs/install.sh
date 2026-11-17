@@ -1,39 +1,39 @@
 #!/usr/bin/env bash
-# install.sh (web installer) — one-line install, update, or uninstall for UberMetroid/agent-ooda.
+# install.sh (web installer) — one-line install, update, or uninstall for UberMetroid/agy-router.
 # Usage:
-#   curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash
-#   curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --uninstall [--purge]
+#   curl -fsSL https://ubermetroid.github.io/agy-router/install.sh | bash
+#   curl -fsSL https://ubermetroid.github.io/agy-router/install.sh | bash -s -- --uninstall [--purge]
 set -euo pipefail
 
 case "${1:-}" in
   -h|--help)
     cat <<'EOF'
-usage: curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash [-s -- OPTIONS]
+usage: curl -fsSL https://ubermetroid.github.io/agy-router/install.sh | bash [-s -- OPTIONS]
 
-  (no options)         clone/update agent-ooda into ~/.local/share/agent-ooda and run ./install.sh
-  --uninstall          remove agent-ooda symlinks and unwire statusLine via installed checkout
-  --uninstall --purge  also delete ~/.local/state/agent-ooda and ~/.local/share/agent-ooda
+  (no options)         clone/update agy-router into ~/.local/share/agy-router and run ./install.sh
+  --uninstall          remove agy-router symlinks and unwire statusLine via installed checkout
+  --uninstall --purge  also delete ~/.local/state/agy-router and ~/.local/share/agy-router
 
 environment:
-  AGENT_OODA_HOME           override checkout path (default ${XDG_DATA_HOME:-~/.local/share}/agent-ooda)
-  AGENT_OODA_REPO_URL       override git repository URL
-  AGENT_OODA_NO_STATUSLINE=1  skip adding statusLine to ~/.gemini/antigravity-cli/settings.json
-  AGENT_OODA_RELEASE_BASE   override prebuilt binary + SHA256SUMS base URL
+  AGY_ROUTER_HOME             override checkout path (default ${XDG_DATA_HOME:-~/.local/share}/agy-router)
+  AGY_ROUTER_REPO_URL         override git repository URL
+  AGY_ROUTER_NO_STATUSLINE=1  skip adding statusLine to ~/.gemini/antigravity-cli/settings.json
+  AGY_ROUTER_RELEASE_BASE     override prebuilt binary + SHA256SUMS base URL
 EOF
     exit 0 ;;
 esac
 
-REPO_URL="${AGENT_OODA_REPO_URL:-https://github.com/UberMetroid/agent-ooda.git}"
-INSTALL_HOME="${AGENT_OODA_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/agent-ooda}"
+REPO_URL="${AGY_ROUTER_REPO_URL:-${AGENT_OODA_REPO_URL:-https://github.com/UberMetroid/agy-router.git}}"
+INSTALL_HOME="${AGY_ROUTER_HOME:-${AGENT_OODA_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/agy-router}}"
 
 clean_home="${HOME%/}"
 clean_dest="${INSTALL_HOME%/}"
 case "$INSTALL_HOME" in
   /*) ;;
-  *) echo "error: AGENT_OODA_HOME must be absolute: $INSTALL_HOME" >&2; exit 1 ;;
+  *) echo "error: AGY_ROUTER_HOME must be absolute: $INSTALL_HOME" >&2; exit 1 ;;
 esac
 if [ -z "$clean_dest" ] || [ "$clean_dest" = "$clean_home" ]; then
-  echo "error: refusing unsafe AGENT_OODA_HOME: $INSTALL_HOME" >&2
+  echo "error: refusing unsafe AGY_ROUTER_HOME: $INSTALL_HOME" >&2
   exit 1
 fi
 
@@ -100,7 +100,7 @@ if [ -d "$INSTALL_HOME/.git" ]; then
   fi
   git -C "$INSTALL_HOME" checkout -q -B main FETCH_HEAD
 elif [ -e "$INSTALL_HOME" ]; then
-  echo "error: $INSTALL_HOME exists and is not a git checkout of agent-ooda" >&2
+  echo "error: $INSTALL_HOME exists and is not a git checkout of agy-router" >&2
   exit 1
 else
   mkdir -p "$(dirname "$INSTALL_HOME")"

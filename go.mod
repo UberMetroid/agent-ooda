@@ -1,3 +1,3 @@
-module github.com/UberMetroid/agent-ooda
+module github.com/UberMetroid/agy-router
 
 go 1.22

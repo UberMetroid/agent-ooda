@@ -11,9 +11,9 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
-	"github.com/UberMetroid/agent-ooda/internal/verify"
-	"github.com/UberMetroid/agent-ooda/internal/worktree"
+	"github.com/UberMetroid/agy-router/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/verify"
+	"github.com/UberMetroid/agy-router/internal/worktree"
 )
 
 func setEnvs(t *testing.T, kv map[string]string) {
@@ -25,9 +25,10 @@ func setEnvs(t *testing.T, kv map[string]string) {
 
 func TestBuildWorkerCommandAllCLIs(t *testing.T) {
 	wt, slot := t.TempDir(), t.TempDir()
-	setEnvs(t, map[string]string{"AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "2", "ANTIGRAVITY_TOKEN": "sec", "GH_TOKEN": "sec",
-		"GITHUB_TOKEN": "sec", "AWS_SECRET_ACCESS_KEY": "sec", "OPENAI_API_KEY": "sec", "ANTHROPIC_API_KEY": "sec",
-		"NPM_TOKEN": "sec", "SSH_AUTH_SOCK": "/tmp/s", "ACME_API_TOKEN": "sec", "STRIPE_SECRET_KEY": "sec"})
+	setEnvs(t, map[string]string{"AGY_ROUTER_DEPTH": "0", "AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "2", "GH_TOKEN": "sec",
+		"ANTIGRAVITY_TOKEN": "sec", "GITHUB_TOKEN": "sec", "AWS_SECRET_ACCESS_KEY": "sec", "OPENAI_API_KEY": "sec",
+		"ANTHROPIC_API_KEY": "sec", "NPM_TOKEN": "sec", "SSH_AUTH_SOCK": "/tmp/s", "ACME_API_TOKEN": "sec",
+		"STRIPE_SECRET_KEY": "sec"})
 	for _, lane := range []string{"agy-opus", "devin-pro", "mcode", "grok", "muse", "mistral"} {
 		built, err := BuildWorkerCommand(CmdReq{Provider: lane, CLIPath: "/bin/" + lane,
 			Prompt: "fix bug", Worktree: wt, SlotDir: slot, TaskID: "t1"})
@@ -35,7 +36,7 @@ func TestBuildWorkerCommandAllCLIs(t *testing.T) {
 			slices.Contains(built.Argv, "--reasoning-effort") {
 			t.Fatalf("%s unpinned failed/leaked: err=%v argv=%v", lane, err, built.Argv)
 		}
-		for _, kv := range []string{"ROUTER_DEPTH=3", "AGENT_OODA_DEPTH=3",
+		for _, kv := range []string{"AGY_ROUTER_DEPTH=3", "ROUTER_DEPTH=3", "AGENT_OODA_DEPTH=3",
 			"GIT_TERMINAL_PROMPT=0", "GH_TOKEN=sec", "GITHUB_TOKEN=sec"} {
 			if !slices.Contains(built.Env, kv) {
 				t.Fatalf("%s missing env %s: %v", lane, kv, built.Env)
@@ -136,13 +137,12 @@ func TestExecStreamAndGeminiGuard(t *testing.T) {
 		TaskID: "g1", TimeoutSec: 5}); b.ExitCode != 2 || !strings.Contains(b.Output, "Gemini guardrail") {
 		t.Fatalf("expected Gemini settings block exit 2, got %+v", b)
 	}
-	script := filepath.Join(tmp, "s.sh")
-	_ = os.WriteFile(script, []byte("#!/bin/sh\n"+
+	_ = os.WriteFile(filepath.Join(tmp, "s.sh"), []byte("#!/bin/sh\n"+
 		"echo '{\"type\":\"result\",\"result\":\"ok_stream\",\"usage\":{\"total_tokens\":99}}'\n"), 0o755)
 	mPath := HudWorkerStart(WorkerMarker{PID: os.Getpid(), TaskID: "s1", Mode: "observe", Lane: "mcode", Cwd: tmp})
 	defer HudWorkerFinish(mPath, LastRunMarker{Mode: "observe", Lane: "mcode", ExitCode: 0})
-	if res := ExecuteOnce(ExecReq{Provider: "mcode", CLIPath: script, Prompt: "hi", Worktree: tmp, SlotDir: tmp,
-		TaskID: "s1", TimeoutSec: 10, ReadOnly: true, MarkerPath: mPath}); res.ExitCode != 0 ||
+	if res := ExecuteOnce(ExecReq{Provider: "mcode", CLIPath: filepath.Join(tmp, "s.sh"), Prompt: "hi", Worktree: tmp,
+		SlotDir: tmp, TaskID: "s1", TimeoutSec: 10, ReadOnly: true, MarkerPath: mPath}); res.ExitCode != 0 ||
 		!strings.Contains(res.Output, "ok_stream") || res.ExportInfo == nil || *res.ExportInfo.Tokens != 99 {
 		t.Fatalf("unexpected ExecuteOnce stream result: %+v", res)
 	}

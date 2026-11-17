@@ -1,4 +1,4 @@
-// Command gates enforces agent-ooda Power-of-2 architecture and portability rules.
+// Command gates enforces agy-router Power-of-2 architecture and portability rules.
 package main
 
 import (

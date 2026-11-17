@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 func testLane(tier, status string, resetAt, cool *string) *fleet.ProviderConfig {

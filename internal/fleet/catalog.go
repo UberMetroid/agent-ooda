@@ -25,7 +25,7 @@ func UsageErr(format string, args ...any) error {
 }
 
 const (
-	Version             = "2.4.2"
+	Version             = "3.0.0"
 	QuotaSchemaVersion  = 9
 	CornerWindowSecs    = 5400
 	SoonWakeSecs        = 2700
@@ -61,9 +61,10 @@ var (
 
 var (
 	CoreHiddenSkills = map[string]bool{
-		"agent-ooda": true, "agent-ooda:agent-ooda": true, "lane": true, "agent-ooda:lane": true,
-		"harden": true, "agent-ooda:harden": true, "router": true, "agent-router": true,
-		"ooda": true, "ooda:ooda": true, "ooda:router": true,
+		"agy-router": true, "agy-router:agy-router": true, "lane": true, "agy-router:lane": true,
+		"harden": true, "agy-router:harden": true, "ooda": true, "agy-router:ooda": true,
+		"agent-ooda": true, "agent-ooda:agent-ooda": true, "agent-ooda:lane": true,
+		"agent-ooda:harden": true, "router": true, "agent-router": true, "ooda:ooda": true, "ooda:router": true,
 		"agy-customizations": true, "antigravity-guide": true, "antigravity_guide": true,
 		"run-workflow": true, "swarm": true, "swarm_monitor": true,
 	}
@@ -169,11 +170,10 @@ type QuotaState struct {
 
 // ReviewModelEnv returns the env-configured auto-review model or cli-default.
 func ReviewModelEnv() string {
-	if v := os.Getenv("AGENT_REVIEW_MODEL"); v != "" {
-		return v
-	}
-	if v := os.Getenv("OODA_REVIEW_MODEL"); v != "" {
-		return v
+	for _, k := range []string{"AGENT_REVIEW_MODEL", "AGY_ROUTER_REVIEW_MODEL", "OODA_REVIEW_MODEL"} {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
 	}
 	return "cli-default"
 }

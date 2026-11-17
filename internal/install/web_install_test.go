@@ -54,7 +54,7 @@ func runWebInst(t *testing.T, script, home, instHome, repoURL string, args ...st
 	t.Helper()
 	cmdArgs := append([]string{script}, args...)
 	cmd := exec.Command("bash", cmdArgs...)
-	env := append(gitEnv(home), "AGENT_OODA_HOME="+instHome, "AGENT_OODA_REPO_URL="+repoURL)
+	env := append(gitEnv(home), "AGY_ROUTER_HOME="+instHome, "AGY_ROUTER_REPO_URL="+repoURL)
 	cmd.Env = env
 	out, err := cmd.CombinedOutput()
 	return string(out), err

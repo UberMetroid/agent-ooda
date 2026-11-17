@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 func removeRepoWorktrees(root, wtDir string, outW io.Writer) []string {

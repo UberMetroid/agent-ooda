@@ -1,0 +1,14 @@
+{
+  "name": "agy-router",
+  "displayName": "agy-router — Multi-Agent Fleet Router & HUD",
+  "version": "3.0.0",
+  "description": "Zero-trust multi-agent fleet router, quota-aware stage scheduler, independent cross-model diff verifier, and theme-synced thermal tok/s HUD for Antigravity.",
+  "author": "UberMetroid",
+  "homepage": "https://ubermetroid.github.io/agy-router/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/UberMetroid/agy-router"
+  },
+  "license": "Apache-2.0",
+  "logo": "assets/logo.svg"
+}

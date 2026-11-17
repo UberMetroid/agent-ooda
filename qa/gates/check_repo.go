@@ -16,7 +16,7 @@ import (
 	"strings"
 )
 
-const modulePrefix = "github.com/UberMetroid/agent-ooda"
+const modulePrefix = "github.com/UberMetroid/agy-router"
 
 var (
 	skipWalkDirs  = map[string]bool{".git": true, ".worktrees": true, "__pycache__": true}
@@ -187,7 +187,7 @@ func checkLineCap(root string) []string {
 
 func checkDensity(root string) []string {
 	var viols []string
-	roots := []string{"cmd", "internal", filepath.Join("plugins", "agent-ooda"), "qa"}
+	roots := []string{"cmd", "internal", filepath.Join("plugins", "agy-router"), "qa"}
 	for _, sub := range roots {
 		base := filepath.Join(root, sub)
 		if _, err := os.Stat(base); err != nil {
@@ -222,7 +222,7 @@ func checkDensity(root string) []string {
 }
 
 func checkPlugin(root, agyBin string) []string {
-	cmd := exec.Command(agyBin, "plugin", "validate", "plugins/agent-ooda", "--strict", "--json")
+	cmd := exec.Command(agyBin, "plugin", "validate", "plugins/agy-router", "--strict", "--json")
 	cmd.Dir = root
 	out, err := cmd.Output()
 	var parsed struct {

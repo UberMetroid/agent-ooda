@@ -6,11 +6,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/UberMetroid/agent-ooda/internal/dispatch"
-	"github.com/UberMetroid/agent-ooda/internal/envelope"
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
-	"github.com/UberMetroid/agent-ooda/internal/verify"
-	"github.com/UberMetroid/agent-ooda/internal/worktree"
+	"github.com/UberMetroid/agy-router/internal/dispatch"
+	"github.com/UberMetroid/agy-router/internal/envelope"
+	"github.com/UberMetroid/agy-router/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/verify"
+	"github.com/UberMetroid/agy-router/internal/worktree"
 )
 
 func buildTaskSpec(
@@ -155,7 +155,7 @@ func runReadOnlyStage(stage, prompt string, opts CLIOpts, outW, errW io.Writer) 
 		st.Source != "cli", comp, excl, opts.NoPivot, task.Files, task.Skills, skBlocks, task.Prompt)
 	cKey := verify.CacheKey(stage, cPay, preSnap)
 	if hit, ok := verify.LoadStageCache(cKey, opts.NoCache); ok {
-		fmt.Fprintf(errW, "[OODA:%s lane=%s model=%s effort=%s 0.0s exit=0 cache=hit]\n",
+		fmt.Fprintf(errW, "[ROUTER:%s lane=%s model=%s effort=%s 0.0s exit=0 cache=hit]\n",
 			banner, hit.Lane, hit.Model, nonEmptyOr(hit.Effort, "default"))
 		fmt.Fprintln(outW, hit.Output)
 		return 0
@@ -168,7 +168,7 @@ func runReadOnlyStage(stage, prompt string, opts CLIOpts, outW, errW io.Writer) 
 		fmt.Fprintln(errW, err)
 		return 2
 	}
-	fmt.Fprintf(errW, "[OODA:%s lane=%s model=%s effort=%s %.1fs exit=%d]\n",
+	fmt.Fprintf(errW, "[ROUTER:%s lane=%s model=%s effort=%s %.1fs exit=%d]\n",
 		banner, res.Lane, res.Model, res.Effort, res.DurationS, res.ExitCode)
 	if res.Output != "" {
 		fmt.Fprintln(outW, res.Output)
@@ -208,7 +208,7 @@ func printDiscoveryFooter(
 	}
 	for _, g := range groups {
 		lc := caps[g[1]]
-		shown, extra, guard := "(run agent-ooda --discover)", "", ""
+		shown, extra, guard := "(run agy-router --discover)", "", ""
 		if len(lc.Models) > 0 {
 			shown = strings.Join(lc.Models[:min(len(lc.Models), limit)], ", ")
 		}

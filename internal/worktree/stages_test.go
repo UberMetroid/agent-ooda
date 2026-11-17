@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 func TestStagesPrecedenceAndCleanup(t *testing.T) {
@@ -18,6 +18,7 @@ func TestStagesPrecedenceAndCleanup(t *testing.T) {
 	qPath := filepath.Join(tmp, "quota.json")
 	t.Setenv("AGENT_QUOTA_FILE", qPath)
 	t.Setenv("HOME", filepath.Join(tmp, "home"))
+	t.Setenv("AGY_ROUTER_PROFILE", "")
 	t.Setenv("AGENT_OODA_PROFILE", "")
 	t.Setenv("OODA_NO_AUTO_PROBE", "1")
 
@@ -82,6 +83,7 @@ func TestLocalAutoMaskAndReset(t *testing.T) {
 	tmp := t.TempDir()
 	qPath := filepath.Join(tmp, "quota.json")
 	t.Setenv("AGENT_QUOTA_FILE", qPath)
+	t.Setenv("AGY_ROUTER_PROFILE", "")
 	t.Setenv("AGENT_OODA_PROFILE", "")
 	t.Setenv("OODA_NO_AUTO_PROBE", "1")
 	if _, err := ConfigureStage(StagePatch{Stage: "act", Lane: "mcode", Cwd: tmp}); err != nil {
@@ -109,6 +111,7 @@ func TestStagesExpiryPresetAndRefusal(t *testing.T) {
 	tmp := t.TempDir()
 	qPath := filepath.Join(tmp, "quota.json")
 	t.Setenv("AGENT_QUOTA_FILE", qPath)
+	t.Setenv("AGY_ROUTER_PROFILE", "")
 	t.Setenv("AGENT_OODA_PROFILE", "")
 	t.Setenv("OODA_NO_AUTO_PROBE", "1")
 
@@ -132,8 +135,11 @@ func TestStagesExpiryPresetAndRefusal(t *testing.T) {
 	}
 	_ = wake
 	for _, k := range []string{"auto", "conserve", "deep", "devin", "grok", "mcode", "muse", "mistral"} {
+		if pre, ok := PresetStages("router-" + k); !ok || len(pre) != 4 {
+			t.Fatalf("missing router preset %s", k)
+		}
 		if pre, ok := PresetStages("ooda-" + k); !ok || len(pre) != 4 {
-			t.Fatalf("missing preset %s", k)
+			t.Fatalf("missing legacy preset %s", k)
 		}
 	}
 	if _, err := ConfigureStage(StagePatch{Stage: "preset", Lane: "conserve", Local: true, Cwd: tmp}); err != nil {
@@ -191,7 +197,7 @@ func TestStageRefusalsAndPAYG(t *testing.T) {
 func TestManifestBoundsAndSkillEscape(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", filepath.Join(tmp, "home"))
-	t.Setenv("AGENT_OODA_PLUGIN_ROOT", filepath.Join(tmp, "plug"))
+	t.Setenv("AGY_ROUTER_PLUGIN_ROOT", filepath.Join(tmp, "plug"))
 	_ = os.MkdirAll(filepath.Join(tmp, "home"), 0o755)
 
 	m1 := filepath.Join(tmp, "many.json")

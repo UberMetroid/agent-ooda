@@ -1,20 +1,20 @@
-// Binary agent-ooda is the multi-call router, statusLine HUD, hook, and setup entrypoint.
+// Binary agy-router is the multi-call router, statusLine HUD, hook, and setup entrypoint.
 package main
 
 import (
 	"os"
 	"path/filepath"
 
-	"github.com/UberMetroid/agent-ooda/internal/cli"
-	"github.com/UberMetroid/agent-ooda/internal/hud"
-	"github.com/UberMetroid/agent-ooda/internal/install"
+	"github.com/UberMetroid/agy-router/internal/cli"
+	"github.com/UberMetroid/agy-router/internal/hud"
+	"github.com/UberMetroid/agy-router/internal/install"
 )
 
 func dispatchSubcommand(prog string, args []string) int {
 	switch prog {
-	case "agent-ooda-hud", "ooda-hud", "statusline.py":
+	case "agy-router-hud", "agent-ooda-hud", "ooda-hud", "statusline.py":
 		return hud.RunStatusLine()
-	case "agent-ooda-hook", "ooda-hook":
+	case "agy-router-hook", "agent-ooda-hook", "ooda-hook":
 		return hud.RunHook()
 	}
 	if len(args) > 0 {

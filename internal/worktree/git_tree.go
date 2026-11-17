@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 const gitTimeoutSec = 120

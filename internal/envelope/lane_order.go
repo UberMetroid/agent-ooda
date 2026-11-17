@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 var conserveLeaders = []string{"devin-pro", "devin-fast", "mcode"}

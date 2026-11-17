@@ -31,7 +31,7 @@ tests*). Do **not** use offensive or dual-use trigger words across any fleet CLI
 
 1. Run the `0`-token deterministic hygiene scanner first:
    ```bash
-   agent-ooda --hygiene [target]
+   agy-router --hygiene [target]
    ```
    Collect all `P0` credential/key/file findings and `P1` hardening footguns
    (`0777`/`0666` permissions, `InsecureSkipVerify: true` outside tests,
@@ -40,17 +40,17 @@ tests*). Do **not** use offensive or dual-use trigger words across any fleet CLI
    target production files and pass `--timeout 300` so workers don't crawl
    unrelated tests):
    ```bash
-   agent-ooda --recon "Map external untrusted input sources (CLI args, env vars, HTTP/RPC/IPC requests, git/file reads) and sensitive sinks in [target] with exact file:line locations. Read-only, cite only verified paths; skip test files." --timeout 300 --skill harden
+   agy-router --recon "Map external untrusted input sources (CLI args, env vars, HTTP/RPC/IPC requests, git/file reads) and sensitive sinks in [target] with exact file:line locations. Read-only, cite only verified paths; skip test files." --timeout 300 --skill harden
    ```
 
 ---
 
 ## Gate 2 — ORIENT Pass A: Structured Finder (`0` Edits)
 
-Propose at most **`8`** concrete candidate chains (`H1..Hn`) via `agent-ooda --orient`
+Propose at most **`8`** concrete candidate chains (`H1..Hn`) via `agy-router --orient`
 with `--timeout 480`:
 ```bash
-agent-ooda --orient "Inspect verified entry points and sinks from recon in [target]. Propose <= 8 candidate trust-boundary defects H1..Hn (skip test files). Every candidate MUST include:
+agy-router --orient "Inspect verified entry points and sinks from recon in [target]. Propose <= 8 candidate trust-boundary defects H1..Hn (skip test files). Every candidate MUST include:
   SOURCE: <file:line> (external/untrusted input only; compile-time constants and test mocks forbidden)
   MISSING_GUARD: <exact unchecked invariant along the call chain>
   SINK: <file:line> (concrete failure impact)
@@ -80,7 +80,7 @@ model family** (`--exclude-lane <finder_lane> --skill none --timeout 480`; use
 budget) and **inline Finder's concise `H1..Hn` chains directly in the prompt**
 (read-only worker runs are stateless across invocations):
 ```bash
-agent-ooda --orient "Skeptic falsification pass (do not crawl unrelated test suites). Read callers, type invariants, bounds checks, capability enforcement, and sanitizer helpers around these inlined candidates H1..Hn in [target] and try to DISPROVE each one:
+agy-router --orient "Skeptic falsification pass (do not crawl unrelated test suites). Read callers, type invariants, bounds checks, capability enforcement, and sanitizer helpers around these inlined candidates H1..Hn in [target] and try to DISPROVE each one:
 <paste Finder's H1..Hn SOURCE -> MISSING_GUARD -> SINK summary + exact line ranges>
 Classify strictly as:
   - DISPROVED: cite the exact file:line upstream guard preventing reachability
@@ -132,5 +132,5 @@ For each approved finding (use sequential `--task --files ...` or parallel
 3. **Final Verification Gates:**
    - Run the repository's full test/build suite (e.g., `make all`, `go test -race ./...`,
      `pytest -q`).
-   - Re-run `agent-ooda --hygiene [target]` -> must exit `0` for `P0` and fixed `P1` items.
-   - Run off-family `agent-ooda --review .` -> require `VERDICT: ACCEPT`.
+   - Re-run `agy-router --hygiene [target]` -> must exit `0` for `P0` and fixed `P1` items.
+   - Run off-family `agy-router --review .` -> require `VERDICT: ACCEPT`.

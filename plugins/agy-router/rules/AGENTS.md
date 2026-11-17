@@ -1,0 +1,7 @@
+# Multi-Agent Fleet Routing (`agy-router`)
+
+- **Recursion Guard:** If `AGY_ROUTER_DEPTH>=1`, `AGENT_OODA_DEPTH>=1`, or `ROUTER_DEPTH>=1`, you ARE a routed worker: NEVER invoke `agy-router` (only `--status`/`--usage`/`--hygiene` read-only checks exist); execute directly with native tools.
+- **Thin Orchestrator & Plan Mode:** Use Antigravity's native Plan Mode (`enter_plan_mode`/`exit_plan_mode`) and keep the main context lean. Offload codebase recon (`agy-router --recon "..."`), multi-file design (`--orient "..."`), implementation (`--task "..." --files ...` or `.worktrees/tasks.json`), and cross-model diff verification (`--review .`) across the CLI fleet instead of brute-forcing large sweeps in main context.
+- **Routing Slots & Fleet Selection:** Check `agy-router --status` / `--usage` before routing. `observe`, `orient`, `act`, `verify` resolve `CLI flag > --local > --profile > global (--set-stage / --select) > auto`; default `auto` drains expiring/0.5x off-peak pools first and honors `[PAYG api_key]` & Gemini guardrails.
+- **Zero-Trust Gate:** Never trust unverified worker prose; inspect modified files or run repo tests + `agy-router --review .` before merging worktrees (`--cleanup`).
+- **Opt-In Skills:** Invoke `/lane` (lane/model pin management), `/ooda` (4-phase OODA debugging & investigation loop), or `/harden` (zero-trust hardening & security audit) on demand — they consume `0` tokens when unused.

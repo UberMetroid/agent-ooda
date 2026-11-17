@@ -1,9 +1,9 @@
 {
-  "agent-ooda-hud-skill-tracker": {
+  "agy-router-hud-skill-tracker": {
     "SessionStart": [
       {
         "type": "command",
-        "command": "./bin/agent-ooda-hook",
+        "command": "./bin/agy-router-hook",
         "timeout": 5
       }
     ],
@@ -13,7 +13,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "./bin/agent-ooda-hook",
+            "command": "./bin/agy-router-hook",
             "timeout": 5
           }
         ]

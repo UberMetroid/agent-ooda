@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 const discoveryTTLSecs = 21600
@@ -197,7 +197,8 @@ func LoadDiscoveryCache(forceRefresh, probeAgy bool) map[string][]string {
 	}
 	now := float64(time.Now().UnixNano()) / 1e9
 	fresh := len(old.CLIModels) > 0 && (now-old.TS) < discoveryTTLSecs
-	if !forceRefresh && (!probeAgy || fresh || os.Getenv("OODA_NO_AUTO_PROBE") == "1") {
+	noProbe := os.Getenv("AGY_ROUTER_NO_AUTO_PROBE") == "1" || os.Getenv("OODA_NO_AUTO_PROBE") == "1"
+	if !forceRefresh && (!probeAgy || fresh || noProbe) {
 		return old.CLIModels
 	}
 	cliMods := make(map[string][]string, 3)

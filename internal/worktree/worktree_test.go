@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 func TestRelPathAndManifest(t *testing.T) {

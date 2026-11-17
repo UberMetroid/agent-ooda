@@ -28,11 +28,13 @@ check_link_writable() {
   fi
 }
 
-agent_ooda_uninstall() {
+agy_router_uninstall() {
   local purge=0 arg path removed=0 unwire=0 hud="$AGY_DIR/statusline.py" wire_out
-  local data_clone="${XDG_DATA_HOME:-$HOME/.local/share}/agent-ooda"
-  local links=("$HOME/.gemini/config/plugins/agent-ooda" "$HOME/.local/bin/agent-ooda" "$hud")
-  local legacy_links=("$HOME/.gemini/config/plugins/ooda" "$HOME/.local/bin/ooda" "$HOME/.local/bin/router")
+  local data_clone="${XDG_DATA_HOME:-$HOME/.local/share}/agy-router"
+  local legacy_clone="${XDG_DATA_HOME:-$HOME/.local/share}/agent-ooda"
+  local links=("$HOME/.gemini/config/plugins/agy-router" "$HOME/.local/bin/agy-router" "$hud")
+  local legacy_links=("$HOME/.gemini/config/plugins/agent-ooda" "$HOME/.local/bin/agent-ooda" \
+    "$HOME/.gemini/config/plugins/ooda" "$HOME/.local/bin/ooda" "$HOME/.local/bin/router")
   for arg in "$@"; do
     case "$arg" in
       --purge) purge=1 ;;
@@ -55,9 +57,10 @@ agent_ooda_uninstall() {
   for path in "${legacy_links[@]}"; do
     check_link_writable "$path" "$REPO_ROOT" || return 1
     check_link_writable "$path" "$data_clone" || return 1
+    check_link_writable "$path" "$legacy_clone" || return 1
   done
 
-  echo "agent-ooda uninstall"
+  echo "agy-router uninstall"
   if [ "$unwire" -eq 1 ] && [ -x "$OODA_BIN" ]; then
     wire_out="$("$OODA_BIN" __wire unwire "$SETTINGS_JSON" "$STATE_DIR")" || {
       echo "error: failed to unwire statusLine in $SETTINGS_JSON; no symlinks removed" >&2
@@ -65,7 +68,7 @@ agent_ooda_uninstall() {
     }
     printf '%s\n' "$wire_out" | sed 's/^/  settings    : /'
   elif [ "$unwire" -eq 1 ]; then
-    echo "  settings    : left $SETTINGS_JSON untouched (agent-ooda binary absent to rewrite JSON)"
+    echo "  settings    : left $SETTINGS_JSON untouched (agy-router binary absent to rewrite JSON)"
   else
     echo "  settings    : statusLine left as-is (statusline.py is not ours)"
   fi
@@ -80,7 +83,7 @@ agent_ooda_uninstall() {
     fi
   done
   for path in "${legacy_links[@]}"; do
-    if owned_link "$path" "$REPO_ROOT" || owned_link "$path" "$data_clone"; then
+    if owned_link "$path" "$REPO_ROOT" || owned_link "$path" "$data_clone" || owned_link "$path" "$legacy_clone"; then
       rm -f "$path"
       echo "  removed     : $path (legacy)"
       removed=$((removed + 1))
@@ -96,10 +99,12 @@ agent_ooda_uninstall() {
     else
       echo "  state       : $STATE_DIR already absent"
     fi
-    if [ -d "$LEGACY_STATE_DIR" ] && [ "$LEGACY_STATE_DIR" != "$STATE_DIR" ]; then
-      rm -rf "$LEGACY_STATE_DIR"
-      echo "  state       : purged legacy $LEGACY_STATE_DIR"
-    fi
+    for leg in "$LEGACY_AGENT_OODA_STATE_DIR" "$LEGACY_STATE_DIR"; do
+      if [ -d "$leg" ] && [ "$leg" != "$STATE_DIR" ]; then
+        rm -rf "$leg"
+        echo "  state       : purged legacy $leg"
+      fi
+    done
   elif [ -d "$STATE_DIR" ]; then
     echo "  state       : kept $STATE_DIR (re-run with --purge to delete)"
     if [ -d "$STATE_DIR/backups" ]; then

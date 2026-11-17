@@ -107,7 +107,7 @@ func applyUnwire(setPath, stateDir string, owned map[string]bool, outW, errW io.
 	}
 	data := raw.(map[string]any)
 	if classifyStatusCmd(data["statusLine"], owned) == "foreign" {
-		fmt.Fprintf(outW, "no agent-ooda statusLine block in %s; nothing to unwire\n", setPath)
+		fmt.Fprintf(outW, "no agy-router statusLine block in %s; nothing to unwire\n", setPath)
 		return 0
 	}
 	delete(data, "statusLine")

@@ -8,11 +8,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
-	"github.com/UberMetroid/agent-ooda/internal/worktree"
+	"github.com/UberMetroid/agy-router/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/worktree"
 )
 
-// CLIOpts holds parsed command-line options for the agent-ooda CLI.
+// CLIOpts holds parsed command-line options for the agy-router CLI.
 type CLIOpts struct {
 	Manifest, Complexity, Lane, Model, Effort, Timeout          string
 	Enable, Disable, SetCycle, Reason, SetStage, Profile        string
@@ -35,7 +35,7 @@ func usageText(prog string) string {
 			"options:\n"+
 			"  -h, --help             show this help message and exit\n"+
 			"  -v, --version          show binary version and exit\n"+
-			"  -s, --select           interactive arrow-key OODA stage & model selector\n"+
+			"  -s, --select           interactive arrow-key router stage & model selector\n"+
 			"  --recon/--orient PROMPT  read-only Observe recon or Orient architecture analysis\n"+
 			"  --task PROMPT          execute scoped coding task in CWD\n"+
 			"  --review [PATH]        standalone read-only cross-model review (default CWD)\n"+

@@ -101,13 +101,13 @@ func TestSetupSkillsAndOwnedLink(t *testing.T) {
 		t.Fatalf("malformed skills.json entries must fail")
 	}
 
-	pDir := filepath.Join(tmp, "plugins", "agent-ooda")
+	pDir := filepath.Join(tmp, "plugins", "agy-router")
 	_ = os.MkdirAll(filepath.Join(pDir, "bin"), 0o755)
-	_ = os.WriteFile(filepath.Join(pDir, "bin", "agent-ooda"), []byte("x"), 0o755)
+	_ = os.WriteFile(filepath.Join(pDir, "bin", "agy-router"), []byte("x"), 0o755)
 	ownLink := filepath.Join(tmp, "own")
 	brokenOwn := filepath.Join(tmp, "broken-own")
 	foreignLink := filepath.Join(tmp, "foreign")
-	_ = os.Symlink(filepath.Join(pDir, "bin", "agent-ooda"), ownLink)
+	_ = os.Symlink(filepath.Join(pDir, "bin", "agy-router"), ownLink)
 	_ = os.Symlink(filepath.Join(pDir, "bin", "missing"), brokenOwn)
 	_ = os.Symlink(filepath.Join(tmp, "other"), foreignLink)
 	if RunSetupCmd([]string{"owned-link", ownLink, pDir}, &errB) != 0 ||
@@ -131,16 +131,16 @@ func runBash(t *testing.T, dir string, env []string, script string, args ...stri
 
 func stageTestRepo(t *testing.T, srcRoot, dstRoot string) {
 	t.Helper()
-	_ = os.MkdirAll(filepath.Join(dstRoot, "plugins", "agent-ooda", "bin"), 0o755)
-	_ = os.MkdirAll(filepath.Join(dstRoot, "plugins", "agent-ooda", "config"), 0o755)
+	_ = os.MkdirAll(filepath.Join(dstRoot, "plugins", "agy-router", "bin"), 0o755)
+	_ = os.MkdirAll(filepath.Join(dstRoot, "plugins", "agy-router", "config"), 0o755)
 	for _, rel := range []string{
 		"install.sh", "uninstall.sh",
-		filepath.Join("plugins", "agent-ooda", "bin", "agent-ooda"),
-		filepath.Join("plugins", "agent-ooda", "config", "quota.default.json"),
-		filepath.Join("plugins", "agent-ooda", "plugin.json"),
+		filepath.Join("plugins", "agy-router", "bin", "agy-router"),
+		filepath.Join("plugins", "agy-router", "config", "quota.default.json"),
+		filepath.Join("plugins", "agy-router", "plugin.json"),
 	} {
 		mode := os.FileMode(0o644)
-		if strings.HasSuffix(rel, ".sh") || strings.HasSuffix(rel, "agent-ooda") {
+		if strings.HasSuffix(rel, ".sh") || strings.HasSuffix(rel, "agy-router") {
 			mode = 0o755
 		}
 		_ = os.WriteFile(filepath.Join(dstRoot, rel), readWireRaw(t, filepath.Join(srcRoot, rel)), mode)
@@ -149,7 +149,7 @@ func stageTestRepo(t *testing.T, srcRoot, dstRoot string) {
 
 func TestInstallAndUninstallScript(t *testing.T) {
 	repoRoot, _ := filepath.Abs(filepath.Join("..", ".."))
-	binPath := filepath.Join(repoRoot, "plugins", "agent-ooda", "bin", "agent-ooda")
+	binPath := filepath.Join(repoRoot, "plugins", "agy-router", "bin", "agy-router")
 	if _, err := os.Stat(binPath); err != nil {
 		t.Fatalf("compiled %s missing: %v", binPath, err)
 	}
@@ -160,18 +160,18 @@ func TestInstallAndUninstallScript(t *testing.T) {
 	_ = os.MkdirAll(fakeHome, 0o755)
 	env := []string{
 		"HOME=" + fakeHome, "XDG_STATE_HOME=" + filepath.Join(fakeHome, ".local", "state"),
-		"AGENT_OODA_NO_BUILD=1", "PATH=" + os.Getenv("PATH"),
+		"AGY_ROUTER_NO_BUILD=1", "PATH=" + os.Getenv("PATH"),
 	}
 	if instOut := runBash(t, staged, env, filepath.Join(staged, "install.sh")); !strings.Contains(
-		instOut, "agent-ooda install complete") {
+		instOut, "agy-router install complete") {
 		t.Fatalf("unexpected install output: %s", instOut)
 	}
 	setPath := filepath.Join(fakeHome, ".gemini", "antigravity-cli", "settings.json")
 	if !strings.Contains(string(readWireRaw(t, setPath)), "statusline.py") {
 		t.Fatalf("settings.json missing statusLine after install")
 	}
-	if _, rerr := os.Lstat(filepath.Join(fakeHome, ".local", "bin", "agent-ooda")); rerr != nil {
-		t.Fatalf("expected agent-ooda bin symlink: %v", rerr)
+	if _, rerr := os.Lstat(filepath.Join(fakeHome, ".local", "bin", "agy-router")); rerr != nil {
+		t.Fatalf("expected agy-router bin symlink: %v", rerr)
 	}
 	if _, rerr := os.Lstat(filepath.Join(fakeHome, ".local", "bin", "router")); !os.IsNotExist(rerr) {
 		t.Fatalf("legacy router symlink should not be created")
@@ -182,13 +182,13 @@ func TestInstallAndUninstallScript(t *testing.T) {
 	}
 
 	noBinRepo := filepath.Join(tmp, "nobin-repo")
-	_ = os.MkdirAll(filepath.Join(noBinRepo, "plugins", "agent-ooda"), 0o755)
+	_ = os.MkdirAll(filepath.Join(noBinRepo, "plugins", "agy-router"), 0o755)
 	for _, name := range []string{"install.sh", "uninstall.sh"} {
 		_ = os.WriteFile(filepath.Join(noBinRepo, name), readWireRaw(t, filepath.Join(repoRoot, name)), 0o755)
 	}
-	symTarget := filepath.Join(fakeHome, ".local", "bin", "agent-ooda")
+	symTarget := filepath.Join(fakeHome, ".local", "bin", "agy-router")
 	_ = os.MkdirAll(filepath.Dir(symTarget), 0o755)
-	_ = os.Symlink(filepath.Join(noBinRepo, "plugins", "agent-ooda", "bin", "agent-ooda"), symTarget)
+	_ = os.Symlink(filepath.Join(noBinRepo, "plugins", "agy-router", "bin", "agy-router"), symTarget)
 	if noBinOut := runBash(t, noBinRepo, []string{
 		"HOME=" + fakeHome, "XDG_STATE_HOME=" + filepath.Join(fakeHome, ".local", "state"), "PATH=/usr/bin:/bin",
 	}, filepath.Join(noBinRepo, "uninstall.sh"), "--purge"); !strings.Contains(noBinOut, symTarget) {
@@ -207,11 +207,11 @@ func readWireRaw(t *testing.T, p string) []byte {
 
 func TestInstallPrebuiltWithoutGo(t *testing.T) {
 	repoRoot, _ := filepath.Abs(filepath.Join("..", ".."))
-	binSrc := readWireRaw(t, filepath.Join(repoRoot, "plugins", "agent-ooda", "bin", "agent-ooda"))
+	binSrc := readWireRaw(t, filepath.Join(repoRoot, "plugins", "agy-router", "bin", "agy-router"))
 	tmp := t.TempDir()
 	noGoBin, relDir, repoDir, fakeHome := filepath.Join(tmp, "bin"), filepath.Join(tmp, "rel"),
 		filepath.Join(tmp, "repo"), filepath.Join(tmp, "home")
-	for _, d := range []string{noGoBin, relDir, filepath.Join(repoDir, "plugins", "agent-ooda", "config"), fakeHome} {
+	for _, d := range []string{noGoBin, relDir, filepath.Join(repoDir, "plugins", "agy-router", "config"), fakeHome} {
 		_ = os.MkdirAll(d, 0o755)
 	}
 	tools := []string{"bash", "dirname", "cat", "uname", "mktemp", "curl", "awk", "sha256sum",
@@ -221,14 +221,14 @@ func TestInstallPrebuiltWithoutGo(t *testing.T) {
 			_ = os.Symlink(p, filepath.Join(noGoBin, name))
 		}
 	}
-	asset := fmt.Sprintf("agent-ooda-%s-%s", runtime.GOOS, runtime.GOARCH)
+	asset := fmt.Sprintf("agy-router-%s-%s", runtime.GOOS, runtime.GOARCH)
 	_ = os.WriteFile(filepath.Join(relDir, asset), binSrc, 0o755)
 	_ = os.WriteFile(filepath.Join(relDir, "SHA256SUMS"),
 		[]byte(fmt.Sprintf("%x  %s\n", sha256.Sum256(binSrc), asset)), 0o644)
 	for _, name := range []string{"install.sh", "uninstall.sh"} {
 		_ = os.WriteFile(filepath.Join(repoDir, name), readWireRaw(t, filepath.Join(repoRoot, name)), 0o755)
 	}
-	qDef := filepath.Join("plugins", "agent-ooda", "config", "quota.default.json")
+	qDef := filepath.Join("plugins", "agy-router", "config", "quota.default.json")
 	_ = os.WriteFile(filepath.Join(repoDir, qDef), readWireRaw(t, filepath.Join(repoRoot, qDef)), 0o644)
 
 	runInst := func() error {
@@ -236,7 +236,7 @@ func TestInstallPrebuiltWithoutGo(t *testing.T) {
 		cmd.Dir = repoDir
 		cmd.Env = []string{
 			"HOME=" + fakeHome, "XDG_STATE_HOME=" + filepath.Join(fakeHome, ".local", "state"),
-			"PATH=" + noGoBin, "AGENT_OODA_RELEASE_BASE=file://" + relDir,
+			"PATH=" + noGoBin, "AGY_ROUTER_RELEASE_BASE=file://" + relDir,
 		}
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -247,7 +247,7 @@ func TestInstallPrebuiltWithoutGo(t *testing.T) {
 	if err := runInst(); err != nil {
 		t.Fatalf("prebuilt no-Go install failed: %v", err)
 	}
-	_ = os.Remove(filepath.Join(repoDir, "plugins", "agent-ooda", "bin", "agent-ooda"))
+	_ = os.Remove(filepath.Join(repoDir, "plugins", "agy-router", "bin", "agy-router"))
 	_ = os.WriteFile(filepath.Join(relDir, "SHA256SUMS"), []byte(strings.Repeat("0", 64)+"  "+asset+"\n"), 0o644)
 	if err := runInst(); err == nil {
 		t.Fatal("expected SHA-256 mismatch to fail closed")

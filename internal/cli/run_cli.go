@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/UberMetroid/agent-ooda/internal/dispatch"
-	"github.com/UberMetroid/agent-ooda/internal/envelope"
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
-	"github.com/UberMetroid/agent-ooda/internal/worktree"
+	"github.com/UberMetroid/agy-router/internal/dispatch"
+	"github.com/UberMetroid/agy-router/internal/envelope"
+	"github.com/UberMetroid/agy-router/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/worktree"
 )
 
 func strPtr(s string) *string {
@@ -192,7 +192,7 @@ func runDispatchMode(opts CLIOpts, outW, errW io.Writer) int {
 	return dispatchManifest(opts, outW, errW)
 }
 
-// RunCLI parses argv and executes the selected agent-ooda command.
+// RunCLI parses argv and executes the selected agy-router command.
 func RunCLI(prog string, argv []string, outW, errW io.Writer) int {
 	if outW == nil {
 		outW = os.Stdout
@@ -209,7 +209,7 @@ func RunCLI(prog string, argv []string, outW, errW io.Writer) int {
 		return 0
 	}
 	if opts.Version {
-		fmt.Fprintf(outW, "agent-ooda v%s\n", fleet.Version)
+		fmt.Fprintf(outW, "agy-router v%s\n", fleet.Version)
 		return 0
 	}
 	if opts.Status || opts.Discover {
@@ -222,8 +222,8 @@ func RunCLI(prog string, argv []string, outW, errW io.Writer) int {
 		return DoHygiene(*opts.Hygiene, opts, outW, errW)
 	}
 	if fleet.RouterDepth() >= 1 {
-		fmt.Fprintln(errW, "error: recursive agent-ooda dispatch blocked (AGENT_OODA_DEPTH>=1 / ROUTER_DEPTH>=1). "+
-			"Execute directly with native tools instead of invoking agent-ooda.")
+		fmt.Fprintln(errW, "error: recursive agy-router dispatch blocked (AGY_ROUTER_DEPTH>=1 / ROUTER_DEPTH>=1). "+
+			"Execute directly with native tools instead of invoking agy-router.")
 		return 2
 	}
 	if opts.Select {

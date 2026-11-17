@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/UberMetroid/agent-ooda/internal/dispatch"
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/dispatch"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 var idleStates = map[string]bool{
@@ -224,7 +224,7 @@ func RenderStatusLine(rawInput string, useColor bool, nowTS *float64, _ *FleetSu
 	}
 	last := LoadRecentFinish(hudBase, now)
 	if last == nil {
-		return Colorize("OODA", pal.IdleText, useColor)
+		return Colorize("ROUTER", pal.IdleText, useColor)
 	}
 	_, step, _, _ := stepStyle(last.Mode, pal)
 	lbl := formatAgentLabel(last.Lane, last.Model, false)

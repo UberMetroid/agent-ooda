@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/UberMetroid/agent-ooda/internal/dispatch"
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/dispatch"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 // Palette defines ANSI 256-color sequences synced with Antigravity (agy) themes.
@@ -84,7 +84,10 @@ var (
 
 // ResolveThemeName selects the active palette name from env, stdin payload, and agy settings.
 func ResolveThemeName(data map[string]any, home string, now time.Time) string {
-	pick := strings.ToLower(strings.TrimSpace(os.Getenv("AGENT_OODA_THEME")))
+	pick := strings.ToLower(strings.TrimSpace(os.Getenv("AGY_ROUTER_THEME")))
+	if pick == "" {
+		pick = strings.ToLower(strings.TrimSpace(os.Getenv("AGENT_OODA_THEME")))
+	}
 	if pick == "" && data != nil {
 		for _, k := range []string{"colorScheme", "scheme", "theme"} {
 			if s, _ := data[k].(string); strings.TrimSpace(s) != "" {
@@ -210,9 +213,7 @@ func LoadRecentFinish(hudBase string, now float64) *dispatch.LastRunMarker {
 }
 
 // ResolveHudCwd resolves the active workspace directory from stdin JSON, workers, or session state.
-func ResolveHudCwd(
-	hudBase string, data map[string]any, workers []dispatch.WorkerMarker, now float64,
-) string {
+func ResolveHudCwd(hudBase string, data map[string]any, workers []dispatch.WorkerMarker, now float64) string {
 	for _, k := range []string{"cwd", "workspace_directory"} {
 		if s, _ := data[k].(string); strings.TrimSpace(s) != "" {
 			return strings.TrimSpace(s)
@@ -246,9 +247,7 @@ func ResolveHudCwd(
 	if err != nil {
 		return ""
 	}
-	var sess struct {
-		Cwd string `json:"cwd"`
-	}
+	var sess struct{ Cwd string `json:"cwd"` }
 	if json.Unmarshal(rawSess, &sess) != nil {
 		return ""
 	}

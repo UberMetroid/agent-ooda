@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 func runGit(t *testing.T, cwd string, args ...string) {

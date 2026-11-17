@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 // EMEnvelope summarizes active/expiring capped lanes and quota conservation state.

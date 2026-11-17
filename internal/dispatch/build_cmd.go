@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
-	"github.com/UberMetroid/agent-ooda/internal/worktree"
+	"github.com/UberMetroid/agy-router/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/worktree"
 )
 
 // CmdReq defines parameters to construct a single headless CLI invocation.
@@ -59,13 +59,14 @@ func childEnv(depth int, prov string, readOnly bool) []string {
 			if k, _, _ := strings.Cut(kv, "="); !exact[k] && !hasPfx(k) {
 				continue
 			}
-		} else if strings.HasPrefix(kv, "ROUTER_DEPTH=") || strings.HasPrefix(kv, "AGENT_OODA_DEPTH=") ||
-			strings.HasPrefix(kv, "GIT_TERMINAL_PROMPT=") || (prov == "agy-opus" && strings.HasPrefix(kv, "ANTIGRAVITY_")) {
+		} else if strings.HasPrefix(kv, "AGY_ROUTER_DEPTH=") || strings.HasPrefix(kv, "ROUTER_DEPTH=") ||
+			strings.HasPrefix(kv, "AGENT_OODA_DEPTH=") || strings.HasPrefix(kv, "GIT_TERMINAL_PROMPT=") ||
+			(prov == "agy-opus" && strings.HasPrefix(kv, "ANTIGRAVITY_")) {
 			continue
 		}
 		out = append(out, kv)
 	}
-	return append(out, fmt.Sprintf("ROUTER_DEPTH=%d", depth),
+	return append(out, fmt.Sprintf("AGY_ROUTER_DEPTH=%d", depth), fmt.Sprintf("ROUTER_DEPTH=%d", depth),
 		fmt.Sprintf("AGENT_OODA_DEPTH=%d", depth), "GIT_TERMINAL_PROMPT=0")
 }
 

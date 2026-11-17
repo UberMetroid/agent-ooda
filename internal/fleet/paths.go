@@ -19,9 +19,9 @@ type ExportUsage struct {
 	Failed  bool `json:"-"`
 }
 
-// PluginRootPath resolves the plugins/agent-ooda directory dynamically at call time.
+// PluginRootPath resolves the plugins/agy-router directory dynamically at call time.
 func PluginRootPath() string {
-	for _, key := range []string{"AGENT_OODA_PLUGIN_ROOT", "OODA_PLUGIN_ROOT"} {
+	for _, key := range []string{"AGY_ROUTER_PLUGIN_ROOT", "AGENT_OODA_PLUGIN_ROOT", "OODA_PLUGIN_ROOT"} {
 		if env := os.Getenv(key); env != "" {
 			return env
 		}
@@ -37,11 +37,11 @@ func PluginRootPath() string {
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "plugins/agent-ooda"
+		return "plugins/agy-router"
 	}
 	cur := cwd
 	for {
-		for _, sub := range []string{"", filepath.Join("plugins", "agent-ooda")} {
+		for _, sub := range []string{"", filepath.Join("plugins", "agy-router")} {
 			cand := filepath.Join(cur, sub)
 			if st, serr := os.Stat(filepath.Join(cand, "plugin.json")); serr == nil && !st.IsDir() {
 				return cand
@@ -53,7 +53,7 @@ func PluginRootPath() string {
 		}
 		cur = parent
 	}
-	return filepath.Join(cwd, "plugins", "agent-ooda")
+	return filepath.Join(cwd, "plugins", "agy-router")
 }
 
 // QuotaFilePath resolves quota.json via override, env vars, or XDG state home.
@@ -61,7 +61,7 @@ func QuotaFilePath(override string) string {
 	if override != "" {
 		return override
 	}
-	for _, key := range []string{"AGENT_OODA_QUOTA_FILE", "AGENT_QUOTA_FILE", "OODA_QUOTA_FILE"} {
+	for _, key := range []string{"AGY_ROUTER_QUOTA_FILE", "AGENT_OODA_QUOTA_FILE", "AGENT_QUOTA_FILE", "OODA_QUOTA_FILE"} {
 		if env := os.Getenv(key); env != "" {
 			return env
 		}
@@ -71,12 +71,12 @@ func QuotaFilePath(override string) string {
 		home, _ := os.UserHomeDir()
 		stateHome = filepath.Join(home, ".local", "state")
 	}
-	return filepath.Join(stateHome, "agent-ooda", "quota.json")
+	return filepath.Join(stateHome, "agy-router", "quota.json")
 }
 
 // DiscoveryFilePath resolves the cached CLI capability JSON path beside quota.json.
 func DiscoveryFilePath() string {
-	for _, key := range []string{"AGENT_OODA_DISCOVERY_FILE", "OODA_DISCOVERY_FILE"} {
+	for _, key := range []string{"AGY_ROUTER_DISCOVERY_FILE", "AGENT_OODA_DISCOVERY_FILE", "OODA_DISCOVERY_FILE"} {
 		if env := os.Getenv(key); env != "" {
 			if strings.HasPrefix(env, "~/") {
 				home, _ := os.UserHomeDir()
@@ -90,22 +90,22 @@ func DiscoveryFilePath() string {
 
 // HudDirPath returns the live HUD telemetry root directory.
 func HudDirPath() string {
-	for _, key := range []string{"AGENT_OODA_HUD_DIR", "ROUTER_HUD_DIR"} {
+	for _, key := range []string{"AGY_ROUTER_HUD_DIR", "AGENT_OODA_HUD_DIR", "ROUTER_HUD_DIR"} {
 		if env := os.Getenv(key); env != "" {
 			return env
 		}
 	}
-	return "/tmp/agent-ooda-hud"
+	return "/tmp/agy-router-hud"
 }
 
 // SlotsRootPath returns the worktree slot scratch directory.
 func SlotsRootPath() string {
-	for _, key := range []string{"AGENT_OODA_SLOTS_DIR", "ROUTER_SLOTS_DIR"} {
+	for _, key := range []string{"AGY_ROUTER_SLOTS_DIR", "AGENT_OODA_SLOTS_DIR", "ROUTER_SLOTS_DIR"} {
 		if env := os.Getenv(key); env != "" {
 			return env
 		}
 	}
-	return "/tmp/agent-ooda-slots"
+	return "/tmp/agy-router-slots"
 }
 
 // SafeID sanitizes a string for safe filenames, defaulting to "default".
@@ -117,10 +117,10 @@ func SafeID(raw string) string {
 	return cleaned
 }
 
-// RouterDepth returns max nested dispatch depth across AGENT_OODA_DEPTH and ROUTER_DEPTH.
+// RouterDepth returns max nested dispatch depth across AGY_ROUTER_DEPTH, AGENT_OODA_DEPTH, and ROUTER_DEPTH.
 func RouterDepth() int {
 	best := 0
-	for _, key := range []string{"AGENT_OODA_DEPTH", "ROUTER_DEPTH"} {
+	for _, key := range []string{"AGY_ROUTER_DEPTH", "AGENT_OODA_DEPTH", "ROUTER_DEPTH"} {
 		raw := strings.TrimSpace(os.Getenv(key))
 		if raw == "" {
 			continue

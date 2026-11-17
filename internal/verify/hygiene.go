@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
-	"github.com/UberMetroid/agent-ooda/internal/worktree"
+	"github.com/UberMetroid/agy-router/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/worktree"
 )
 
 const hygieneMaxBytes = 1 << 20

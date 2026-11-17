@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/UberMetroid/agent-ooda/internal/envelope"
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/envelope"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 // ReviewExecReq parameterizes one headless reviewer execution.
@@ -120,7 +120,7 @@ func invokeReviewer(req ReviewReq, sel envelope.SelectRes, lease *os.File, promp
 	}
 	taskID := "review-" + filepath.Base(req.SlotDir)
 	if req.LogWriter != nil {
-		fmt.Fprintf(req.LogWriter, "▸ [OODA:ACT verify] agent=%s (%s:%s) | effort=%s\n",
+		fmt.Fprintf(req.LogWriter, "▸ [ROUTER:ACT verify] agent=%s (%s:%s) | effort=%s\n",
 			sel.Lane, sel.Info.CLI, filepath.Base(spec.DisplayModel), spec.DisplayEffort)
 	}
 	marker, dm, de, revExit, start := "", spec.DisplayModel, spec.DisplayEffort, -1, time.Now()

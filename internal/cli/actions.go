@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/UberMetroid/agent-ooda/internal/dispatch"
-	"github.com/UberMetroid/agent-ooda/internal/envelope"
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
-	"github.com/UberMetroid/agent-ooda/internal/verify"
-	"github.com/UberMetroid/agent-ooda/internal/worktree"
+	"github.com/UberMetroid/agy-router/internal/dispatch"
+	"github.com/UberMetroid/agy-router/internal/envelope"
+	"github.com/UberMetroid/agy-router/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/verify"
+	"github.com/UberMetroid/agy-router/internal/worktree"
 )
 
 func requireCWD(errW io.Writer) (string, bool) {
@@ -177,7 +177,7 @@ func DoSingleTask(opts CLIOpts, outW, errW io.Writer) int {
 	if (actSt.Lane == "auto" || strings.HasPrefix(actSt.Source, "profile:")) && !opts.NoPivot {
 		if mm := envelope.LoadRecentMismatch(cwd, files); mm != nil && envelope.HasLaneFamily(actSt.Lane, mm.Family) {
 			avoid[mm.Family] = true
-			fmt.Fprintf(outW, "▸ [OODA:MISMATCH PIVOT] prior loop on %s (%s) %s — rotating model family\n",
+			fmt.Fprintf(outW, "▸ [ROUTER:MISMATCH PIVOT] prior loop on %s (%s) %s — rotating model family\n",
 				mm.Lane, mm.Family, mm.Reason)
 		}
 	}
@@ -196,7 +196,7 @@ func DoSingleTask(opts CLIOpts, outW, errW io.Writer) int {
 		fmt.Fprintln(errW, err)
 		return 2
 	}
-	fmt.Fprintf(outW, "[OODA:ACT lane=%s model=%s effort=%s %.1fs exit=%d]\n",
+	fmt.Fprintf(outW, "[ROUTER:ACT lane=%s model=%s effort=%s %.1fs exit=%d]\n",
 		res.Lane, res.Model, res.Effort, res.DurationS, res.ExitCode)
 	if res.FallbackFrom != "" {
 		fmt.Fprintf(outW, "routing note: %s\n", res.FallbackFrom)

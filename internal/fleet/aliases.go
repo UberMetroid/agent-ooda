@@ -185,14 +185,13 @@ func NormalizeModel(provider, model string) (string, error) {
 // ResolveEffort picks effort from explicit flag, env var, or quota config.
 func ResolveEffort(info *ProviderConfig, explicit string) string {
 	chosen := strings.TrimSpace(explicit)
-	if chosen == "" {
-		if v := os.Getenv("AGENT_EFFORT"); v != "" {
+	for _, k := range []string{"AGENT_EFFORT", "AGY_ROUTER_EFFORT", "OODA_EFFORT"} {
+		if v := os.Getenv(k); v != "" && chosen == "" {
 			chosen = v
-		} else if v := os.Getenv("OODA_EFFORT"); v != "" {
-			chosen = v
-		} else if info != nil && info.Effort != nil {
-			chosen = *info.Effort
 		}
+	}
+	if chosen == "" && info != nil && info.Effort != nil {
+		chosen = *info.Effort
 	}
 	key := strings.ToLower(strings.TrimSpace(chosen))
 	if key == "" || key == "auto" || key == "default" || key == "cli-default" {

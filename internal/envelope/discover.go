@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 var tierSuffixRe = regexp.MustCompile(`-(low|medium|high|xhigh|max)$`)
@@ -157,7 +157,9 @@ func DiscoverFleetCaps(opts DiscoverOpts) map[string]LaneCap {
 		"grok": ProbeGrokConfig(opts.Home), "mistral": ProbeVibeConfig(opts.Home),
 	}
 	var cliMods map[string][]string
-	if opts.Home == "" || os.Getenv("AGENT_OODA_DISCOVERY_FILE") != "" || os.Getenv("OODA_DISCOVERY_FILE") != "" {
+	hasDiscEnv := os.Getenv("AGY_ROUTER_DISCOVERY_FILE") != "" ||
+		os.Getenv("AGENT_OODA_DISCOVERY_FILE") != "" || os.Getenv("OODA_DISCOVERY_FILE") != ""
+	if opts.Home == "" || hasDiscEnv {
 		cliMods = LoadDiscoveryCache(opts.ForceRefresh, opts.ProbeAgy)
 	}
 	caps := make(map[string]LaneCap, len(fleet.ProviderOrder))
@@ -171,7 +173,7 @@ func DiscoverFleetCaps(opts DiscoverOpts) map[string]LaneCap {
 func EffectiveLaneSpec(
 	provider string, info *fleet.ProviderConfig, expModel, expEffort, complexity, home string,
 ) (LaneSpec, error) {
-	rawModel := orStr(expModel, orStr(os.Getenv("AGENT_MODEL"), os.Getenv("OODA_MODEL")))
+	rawModel := orStr(expModel, orStr(os.Getenv("AGY_ROUTER_MODEL"), orStr(os.Getenv("AGENT_MODEL"), os.Getenv("OODA_MODEL"))))
 	if rawModel == "" && info != nil && info.Model != nil {
 		rawModel = *info.Model
 	}

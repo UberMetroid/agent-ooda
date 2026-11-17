@@ -114,7 +114,7 @@ func ProbeMuseUsage(timeoutSec int) MuseProbe {
 	}
 	p := ParseMuseUsageJSON(res.Combined, res.ExitCode, res.TimedOut)
 	p.CheckedAt = float64(time.Now().UnixNano()) / 1e9
-	if os.Getenv("OODA_NO_AUTO_PROBE") != "1" {
+	if os.Getenv("AGY_ROUTER_NO_AUTO_PROBE") != "1" && os.Getenv("OODA_NO_AUTO_PROBE") != "1" {
 		_ = AtomicWriteJSON(filepath.Join(HudDirPath(), "muse_usage.json"), p, true, true)
 	}
 	return p
@@ -133,7 +133,8 @@ func CachedMuseProbe(maxAgeSec float64) MuseProbe {
 			return cached
 		}
 	}
-	if maxAgeSec <= 0 || os.Getenv("OODA_NO_AUTO_PROBE") == "1" || ResolveCLI("muse") == "" {
+	noProbe := os.Getenv("AGY_ROUTER_NO_AUTO_PROBE") == "1" || os.Getenv("OODA_NO_AUTO_PROBE") == "1"
+	if maxAgeSec <= 0 || noProbe || ResolveCLI("muse") == "" {
 		return MuseProbe{}
 	}
 	return ProbeMuseUsage(3)

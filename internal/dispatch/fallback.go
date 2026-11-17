@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/UberMetroid/agent-ooda/internal/envelope"
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
-	"github.com/UberMetroid/agent-ooda/internal/verify"
+	"github.com/UberMetroid/agy-router/internal/envelope"
+	"github.com/UberMetroid/agy-router/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/verify"
 )
 
 func runTaskAttempt(st *taskState, sel envelope.SelectRes, lease *os.File) (ExecRes, string, string) {
@@ -33,13 +33,13 @@ func runTaskAttempt(st *taskState, sel envelope.SelectRes, lease *os.File) (Exec
 	}
 	extra := VisibleExtraSkills(req.Task.Skills)
 	parRun := req.IsParallel || req.StripeIdx != nil
-	modeTag, stage := "act", "OODA:ACT"
+	modeTag, stage := "act", "ROUTER:ACT"
 	if req.Task.ID == "orient" || req.Task.Complexity == "orient" {
-		modeTag, stage = "orient", "OODA:ORIENT"
+		modeTag, stage = "orient", "ROUTER:ORIENT"
 	} else if req.Task.ReadOnly {
-		modeTag, stage = "observe", "OODA:OBSERVE"
+		modeTag, stage = "observe", "ROUTER:OBSERVE"
 	} else if parRun {
-		modeTag, stage = "act:parallel", "OODA:ACT parallel:"+req.Task.ID
+		modeTag, stage = "act:parallel", "ROUTER:ACT parallel:"+req.Task.ID
 	}
 	if req.LogWriter != nil {
 		if st.skipped != "" && len(st.attempts) == 0 {

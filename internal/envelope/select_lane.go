@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 // SelectReq parameterizes provider selection for a single routed task.
@@ -36,7 +36,7 @@ func checkCandidate(
 		return SelectRes{}, name + ": already attempted", false
 	}
 	if name == "agy-opus" && depth >= 1 {
-		return SelectRes{}, "agy-opus: blocked inside nested AGENT_OODA_DEPTH>=1 / ROUTER_DEPTH>=1", false
+		return SelectRes{}, "agy-opus: blocked inside nested AGY_ROUTER_DEPTH>=1 / ROUTER_DEPTH>=1", false
 	}
 	if req.StrictAvoid && req.AvoidFamilies != nil && req.AvoidFamilies[ModelFamily(name)] {
 		return SelectRes{}, name + ": excluded family (" + ModelFamily(name) + ")", false

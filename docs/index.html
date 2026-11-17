@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>agent-ooda — Static Go OODA Multi-Agent Engine, Router &amp; Live tok/s HUD</title>
-  <meta name="description" content="Zero-dependency static Go 1.22+ (CGO_ENABLED=0) multi-call OODA agent engine, zero-trust quota-aware 8-lane router, cross-model diff verifier, and live thermal tok/s HUD for Antigravity (agy) and future hosts.">
-  <meta property="og:title" content="agent-ooda — Static Go OODA Multi-Agent Engine, Router &amp; Live tok/s HUD">
-  <meta property="og:description" content="Static Go multi-call OODA router, zero-trust quota-aware scheduler, cross-model diff verifier, and live ~tok/s HUD with zero-Go SHA-256 web install.">
-  <meta property="og:url" content="https://ubermetroid.github.io/agent-ooda/">
+  <title>agy-router — Static Go Multi-Agent Fleet Router, Cross-Model Verifier &amp; Live tok/s HUD</title>
+  <meta name="description" content="Zero-dependency static Go 1.22+ (CGO_ENABLED=0) multi-call fleet router, zero-trust quota-aware 8-lane scheduler, opt-in /ooda and /harden skills, cross-model diff verifier, and live thermal tok/s HUD for Antigravity (agy) and future hosts.">
+  <meta property="og:title" content="agy-router — Static Go Multi-Agent Fleet Router &amp; Live tok/s HUD">
+  <meta property="og:description" content="Static Go multi-call fleet router, zero-trust quota-aware scheduler, opt-in /ooda &amp; /harden skills, cross-model diff verifier, and live ~tok/s HUD with zero-Go SHA-256 web install.">
+  <meta property="og:url" content="https://ubermetroid.github.io/agy-router/">
   <meta property="og:type" content="website">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128' fill='none'%3E%3Crect width='128' height='128' rx='24' fill='%230d1117'/%3E%3Ccircle cx='64' cy='64' r='42' stroke='%2330363d' stroke-width='4' stroke-dasharray='10 8'/%3E%3Cpath d='M64 22 A42 42 0 0 1 106 64' stroke='%2339d0d8' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M106 64 A42 42 0 0 1 64 106' stroke='%23f0b429' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M64 106 A42 42 0 0 1 22 64' stroke='%233fb950' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M22 64 A42 42 0 0 1 64 22' stroke='%23d2a8ff' stroke-width='6' stroke-linecap='round'/%3E%3Cpolygon points='64,34 86,84 64,73 42,84' fill='%23e6edf3'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -450,7 +450,7 @@
           <path d="M22 64 A42 42 0 0 1 64 22" stroke="#d2a8ff" stroke-width="7" stroke-linecap="round"/>
           <polygon points="64,34 86,84 64,73 42,84" fill="#e6edf3"/>
         </svg>
-        AGENT-OODA // UBERMETROID
+        AGY-ROUTER // UBERMETROID
       </a>
       <nav class="nav" aria-label="Primary navigation">
         <a href="#hud">HUD</a>
@@ -460,30 +460,31 @@
         <a href="#review">Verify</a>
         <a href="#quickstart">Install</a>
       </nav>
-      <a class="btn btn-primary" href="https://github.com/UberMetroid/agent-ooda">GitHub Repo</a>
+      <a class="btn btn-primary" href="https://github.com/UberMetroid/agy-router">GitHub Repo</a>
     </div>
   </header>
 
   <main id="top">
     <section class="hero">
       <div class="wrap">
-        <span class="eyebrow">agent-ooda v2.4.2 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Zero-Trust Per-Stage Router (v9)</span>
+        <span class="eyebrow">agy-router v3.0.0 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Zero-Trust Per-Stage Router (v9)</span>
         <h1>Turn one session into a<br><span>token-routed agent fleet.</span></h1>
         <p class="lead">
-          <strong>UberMetroid/agent-ooda</strong> ships one zero-dependency static Go OODA engine
-          (<code>agent-ooda</code>, <code>agent-ooda-hud</code>, <code>agent-ooda-hook</code>) paired with
-          host plugin adapters (<code>plugins/agent-ooda</code> for Antigravity <code>agy</code> today): v9 per-stage
-          OODA routing (<code>--select</code> TUI, <code>/lane</code>, <code>/harden</code>, 8 <code>/agents</code> profiles),
+          <strong>UberMetroid/agy-router</strong> ships one zero-dependency static Go routing engine
+          (<code>agy-router</code>, <code>agy-router-hud</code>, <code>agy-router-hook</code>) paired with
+          host plugin adapters (<code>plugins/agy-router</code> for Antigravity <code>agy</code> today): v9 per-stage
+          routing (<code>--select</code> TUI, <code>/lane</code>, 8 <code>/agents</code> profiles), opt-in
+          <code>/ooda</code> &amp; <code>/harden</code> skills (0 tokens unless invoked),
           <code>--hygiene</code> 0-token secret/footgun scanning, <code>--orient</code> synthesis, cross-model verification,
           and an <code>agy</code>-theme-synced thermal <code>tok/s</code> HUD.
         </p>
         <div class="install-bar" role="region" aria-label="One-line web installer">
-          <code id="install-cmd">curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash</code>
+          <code id="install-cmd">curl -fsSL https://ubermetroid.github.io/agy-router/install.sh | bash</code>
           <button class="btn btn-primary copy-btn" type="button" id="copy-install">Copy command</button>
         </div>
         <div class="hero-actions">
           <a class="btn btn-primary" href="#quickstart">Install &amp; Quickstart</a>
-          <a class="btn" href="https://github.com/UberMetroid/agent-ooda/releases/latest">Release Binaries (v2.4.2)</a>
+          <a class="btn" href="https://github.com/UberMetroid/agy-router/releases/latest">Release Binaries (v3.0.0)</a>
           <a class="btn" href="#architecture">Go Architecture</a>
         </div>
         <div class="telemetry-strip">
@@ -511,10 +512,10 @@
       <div class="wrap">
         <div class="sec-head">
           <h2>Live Thermal tok/s HUD</h2>
-          <span class="sec-tag">bin/agent-ooda-hud &bull; statusLine</span>
+          <span class="sec-tag">bin/agy-router-hud &bull; statusLine</span>
         </div>
         <p class="sec-sub">
-          <code>bin/agent-ooda-hud</code> shows <code>OODA</code> on standby, tracks the active orchestrator phase
+          <code>bin/agy-router-hud</code> shows <code>ROUTER</code> on standby, tracks the active orchestrator phase
           (<code>◎ observe</code>, <code>◈ orient</code>, <code>◇ decide</code>, <code>▸ act</code>, <code>✦ verify</code>) in <code>agy</code>&apos;s live
           <code>colorScheme</code>, and renders one line per live worker with 5-band thermal <code>tok/s</code> heat.
         </p>
@@ -526,7 +527,7 @@
           <ul class="hud-list">
             <li class="hud-row">
               <span class="hud-stage">Standby</span>
-              <span class="hud-line"><span class="c-muted">OODA</span></span>
+              <span class="hud-line"><span class="c-muted">ROUTER</span></span>
             </li>
             <li class="hud-row">
               <span class="hud-stage">Orchestrator Orient</span>
@@ -570,8 +571,8 @@
             <h3>statusLine Wiring</h3>
             <p>
               <code>./install.sh</code> symlinks <code>~/.gemini/antigravity-cli/statusline.py</code> to
-              <code>bin/agent-ooda-hud</code> and merges <code>statusLine</code> into <code>settings.json</code> cleanly
-              (skip via <code>AGENT_OODA_NO_STATUSLINE=1</code>; previous statusLine is backed up).
+              <code>bin/agy-router-hud</code> and merges <code>statusLine</code> into <code>settings.json</code> cleanly
+              (skip via <code>AGY_ROUTER_NO_STATUSLINE=1</code>; previous statusLine is backed up).
             </p>
           </div>
           <div>
@@ -593,20 +594,20 @@
       <div class="wrap">
         <div class="sec-head">
           <h2>Static Go Core &amp; Multi-Host Suite</h2>
-          <span class="sec-tag">cmd/agent-ooda &bull; internal/* &bull; plugins/*</span>
+          <span class="sec-tag">cmd/agy-router &bull; internal/* &bull; plugins/*</span>
         </div>
         <p class="sec-sub">
-          <code>agent-ooda</code> separates host-agnostic Go packages from thin plugin adapters so multiple CLI hosts
+          <code>agy-router</code> separates host-agnostic Go packages from thin plugin adapters so multiple CLI hosts
           can share one battle-tested binary, quota store, lease mechanism, and verifier without code duplication.
         </p>
         <div class="grid-3">
           <div class="card">
             <span class="badge b-cyan">Multi-Call Binary</span>
-            <h3>One Static <code>agent-ooda</code> Executable</h3>
+            <h3>One Static <code>agy-router</code> Executable</h3>
             <p>
               Built with <code>CGO_ENABLED=0</code> and zero third-party packages. Inspects <code>argv[0]</code> to run
-              as <code>agent-ooda</code> (dispatcher &amp; CLI), <code>agent-ooda-hud</code> (status bar), or
-              <code>agent-ooda-hook</code> (session skill recorder) with instant startup.
+              as <code>agy-router</code> (dispatcher &amp; CLI), <code>agy-router-hud</code> (status bar), or
+              <code>agy-router-hook</code> (session skill recorder) with instant startup.
             </p>
           </div>
           <div class="card">
@@ -614,10 +615,10 @@
             <h3>Multi-Host Plugin &amp; 3 Selectors</h3>
             <p>
               Core packages live under <code>internal/{fleet,envelope,dispatch,verify,worktree,hud,cli,install}</code>
-              while <code>plugins/agent-ooda</code> ships the <code>agy</code> skill/hook suite, <code>/lane</code>, and
-              8 native <code>/agents</code> profiles (<code>ooda-auto</code>, <code>conserve</code>, <code>deep</code>,
+              while <code>plugins/agy-router</code> ships opt-in <code>/lane</code>, <code>/ooda</code>, and <code>/harden</code> skills plus
+              8 native <code>/agents</code> profiles (<code>router-auto</code>, <code>conserve</code>, <code>deep</code>,
               <code>devin</code>, <code>grok</code>, <code>mcode</code>, <code>muse</code>, <code>mistral</code>), synced
-              with <code>agent-ooda --select</code> (<code>-s</code>).
+              with <code>agy-router --select</code> (<code>-s</code>).
             </p>
           </div>
           <div class="card">
@@ -706,15 +707,15 @@
       <div class="wrap">
         <div class="sec-head">
           <h2>The 8-Lane Fleet &amp; Binary Guardrails</h2>
-          <span class="sec-tag">agent-ooda --status &bull; --discover &bull; --probe</span>
+          <span class="sec-tag">agy-router --status &bull; --discover &bull; --probe</span>
         </div>
         <p class="sec-sub">
           Currently configured for the <strong>6 agent CLIs</strong> (<code>8</code> lanes) we actively subscribe to
-          below. <code>agent-ooda --status</code> and <code>agent-ooda --discover</code> probe installed CLIs
+          below. <code>agy-router --status</code> and <code>agy-router --discover</code> probe installed CLIs
           dynamically for active models, effort controls, UTC off-peak/peak-jam tariffs, and injectable skills.
-          <code>agent-ooda --probe</code> runs minimal 1-token prompt canaries (skipping credits), while omitted
+          <code>agy-router --probe</code> runs minimal 1-token prompt canaries (skipping credits), while omitted
           <code>--complexity</code> and <code>--skill</code> infer automatically (opt out via
-          <code>--skill none</code> or <code>OODA_NO_AUTO_SKILL=1</code>). Gemini quota is shielded exclusively
+          <code>--skill none</code> or <code>AGY_ROUTER_NO_AUTO_SKILL=1</code>). Gemini quota is shielded exclusively
           for the top-level Antigravity orchestrator.
         </p>
 
@@ -803,7 +804,7 @@
           <div class="card">
             <h3>Hard Binary Guardrails</h3>
             <p>
-              Workers run with <code>AGENT_OODA_DEPTH=1</code> &amp; <code>ROUTER_DEPTH=1</code> (or higher). The Go CLI blocks recursive dispatch,
+              Workers run with <code>AGY_ROUTER_DEPTH=1</code>, <code>AGENT_OODA_DEPTH=1</code> &amp; <code>ROUTER_DEPTH=1</code> (or higher). The Go CLI blocks recursive dispatch,
               <code>--probe</code>, <code>--cleanup</code>, and quota mutations with exit <code>2</code> whenever depth
               <code>&gt;=1</code>, and hard-rejects <code>gemini*</code> or <code>orchestrator*</code>
               models on any worker or review lane.
@@ -815,7 +816,7 @@
           <span class="badge b-amber">Unconfigured Agents</span>
           <h3>Other Agent CLIs (Not Wired &mdash; No Active Paid Subscription)</h3>
           <p>
-            <code>agent-ooda</code> does not currently wire
+            <code>agy-router</code> does not currently wire
             <a href="https://code.claude.com/docs/en/overview" target="_blank" rel="noopener">Anthropic Claude Code</a> (<code>claude</code>; Claude Opus/Sonnet workers already run via <code>agy-opus</code>),
             <a href="https://github.com/openai/codex" target="_blank" rel="noopener">OpenAI Codex CLI</a> (<code>codex</code>),
             <a href="https://cursor.com/cli" target="_blank" rel="noopener">Cursor CLI</a> (<code>cursor-agent</code>),
@@ -833,10 +834,10 @@
       <div class="wrap">
         <div class="sec-head">
           <h2>Cross-Model Diff Verification</h2>
-          <span class="sec-tag">agent-ooda --review .</span>
+          <span class="sec-tag">agy-router --review .</span>
         </div>
         <p class="sec-sub">
-          No model family grades its own patch. <code>agent-ooda --review</code> excludes the authoring family automatically,
+          No model family grades its own patch. <code>agy-router --review</code> excludes the authoring family automatically,
           tracks pre-task <code>HeadRef</code> state so worker commits never evade scope or review checks, renders
           untracked files as synthetic hunks, and fails closed on any <code>[P0-3]</code>, <code>UNKNOWN</code>, or
           <code>SKIPPED</code> result.
@@ -879,41 +880,41 @@
         <div class="grid-2">
           <div>
             <pre class="codeblock"><code># One-line web installer (no Go required; SHA-256 verified binary)
-curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash
+curl -fsSL https://ubermetroid.github.io/agy-router/install.sh | bash
 
 # Or install from source (builds if Go 1.22+ is present)
-git clone https://github.com/UberMetroid/agent-ooda.git
-cd agent-ooda &amp;&amp; ./install.sh
+git clone https://github.com/UberMetroid/agy-router.git
+cd agy-router &amp;&amp; ./install.sh
 
-# restart agy so the plugin, 8 /agents profiles, /lane, /harden &amp; statusLine load
-agy plugin list       # confirm "agent-ooda" is enabled (2.4.2)
-agent-ooda --version  # print binary version
-agent-ooda --status   # OODA stage matrix, fleet tiers, resets &amp; skills
-agent-ooda --hygiene  # 0-token P0 secret, key &amp; P1 hardening scan
-agent-ooda --select   # arrow-key TUI configurator (-s; add --local for repo)
-agent-ooda --set-stage act=grok --effort xhigh
-agent-ooda --set-stage preset=deep   # or --reset-stages
-agent-ooda --discover # refresh live CLI model probes
-agent-ooda --probe    # minimal 1-token prompt canaries &amp; muse PAYG check
-agent-ooda --usage    # per-lane 5h/24h/7d/30d windows &amp; UTC tariffs
-agent-ooda --recon "Map auth flow and callers"
-agent-ooda --orient "Trace cache invalidation &amp; coupling"
-agent-ooda --review . # cross-model diff gate
+# restart agy so the plugin, 8 /agents profiles, /lane, /ooda, /harden &amp; statusLine load
+agy plugin list       # confirm "agy-router" is enabled (3.0.0)
+agy-router --version  # print binary version
+agy-router --status   # router stage matrix, fleet tiers, resets &amp; skills
+agy-router --hygiene  # 0-token P0 secret, key &amp; P1 hardening scan
+agy-router --select   # arrow-key TUI configurator (-s; add --local for repo)
+agy-router --set-stage act=grok --effort xhigh
+agy-router --set-stage preset=deep   # or --reset-stages
+agy-router --discover # refresh live CLI model probes
+agy-router --probe    # minimal 1-token prompt canaries &amp; muse PAYG check
+agy-router --usage    # per-lane 5h/24h/7d/30d windows &amp; UTC tariffs
+agy-router --recon "Map auth flow and callers"
+agy-router --orient "Trace cache invalidation &amp; coupling"
+agy-router --review . # cross-model diff gate
 make all              # full House-Law + race test + dogfood suite
 
 # Update or uninstall cleanly (guards uncommitted/unpushed work)
-curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --uninstall --purge</code></pre>
+curl -fsSL https://ubermetroid.github.io/agy-router/install.sh | bash -s -- --uninstall --purge</code></pre>
           </div>
           <div class="card">
             <span class="badge b-green">Install</span>
             <h3>What the Installer Wires</h3>
             <p>
-              The web installer clones or fast-forwards <code>UberMetroid/agent-ooda</code> into
-              <code>${XDG_DATA_HOME:-~/.local/share}/agent-ooda</code> and invokes <code>./install.sh</code>. On hosts
+              The web installer clones or fast-forwards <code>UberMetroid/agy-router</code> into
+              <code>${XDG_DATA_HOME:-~/.local/share}/agy-router</code> and invokes <code>./install.sh</code>. On hosts
               without Go 1.22+, <code>install.sh</code> downloads the matching static GitHub Release binary and verifies
               its SHA-256 checksum against <code>SHA256SUMS</code> before installing. It links
-              <code>~/.gemini/config/plugins/agent-ooda</code>, <code>~/.local/bin/agent-ooda</code>,
-              and <code>~/.gemini/antigravity-cli/statusline.py</code> (migrating legacy <code>v1.x</code> shims safely),
+              <code>~/.gemini/config/plugins/agy-router</code>, <code>~/.local/bin/agy-router</code>,
+              and <code>~/.gemini/antigravity-cli/statusline.py</code> (migrating legacy <code>agent-ooda</code> / <code>v1.x</code> shims &amp; state safely),
               and wires <code>~/.gemini/antigravity-cli/settings.json</code> idempotently.
             </p>
           </div>
@@ -933,10 +934,10 @@ curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --un
             <h3>State Paths &amp; House-Law Gates</h3>
             <p>
               Quota state (<code>v9</code>) and global stage pins persist under
-              <code>${XDG_STATE_HOME:-~/.local/state}/agent-ooda/quota.json</code> (override via
-              <code>AGENT_OODA_QUOTA_FILE</code>); <code>--local</code> per-repo pins live out-of-git in
+              <code>${XDG_STATE_HOME:-~/.local/state}/agy-router/quota.json</code> (override via
+              <code>AGY_ROUTER_QUOTA_FILE</code>); <code>--local</code> per-repo pins live out-of-git in
               <code>workspaces/&lt;id&gt;.json</code>. Live HUD markers and <code>flock</code> leases live in
-              <code>/tmp/agent-ooda-hud</code>.
+              <code>/tmp/agy-router-hud</code>.
             </p>
             <div class="pills">
               <span class="pill">portable (0 requires, no home paths)</span>
@@ -956,11 +957,11 @@ curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --un
 
   <footer>
     <div class="wrap foot-inner">
-      <span>Built by <a href="https://github.com/UberMetroid">UberMetroid</a> &bull; Zero-Trust OODA &amp; First-Principles Quota Routing</span>
+      <span>Built by <a href="https://github.com/UberMetroid">UberMetroid</a> &bull; Zero-Trust Multi-Agent &amp; First-Principles Quota Routing</span>
       <span>
-        <a href="https://github.com/UberMetroid/agent-ooda">UberMetroid/agent-ooda</a>
+        <a href="https://github.com/UberMetroid/agy-router">UberMetroid/agy-router</a>
         &middot;
-        <a href="https://github.com/UberMetroid/agent-ooda/releases/latest">Releases</a>
+        <a href="https://github.com/UberMetroid/agy-router/releases/latest">Releases</a>
         &middot;
         <a href="https://ubermetroid.github.io/">ubermetroid.github.io</a>
       </span>

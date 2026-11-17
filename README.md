@@ -1,34 +1,34 @@
-# agent-ooda
+# agy-router
 
-**Static Go OODA multi-agent router, quota-aware scheduler, zero-trust cross-model verifier, and live thermal `tok/s` statusLine HUD.**
+**Static Go multi-agent fleet router, quota-aware scheduler, opt-in `/ooda` + `/harden` skills, zero-trust cross-model verifier, and live thermal `tok/s` statusLine HUD.**
 
-`UberMetroid/agent-ooda` packages one zero-dependency Go 1.22+ (`CGO_ENABLED=0`, zero external `require`s) engine paired with host plugin adapters under `plugins/`—starting with [`plugins/agent-ooda`](plugins/agent-ooda) for Antigravity (`agy`) and structured so `mcode` and future coding hosts share the same fleet state, `flock` slot leases, git worktrees, and diff verifier.
+`UberMetroid/agy-router` packages one zero-dependency Go 1.22+ (`CGO_ENABLED=0`, zero external `require`s) engine paired with host plugin adapters under `plugins/`—starting with [`plugins/agy-router`](plugins/agy-router) for Antigravity (`agy`) and structured so `mcode` and future coding hosts share the same fleet state, `flock` slot leases, git worktrees, and diff verifier.
 
-- **Site & web installer:** **<https://ubermetroid.github.io/agent-ooda/>**
-- **Releases & static binaries (`SHA256SUMS`):** **<https://github.com/UberMetroid/agent-ooda/releases/latest>**
+- **Site & web installer:** **<https://ubermetroid.github.io/agy-router/>**
+- **Releases & static binaries (`SHA256SUMS`):** **<https://github.com/UberMetroid/agy-router/releases/latest>**
 
 ## Quick Install (Zero Go Required)
 
 ```bash
-curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash
+curl -fsSL https://ubermetroid.github.io/agy-router/install.sh | bash
 ```
 
-Installs or updates `UberMetroid/agent-ooda` in `${XDG_DATA_HOME:-~/.local/share}/agent-ooda` (override with `AGENT_OODA_HOME`). If Go 1.22+ is on `PATH`, it builds [`plugins/agent-ooda/bin/agent-ooda`](plugins/agent-ooda/bin/agent-ooda) locally with `CGO_ENABLED=0`; otherwise it downloads the matching static GitHub Release binary (`linux`/`darwin`, `amd64`/`arm64`) and verifies its SHA-256 digest against `SHA256SUMS` before installing.
+Installs or updates `UberMetroid/agy-router` in `${XDG_DATA_HOME:-~/.local/share}/agy-router` (override with `AGY_ROUTER_HOME`). If Go 1.22+ is on `PATH`, it builds [`plugins/agy-router/bin/agy-router`](plugins/agy-router/bin/agy-router) locally with `CGO_ENABLED=0`; otherwise it downloads the matching static GitHub Release binary (`linux`/`darwin`, `amd64`/`arm64`) and verifies its SHA-256 digest against `SHA256SUMS` before installing.
 
 ## Architecture & Multi-Call Binary
 
-All runtime roles compile into one static binary (`plugins/agent-ooda/bin/agent-ooda`) dispatched via `argv[0]` basename:
+All runtime roles compile into one static binary (`plugins/agy-router/bin/agy-router`) dispatched via `argv[0]` basename:
 
-| Binary / Symlink | Entrypoint (`cmd/agent-ooda`) | Responsibility |
+| Binary / Symlink | Entrypoint (`cmd/agy-router`) | Responsibility |
 | --- | --- | --- |
-| `agent-ooda` | CLI dispatcher & fleet admin | `--version`, `--recon`, `--orient`, `--task`, manifests, `--review`, `--select`/`-s`, `--set-stage`, `--status`, `--discover`, `--usage`, `--probe` |
-| `agent-ooda-hud` / `statusline.py` | Live thermal statusLine HUD | Renders live ANSI statusBar telemetry from NDJSON worker markers + `quota.json` |
-| `agent-ooda-hook` | Antigravity lifecycle hook | Tracks injected skills per session and garbage-collects dead worker markers |
+| `agy-router` | CLI dispatcher & fleet admin | `--version`, `--recon`, `--orient`, `--task`, manifests, `--review`, `--select`/`-s`, `--set-stage`, `--status`, `--discover`, `--usage`, `--probe` |
+| `agy-router-hud` / `statusline.py` | Live thermal statusLine HUD | Renders live ANSI statusBar telemetry from NDJSON worker markers + `quota.json` |
+| `agy-router-hook` | Antigravity lifecycle hook | Tracks injected skills per session and garbage-collects dead worker markers |
 | `__setup` / `__wire` | Installer helpers | Safe JSON validation and idempotent `settings.json` `statusLine` wiring |
 
 ```text
-agent-ooda/
-├── cmd/agent-ooda/      # multi-call entrypoint (agent-ooda / agent-ooda-hud / agent-ooda-hook)
+agy-router/
+├── cmd/agy-router/      # multi-call entrypoint (agy-router / agy-router-hud / agy-router-hook)
 ├── internal/
 │   ├── fleet/           # quota store (v9), stage matrix, multi-window cycles, flock leases
 │   ├── envelope/        # quota-aware lane selection, UTC tariffs, CLI discovery, mismatch pivot
@@ -38,7 +38,7 @@ agent-ooda/
 │   ├── hud/             # ANSI statusLine renderer, 5-band tok/s gradient, hook recorder
 │   ├── cli/             # arg parser, --select TUI, depth guard, stage & fleet reporting
 │   └── install/         # cross-host setup/unwire helpers
-├── plugins/agent-ooda/  # Antigravity (agy) plugin manifest, unified skill, rule, hooks & bin shims
+├── plugins/agy-router/  # Antigravity (agy) plugin manifest, skills (/lane, /ooda, /harden), rule, hooks & bin shims
 └── qa/gates/            # AST & repo House-Law gate suite (`make all`)
 ```
 
@@ -50,7 +50,7 @@ agent-ooda/
 
 ## The 8-Lane Fleet
 
-`agent-ooda` is currently configured for the **6 agent CLIs** (`8` routing lanes) we actively run and subscribe to:
+`agy-router` is currently configured for the **6 agent CLIs** (`8` routing lanes) we actively run and subscribe to:
 
 | Lane | Engine / CLI | Tier / clock |
 | --- | --- | --- |
@@ -63,33 +63,34 @@ agent-ooda/
 | `devin-pro` | [Cognition Devin CLI](https://docs.devin.ai/) Pro pool (`devin`) | unlimited `$20/mo` Pro, `24h + 7d` |
 | `devin-fusion` | [Cognition Devin CLI](https://docs.devin.ai/) Fusion pool (`devin`) | paid credits (opt-in `--lane` only) |
 
-Model IDs and efforts are **discovered dynamically, not hardcoded**: `agent-ooda --status` and
-`agent-ooda --discover` inspect non-secret local CLI configs, cached CLI model lists, effort flags
+Model IDs and efforts are **discovered dynamically, not hardcoded**: `agy-router --status` and
+`agy-router --discover` inspect non-secret local CLI configs, cached CLI model lists, effort flags
 (`--effort`/`--reasoning-effort` vs `via-model`), live UTC off-peak tariffs (`Z.ai` / `DeepSeek`
 `0.5x` off-peak, `mcode` weekday peak-jam avoidance), and installed `--skill` definitions. When
-`--complexity` or `--skill` are omitted, `agent-ooda` infers the task regime and matches up to 2
-non-core domain skills automatically, tuning model tier and `--effort`. `agent-ooda --probe` runs
+`--complexity` or `--skill` are omitted, `agy-router` infers the task regime and matches up to 2
+non-core domain skills automatically, tuning model tier and `--effort`. `agy-router --probe` runs
 minimal 1-token prompt canaries (never probing `credits`; updates local `quota.json`). Hard binary guardrails exit `2`
-on any `gemini*`/`orchestrator*` worker model and block recursive execution (`agent-ooda --recon`,
+on any `gemini*`/`orchestrator*` worker model and block recursive execution (`agy-router --recon`,
 `--task`, `--review`, `--probe`, `--cleanup`, `--enable`, `--disable`, `--set-cycle`) whenever
-`AGENT_OODA_DEPTH>=1` or `ROUTER_DEPTH>=1`.
+`AGY_ROUTER_DEPTH>=1`, `AGENT_OODA_DEPTH>=1`, or `ROUTER_DEPTH>=1`.
 
-**Stage clocks & Per-Stage OODA Routing (`v2.4.2`):**
+**Stage clocks & Per-Stage Routing (`v3.0.0`):**
 
 - **Per-Stage Matrix (`observe`, `orient`, `act`, `verify`):** Each worker stage defaults to `auto` (`Decide` remains with you and the top-level orchestrator) and resolves via **`CLI flag > --local > --profile > global > auto`**. CLI `--lane`/`--model`/`--effort` target the primary command stage (`--recon`, `--orient`, `--task`, or standalone `--review`); post-task `verify` follows `--local`/`--profile`/global pins so `--task` worker flags never leak onto the off-family reviewer.
 - **Soft-Pin Failover & Off-Family Verify:** Pinned stages soft-failover on 429s/cooldown down their lane CSV or quota-aware `auto`, scrubbing primary-lane `--model`/`--effort` overrides when failing over to another lane (and never falling back onto `devin-fusion` credits or PAYG `muse`); `verify` always enforces a non-authoring model family.
-- **Selectors & Hardening Skills:**
-  - `agent-ooda --select` (`-s`): Interactive terminal TUI (`↑`/`↓`, `Enter`, `b`/Backspace to go back, `q` to quit, `Tab` to switch scope; live `agy` theme colors, sticky or `--until-reset`, global `quota.json` `v9` or `--local` `~/.local/state/agent-ooda/workspaces/<id>.json`).
+- **Selectors & Opt-In Skills (`0` tokens unless invoked):**
+  - `agy-router --select` (`-s`): Interactive terminal TUI (`↑`/`↓`, `Enter`, `b`/Backspace to go back, `q` to quit, `Tab` to switch scope; live `agy` theme colors, sticky or `--until-reset`, global `quota.json` `v9` or `--local` `~/.local/state/agy-router/workspaces/<id>.json`).
   - `/lane`: Native Antigravity in-chat selector skill (`ask_question`) for per-stage pins, presets, and resets.
-  - `/harden`: 4-phase zero-hallucination trust-boundary skill (`--hygiene` + Finder `--orient` + off-family Skeptic falsification + compile-clean Red-to-Green refusal unit tests).
-  - `/agents`: `8` native `agy` workflow profiles (`ooda-auto`, `ooda-conserve`, `ooda-deep`, `ooda-devin`, `ooda-grok`, `ooda-mcode`, `ooda-muse`, `ooda-mistral`).
+  - `/ooda`: Standalone opt-in 4-phase OODA debugging & multi-file engineering workflow (`agy-router --recon`, `--orient`, `--task`, `--review .`).
+  - `/harden`: Standalone opt-in 4-phase zero-hallucination trust-boundary skill (`--hygiene` + Finder `--orient` + off-family Skeptic falsification + compile-clean Red-to-Green refusal unit tests).
+  - `/agents`: `8` native `agy` workflow profiles (`router-auto`, `router-conserve`, `router-deep`, `router-devin`, `router-grok`, `router-mcode`, `router-muse`, `router-mistral`).
 - **Observe & Orient (Token-Lean & Read-Only Guarded):** `--recon` (`observe`) and `--orient` (`orient`) skip auto-matched workspace skills unless `--skill` is passed, run `mcode` read-only recon/orient with `--max-steps 20` (while inline `mcode` `--review` scales dynamically up to `35`/`45` steps), cache identical Merkle-hashed read-only results across `--recon`/`--orient`/`--review` (`--no-cache` to bypass), strip `GH_TOKEN`/`GITHUB_TOKEN` (plus `ANTIGRAVITY_*`) from read-only workers, snapshot the repo before/after to fail closed on any unexpected file write, and isolate clean worktrees via `git worktree add -B`.
 - **Act & Parallel:** Soonest-resetting capped lanes drain first with EWMA health scoring (`health_ewma` demoting flaky lanes and recovering on clean runs) plus an NDJSON stream stall watchdog (`180s` idle kill + immediate failover); manifest batches isolate `git worktree` stripes with atomic `flock` slot leases.
 - **Conserve & Verify:** When one capped lane remains, free `devin-*` and `mcode` absorb routine work; every non-empty diff runs through an independent model family.
 
 ### Other Agent CLIs (Not Currently Configured)
 
-These coding-agent CLIs are **not** currently wired in `agent-ooda` because we don't carry paid subscriptions for them today. If you use them and want to add a lane, adapters live modularly under `internal/dispatch/` and `internal/fleet/`:
+These coding-agent CLIs are **not** currently wired in `agy-router` because we don't carry paid subscriptions for them today. If you use them and want to add a lane, adapters live modularly under `internal/dispatch/` and `internal/fleet/`:
 
 - **[Anthropic Claude Code](https://code.claude.com/docs/en/overview)** (`claude`) — no standalone Claude subscription configured (Claude Opus/Sonnet worker execution in our fleet currently routes through Antigravity's `agy-opus` pool).
 - **[OpenAI Codex CLI](https://github.com/openai/codex)** (`codex`) — requires a ChatGPT plan or OpenAI API subscription.
@@ -109,14 +110,14 @@ review or scope checks) are all audited fail-closed with a `240s` review budget:
 - **Inline stream audit (`> 8 KiB` or committed diffs):** `--permission smart --prompt-mode coding --max-steps 25`.
 - **Fail-closed fallback:** on cooldown, nonzero exit, `SKIPPED`, `UNKNOWN`, or `[P0-3]` findings, review rotates off-family (`mcode → devin-fast → devin-pro → grok → mistral → muse → agy-opus`) or fails non-zero.
 
-## Live Theme-Synced `tok/s` HUD (`bin/agent-ooda-hud`)
+## Live Theme-Synced `tok/s` HUD (`bin/agy-router-hud`)
 
-`bin/agent-ooda-hud` (`statusline.py`) reads live NDJSON stream telemetry and matches `agy`'s live theme (`colorScheme` in `~/.gemini/antigravity-cli/settings.json` — `dark`, `light`, `tokyo night`, `solarized dark`/`light`, `colorblind-friendly dark`/`light`, seasonal `halloween`, `COLORFGBG` terminal auto-detect, or `AGENT_OODA_THEME`), swapping colors immediately when `agy` swaps themes.
+`bin/agy-router-hud` (`statusline.py`) reads live NDJSON stream telemetry and matches `agy`'s live theme (`colorScheme` in `~/.gemini/antigravity-cli/settings.json` — `dark`, `light`, `tokyo night`, `solarized dark`/`light`, `colorblind-friendly dark`/`light`, seasonal `halloween`, `COLORFGBG` terminal auto-detect, or `AGY_ROUTER_THEME`), swapping colors immediately when `agy` swaps themes.
 
-It displays a crisp `OODA` standby badge when idle and renders live OODA phase with distinct static icons (`◎ observe`, `◈ orient`, `◇ decide`, `▸ act`, `✦ verify`), active agent + model, `tool Xs` waits, a **5-band ANSI 256-color thermal `tok/s` heat ramp** (blue `<25` → teal → amber → orange → red `>=180`), a 4-second `✓`/`✗` completion flash, and one dedicated line per parallel worker:
+It displays a crisp `ROUTER` standby badge when idle and renders live phase with distinct static icons (`◎ observe`, `◈ orient`, `◇ decide`, `▸ act`, `✦ verify`), active agent + model, `tool Xs` waits, a **5-band ANSI 256-color thermal `tok/s` heat ramp** (blue `<25` → teal → amber → orange → red `>=180`), a 4-second `✓`/`✗` completion flash, and one dedicated line per parallel worker:
 
 ```text
-OODA
+ROUTER
 ◈ orient · Gemini 4 Argon (Low)
 ◇ decide · Gemini 4 Argon (Low)
 ◎ observe · devin-fast (swe-2-flash-max) · ~42 tok/s
@@ -129,23 +130,23 @@ OODA
 ## CLI Quick Reference
 
 ```bash
-agent-ooda --version                        # print binary version
-agent-ooda --status                         # OODA stage matrix, fleet regimes, models & skills
-agent-ooda --select                         # interactive arrow-key TUI (-s; add --local for repo)
-agent-ooda --set-stage act=grok --effort xhigh
-agent-ooda --set-stage act=auto --local     # mask one stage to auto in this repo
-agent-ooda --set-stage preset=conserve      # presets: auto, conserve, deep, devin, grok, mcode, muse, mistral
-agent-ooda --reset-stages                   # reset global pins to auto (--local clears repo overrides)
-agent-ooda --discover                       # refresh live CLI capability probe cache
-agent-ooda --probe                          # minimal 1-token prompt canary & muse PAYG check
-agent-ooda --usage                          # per-lane 5h/24h/7d/30d windows, UTC tariffs & quota state telemetry
-agent-ooda --recon "Map auth flow"          # OODA Observe: read-only recon (free lanes first)
-agent-ooda --orient "Trace cache race"      # OODA Orient: read-only root-cause & architecture plan
-agent-ooda --task "Fix parser bug" --files internal/cli/parse_args.go --skill devin
-agent-ooda .worktrees/tasks.json -j 4
-agent-ooda --review .                       # standalone cross-model working-tree/HEAD diff gate + P0 hygiene check
-agent-ooda --hygiene .                      # 0-token P0 secret, key & P1 hardening footgun scan
-agent-ooda --cleanup                        # remove .worktrees and temporary ooda/* branches
+agy-router --version                        # print binary version
+agy-router --status                         # router stage matrix, fleet regimes, models & skills
+agy-router --select                         # interactive arrow-key TUI (-s; add --local for repo)
+agy-router --set-stage act=grok --effort xhigh
+agy-router --set-stage act=auto --local     # mask one stage to auto in this repo
+agy-router --set-stage preset=conserve      # presets: auto, conserve, deep, devin, grok, mcode, muse, mistral
+agy-router --reset-stages                   # reset global pins to auto (--local clears repo overrides)
+agy-router --discover                       # refresh live CLI capability probe cache
+agy-router --probe                          # minimal 1-token prompt canary & muse PAYG check
+agy-router --usage                          # per-lane 5h/24h/7d/30d windows, UTC tariffs & quota state telemetry
+agy-router --recon "Map auth flow"          # Observe: read-only recon (free lanes first)
+agy-router --orient "Trace cache race"      # Orient: read-only root-cause & architecture plan
+agy-router --task "Fix parser bug" --files internal/cli/parse_args.go --skill devin
+agy-router .worktrees/tasks.json -j 4
+agy-router --review .                       # standalone cross-model working-tree/HEAD diff gate + P0 hygiene check
+agy-router --hygiene .                      # 0-token P0 secret, key & P1 hardening footgun scan
+agy-router --cleanup                        # remove .worktrees and temporary ooda/* branches
 ```
 
 ## Install, Update & Uninstall
@@ -153,23 +154,23 @@ agent-ooda --cleanup                        # remove .worktrees and temporary oo
 ### Web installer or local checkout
 
 ```bash
-# Web installer (clones/updates ~/.local/share/agent-ooda, uses Go or SHA-256 prebuilt binary)
-curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash
+# Web installer (clones/updates ~/.local/share/agy-router, uses Go or SHA-256 prebuilt binary)
+curl -fsSL https://ubermetroid.github.io/agy-router/install.sh | bash
 
 # Local source checkout
-git clone https://github.com/UberMetroid/agent-ooda.git && cd agent-ooda
+git clone https://github.com/UberMetroid/agy-router.git && cd agy-router
 ./install.sh            # or: make install   (./install.sh --help lists options)
-agy plugin list         # restart agy first, then confirm "agent-ooda" is enabled
+agy plugin list         # restart agy first, then confirm "agy-router" is enabled
 ```
 
 `install.sh` is idempotent:
 
-- **Links** `~/.gemini/config/plugins/agent-ooda` → `plugins/agent-ooda`,
-  `~/.local/bin/agent-ooda` → `plugins/agent-ooda/bin/agent-ooda`, and
-  `~/.gemini/antigravity-cli/statusline.py` → `plugins/agent-ooda/bin/agent-ooda-hud`.
-- **Migrates & archives** legacy `v1.x` owned `ooda`/`router` symlinks (leaving unrelated `ooda` binaries such as `openOODA-core` untouched) and `${XDG_STATE_HOME:-~/.local/state}/ooda/` state into `${XDG_STATE_HOME:-~/.local/state}/agent-ooda/backups/`.
-- **Seeds** `${XDG_STATE_HOME:-~/.local/state}/agent-ooda/quota.json` and registers `~/.agents/skills` in `~/.gemini/config/skills.json`.
-- **Wires `statusLine`** in `~/.gemini/antigravity-cli/settings.json` (skip with `AGENT_OODA_NO_STATUSLINE=1`):
+- **Links** `~/.gemini/config/plugins/agy-router` → `plugins/agy-router`,
+  `~/.local/bin/agy-router` → `plugins/agy-router/bin/agy-router`, and
+  `~/.gemini/antigravity-cli/statusline.py` → `plugins/agy-router/bin/agy-router-hud`.
+- **Migrates & archives** legacy `agent-ooda` and `v1.x` owned `ooda`/`router` symlinks (leaving unrelated `ooda` binaries such as `openOODA-core` untouched) and `${XDG_STATE_HOME:-~/.local/state}/{agent-ooda,ooda}/` state into `${XDG_STATE_HOME:-~/.local/state}/agy-router/`.
+- **Seeds** `${XDG_STATE_HOME:-~/.local/state}/agy-router/quota.json` and registers `~/.agents/skills` in `~/.gemini/config/skills.json`.
+- **Wires `statusLine`** in `~/.gemini/antigravity-cli/settings.json` (skip with `AGY_ROUTER_NO_STATUSLINE=1`):
 
   ```json
   {
@@ -189,18 +190,18 @@ agy plugin list         # restart agy first, then confirm "agent-ooda" is enable
 
 ```bash
 # Update via web installer (guards against local changes or unpushed commits)
-curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash
+curl -fsSL https://ubermetroid.github.io/agy-router/install.sh | bash
 
 # Update from local checkout (links resolve directly into the checkout)
 git pull && ./install.sh
 
-# Uninstall (removes agent-ooda symlinks & restores previous statusLine; add --purge to remove state/checkout)
+# Uninstall (removes agy-router symlinks & restores previous statusLine; add --purge to remove state/checkout)
 ./install.sh --uninstall --purge
 # or via web installer:
-curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash -s -- --uninstall --purge
+curl -fsSL https://ubermetroid.github.io/agy-router/install.sh | bash -s -- --uninstall --purge
 ```
 
-Runtime state persists under `${XDG_STATE_HOME:-~/.local/state}/agent-ooda/quota.json` (`v9`, `AGENT_OODA_QUOTA_FILE`) and per-repo `--local` pins under `~/.local/state/agent-ooda/workspaces/<id>.json`; live HUD markers and `flock` leases live in `/tmp/agent-ooda-hud` (`AGENT_OODA_HUD_DIR`).
+Runtime state persists under `${XDG_STATE_HOME:-~/.local/state}/agy-router/quota.json` (`v9`, `AGY_ROUTER_QUOTA_FILE`) and per-repo `--local` pins under `~/.local/state/agy-router/workspaces/<id>.json`; live HUD markers and `flock` leases live in `/tmp/agy-router-hud` (`AGY_ROUTER_HUD_DIR`).
 
 ## House-Law Verification
 

@@ -9,12 +9,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 var (
 	skillAliases = map[string]string{
-		"ooda": "agent-ooda", "router": "agent-ooda", "agent-router": "agent-ooda",
+		"router": "agy-router", "agent-router": "agy-router", "agent-ooda": "agy-router",
 	}
 	fmNameRe      = regexp.MustCompile(`^\s*name\s*:\s*(.+)$`)
 	fmDescRe      = regexp.MustCompile(`^\s*description\s*:\s*(.*)$`)
@@ -215,6 +215,7 @@ func LoadSkillBlocks(names []string, cwd string) (string, error) {
 	var blocks []string
 	for _, raw := range names {
 		name := strings.TrimSpace(raw)
+		name = strings.TrimPrefix(name, "agy-router:")
 		name = strings.TrimPrefix(name, "agent-ooda:")
 		name = strings.TrimPrefix(name, "ooda:")
 		if alias, ok := skillAliases[name]; ok {

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/UberMetroid/agent-ooda/internal/dispatch"
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/dispatch"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 func setTestWorkers(t *testing.T, hudDir string, workers []dispatch.WorkerMarker) {
@@ -36,8 +36,8 @@ func TestStatusLineModes(t *testing.T) {
 	t.Setenv("ROUTER_HUD_DIR", hudDir)
 	t.Setenv("NO_COLOR", "1")
 	now := float64(((time.Now().Unix() / 10) + 1) * 10)
-	if got := RenderStatusLine("{}", true, &now, nil); got != "OODA" {
-		t.Fatalf("expected active OODA idle badge, got %q", got)
+	if got := RenderStatusLine("{}", true, &now, nil); got != "ROUTER" {
+		t.Fatalf("expected active ROUTER idle badge, got %q", got)
 	}
 	for _, tc := range [][2]string{
 		{`{"agent":{"state":"thinking"}}`, "◈ orient"},
@@ -149,8 +149,8 @@ func TestThermalTokSAndIdlePins(t *testing.T) {
 	}
 	_ = os.WriteFile(filepath.Join(cfgDir, "settings.json"), []byte(`{"colorScheme":"light"}`), 0o600)
 	_ = os.Remove(filepath.Join(hudDir, "last.json"))
-	if idleLight := RenderStatusLine("{}", true, &now, nil); idleLight != PaletteFor("light").IdleText+"OODA"+Reset {
-		t.Fatalf("expected light theme OODA idle badge, got %q", idleLight)
+	if idleLight := RenderStatusLine("{}", true, &now, nil); idleLight != PaletteFor("light").IdleText+"ROUTER"+Reset {
+		t.Fatalf("expected light theme ROUTER idle badge, got %q", idleLight)
 	}
 	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{{Mode: "act", Model: "grok-4.7"}})
 	if light := RenderStatusLine("{}", true, &now, nil); !strings.Contains(light, PaletteFor("light").Act+"▸ act") {
@@ -186,8 +186,8 @@ func TestHookAndDeadWorkerGC(t *testing.T) {
 	pfx := `{"conversationId":"c1","hookEventName":"PostToolUse","toolCall":{"name":`
 	for _, p := range []string{
 		pfx + `"read_file","args":{"Path":"~/.agents/skills/readskill/SKILL.md"}}}`,
-		pfx + `"run_command","args":{"CommandLine":"agent-ooda --task fix --skill none,off,newskill"}}}`,
-		pfx + `"run_command","args":{"CommandLine":"agent-ooda --orient why"}}}`,
+		pfx + `"run_command","args":{"CommandLine":"agy-router --task fix --skill none,off,newskill"}}}`,
+		pfx + `"run_command","args":{"CommandLine":"agy-router --orient why"}}}`,
 	} {
 		if out := callHook(p, "0"); out != "{}\n" {
 			t.Fatalf("hook output: %q", out)
@@ -250,7 +250,7 @@ func TestBoundedHudAndHookStdin(t *testing.T) {
 	_ = outW.Close()
 	var capBuf bytes.Buffer
 	_, _ = capBuf.ReadFrom(outR)
-	if strings.TrimSpace(capBuf.String()) != "OODA" {
-		t.Fatalf("expected oversized statusLine stdin to fall back to OODA, got %q", capBuf.String())
+	if strings.TrimSpace(capBuf.String()) != "ROUTER" {
+		t.Fatalf("expected oversized statusLine stdin to fall back to ROUTER, got %q", capBuf.String())
 	}
 }

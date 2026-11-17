@@ -129,7 +129,7 @@ func AutoMatchSkills(prompt string, files []string, cwd string) []string {
 	return out
 }
 
-// ResolveTaskSkills honors explicit --skill flags or --skill none / OODA_NO_AUTO_SKILL opt-outs.
+// ResolveTaskSkills honors explicit --skill flags or --skill none / AGY_ROUTER_NO_AUTO_SKILL opt-outs.
 func ResolveTaskSkills(explicit []string, prompt string, files []string, cwd string) []string {
 	for _, s := range explicit {
 		low := strings.ToLower(strings.TrimSpace(s))
@@ -140,7 +140,7 @@ func ResolveTaskSkills(explicit []string, prompt string, files []string, cwd str
 	if len(explicit) > 0 {
 		return explicit
 	}
-	if os.Getenv("OODA_NO_AUTO_SKILL") == "1" {
+	if os.Getenv("AGY_ROUTER_NO_AUTO_SKILL") == "1" || os.Getenv("OODA_NO_AUTO_SKILL") == "1" {
 		return nil
 	}
 	return AutoMatchSkills(prompt, files, cwd)

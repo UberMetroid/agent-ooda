@@ -11,9 +11,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
-	"github.com/UberMetroid/agent-ooda/internal/verify"
-	"github.com/UberMetroid/agent-ooda/internal/worktree"
+	"github.com/UberMetroid/agy-router/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/verify"
+	"github.com/UberMetroid/agy-router/internal/worktree"
 )
 
 var maxLineBytes = 1 << 20

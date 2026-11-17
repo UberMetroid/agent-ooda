@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
 // StageSpec describes the effective route and source resolved for one OODA stage.
@@ -34,10 +34,10 @@ func PresetStages(name string) (map[string]fleet.StageRoute, bool) {
 	res, ok := map[string]map[string]fleet.StageRoute{
 		"auto": mk("auto", "auto", "auto", "auto", nil), "devin": mk("devin-fast", "devin-pro", "devin-pro", "mcode", nil),
 		"conserve": mk("devin-fast", "devin-pro", "devin-pro,devin-fast", "mcode", nil),
-		"deep":     mk("devin-fast", "agy-opus,grok", "agy-opus,devin-pro", "mcode", fleet.Ptr("xhigh")),
-		"mcode":    mk("mcode", "mcode", "mcode", "devin-fast", nil), "grok": mk("devin-fast", "grok", "grok", "mcode", nil),
+		"deep": mk("devin-fast", "agy-opus,grok", "agy-opus,devin-pro", "mcode", fleet.Ptr("xhigh")),
+		"mcode": mk("mcode", "mcode", "mcode", "devin-fast", nil), "grok": mk("devin-fast", "grok", "grok", "mcode", nil),
 		"muse": mk("devin-fast", "muse", "muse", "mcode", nil), "mistral": mk("devin-fast", "mistral", "mistral", "mcode", nil),
-	}[strings.TrimPrefix(strings.ToLower(strings.TrimSpace(name)), "ooda-")]
+	}[strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(strings.TrimSpace(name)), "router-"), "ooda-")]
 	return res, ok
 }
 
@@ -49,12 +49,10 @@ func WorkspaceStagesPath(cwd string) string {
 	}
 	for d := root; d != filepath.Dir(d); d = filepath.Dir(d) {
 		gp := filepath.Join(d, ".git")
-		fi, err := os.Stat(gp)
-		if err == nil && fi.IsDir() {
+		if fi, err := os.Stat(gp); err == nil && fi.IsDir() {
 			root = d
 			break
-		}
-		if err != nil || !fi.Mode().IsRegular() {
+		} else if err != nil || !fi.Mode().IsRegular() {
 			continue
 		}
 		raw, _ := os.ReadFile(gp)
@@ -225,8 +223,10 @@ func ResolveStage(stage, cliLane, cliModel, cliEffort, cliProfile, cwd string, q
 		}
 		return sp
 	}
-	if cliProfile == "" {
-		cliProfile = os.Getenv("AGENT_OODA_PROFILE")
+	for _, k := range []string{"AGY_ROUTER_PROFILE", "AGENT_OODA_PROFILE"} {
+		if cliProfile == "" {
+			cliProfile = os.Getenv(k)
+		}
 	}
 	ws := LoadWorkspaceStages(cwd)
 	pre, hasPre := PresetStages(cliProfile)
