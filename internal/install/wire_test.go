@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -192,5 +193,19 @@ func TestInstallLegacyMigration(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(stateBase, "agent-ooda", "quota.json")); err != nil {
 		t.Fatalf("expected migrated quota.json: %v", err)
+	}
+}
+
+func TestWriteWireJSONNoTmpSymlink(t *testing.T) {
+	dir := t.TempDir()
+	setPath := filepath.Join(dir, "settings.json")
+	victim := filepath.Join(dir, "victim.txt")
+	_ = os.WriteFile(victim, []byte("keep"), 0o600)
+	_ = os.Symlink(victim, filepath.Join(dir, ".settings.json.tmp."+strconv.Itoa(os.Getpid())))
+	if err := writeWireJSON(setPath, map[string]any{"ok": true}); err != nil {
+		t.Fatalf("writeWireJSON failed: %v", err)
+	}
+	if raw, err := os.ReadFile(victim); err != nil || string(raw) != "keep" {
+		t.Fatalf("writeWireJSON followed predictable tmp symlink into victim.txt: %q (%v)", string(raw), err)
 	}
 }

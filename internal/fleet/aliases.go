@@ -247,7 +247,7 @@ func ExtractResetTS(out string) *string {
 		if len(m) < 2 {
 			continue
 		}
-		if t, ok := ParseISOUTC(m[1]); ok && t.After(nowUTC) {
+		if t, ok := ParseISOUTC(m[1]); ok && t.After(nowUTC) && t.Sub(nowUTC) <= 45*24*time.Hour {
 			s := FormatLocalISO(t)
 			return &s
 		}

@@ -19,7 +19,7 @@ func removeRepoWorktrees(root, wtDir string, outW io.Writer) []string {
 		}
 		if json.Unmarshal(raw, &rows) == nil {
 			for _, r := range rows {
-				if r.ID != "" {
+				if fleet.SafeIDRe.MatchString(r.ID) {
 					ids = append(ids, r.ID)
 				}
 			}

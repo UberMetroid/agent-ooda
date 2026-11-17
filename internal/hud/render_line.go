@@ -208,6 +208,8 @@ func RenderStatusLine(
 		hudCwd := ResolveHudCwd(hudBase, data, workers, now)
 		sum = LoadFleetSummary(time.Now().UTC(), hudCwd)
 	}
+	sum.Pins = strings.TrimSpace(SanitizePlain(sum.Pins))
+	sum.WakeCD = strings.TrimSpace(SanitizePlain(sum.WakeCD))
 	thinking := agentThinking(data)
 	var last *dispatch.LastRunMarker
 	if len(workers) == 0 && !thinking {

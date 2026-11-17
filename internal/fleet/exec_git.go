@@ -5,14 +5,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
 const shimMarker = ".superconductor"
+
+var maxCmdOutBytes int64 = 16 << 20
 
 // CmdSpec defines a bounded argv-only subprocess invocation (no shell).
 type CmdSpec struct {
@@ -119,9 +123,25 @@ func RunCmd(spec CmdSpec) (CmdRes, error) {
 		cmd.Env = spec.Env
 	}
 	var outBuf, errBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	err := cmd.Run()
+	outP, err1 := cmd.StdoutPipe()
+	errP, err2 := cmd.StderrPipe()
+	if err1 != nil || err2 != nil {
+		return CmdRes{ExitCode: 1}, fmt.Errorf("pipe setup failed")
+	}
+	if serr := cmd.Start(); serr != nil {
+		return CmdRes{ExitCode: 1}, serr
+	}
+	var wg sync.WaitGroup
+	capCopy := func(dst *bytes.Buffer, src io.ReadCloser) {
+		defer wg.Done()
+		_, _ = io.Copy(dst, io.LimitReader(src, maxCmdOutBytes))
+		_, _ = io.Copy(io.Discard, src)
+	}
+	wg.Add(2)
+	go capCopy(&outBuf, outP)
+	go capCopy(&errBuf, errP)
+	wg.Wait()
+	err := cmd.Wait()
 	res := CmdRes{
 		Stdout:   outBuf.String(),
 		Stderr:   errBuf.String(),
@@ -168,6 +188,9 @@ func RepoRoot(startDir string) (string, error) {
 
 // ResolveCLI finds an executable cliName on PATH or fallback paths, skipping shims.
 func ResolveCLI(cliName string) string {
+	if !SafeIDRe.MatchString(cliName) {
+		return ""
+	}
 	var cands []string
 	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
 		if dir == "" || strings.Contains(dir, shimMarker) {

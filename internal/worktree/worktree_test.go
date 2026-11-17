@@ -1,6 +1,7 @@
 package worktree
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -195,5 +196,37 @@ func TestSafeFilesAndControlPaths(t *testing.T) {
 		if _, err := NormalizeRelPath(bad); err == nil {
 			t.Fatalf("expected NormalizeRelPath to reject control char path %q", bad)
 		}
+	}
+}
+
+func TestWorktreeBindingAndCleanupIDs(t *testing.T) {
+	repo := t.TempDir()
+	for _, args := range [][]string{{"init", "-q"}, {"config", "user.email", "t@e.com"},
+		{"config", "user.name", "T"}} {
+		_, _ = fleet.RunCmd(fleet.CmdSpec{Argv: append([]string{"git"}, args...), Cwd: repo})
+	}
+	_ = os.WriteFile(filepath.Join(repo, "a.go"), []byte("package a\n"), 0o644)
+	_, _ = fleet.RunCmd(fleet.CmdSpec{Argv: []string{"git", "add", "a.go"}, Cwd: repo})
+	_, _ = fleet.RunCmd(fleet.CmdSpec{Argv: []string{"git", "commit", "-q", "-m", "seed"}, Cwd: repo})
+	wt, _, err := EnsureWorktree(repo, "wt-bind")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyWorktreeBinding(repo, wt); err != nil {
+		t.Fatalf("valid worktree binding rejected: %v", err)
+	}
+	_ = os.RemoveAll(filepath.Join(wt, ".git"))
+	if err := VerifyWorktreeBinding(repo, wt); err == nil {
+		t.Fatal("expected VerifyWorktreeBinding to fail when wt/.git missing")
+	}
+	_, _ = fleet.RunCmd(fleet.CmdSpec{Argv: []string{"git", "branch", "ooda/keep/nested"}, Cwd: repo})
+	_ = os.WriteFile(filepath.Join(repo, ".worktrees", "results.json"),
+		[]byte(`[{"id":"keep/nested"},{"id":"wt-bind"}]`), 0o644)
+	var out bytes.Buffer
+	Cleanup(repo, &out)
+	if chk, _ := fleet.RunCmd(fleet.CmdSpec{
+		Argv: []string{"git", "rev-parse", "--verify", "refs/heads/ooda/keep/nested"}, Cwd: repo,
+	}); chk.ExitCode != 0 {
+		t.Fatalf("Cleanup deleted non-SafeID branch ooda/keep/nested from results.json")
 	}
 }

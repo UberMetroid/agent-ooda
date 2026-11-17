@@ -49,35 +49,14 @@ func TestStatusLineModes(t *testing.T) {
 		workers []dispatch.WorkerMarker
 		want    string
 	}{
-		{
-			[]dispatch.WorkerMarker{{Mode: "observe", Model: "swe-2-flash-max"}},
-			"⠋ observe · swe-2-flash-max",
-		},
-		{
-			[]dispatch.WorkerMarker{{Mode: "orient", Model: "grok-4.7"}},
-			"⠋ orient · grok-4.7",
-		},
-		{
-			[]dispatch.WorkerMarker{{Mode: "act", Model: "claude-opus-5-5-high"}},
-			"⠋ act · claude-opus-5-5-high",
-		},
-		{
-			[]dispatch.WorkerMarker{{Mode: "act:verify", Model: "minimax/MiniMax-M3.1-Flash"}},
-			"⠋ verify · MiniMax-M3.1-Flash",
-		},
-		{
-			[]dispatch.WorkerMarker{
-				{Mode: "act", Model: "grok-4.7"},
-				{Mode: "act", Model: "fusion-claude-opus-5-5-high-sidekick-swe-2-medium"},
-			},
-			"⠋ act ×2 · grok-4.7, devin-fusion",
-		},
-		{
-			[]dispatch.WorkerMarker{
-				{Mode: "act", Model: "grok-4.7", Skills: []string{"agent-ooda", "ooda", "router", "custom-skill"}},
-			},
-			"⠋ act · grok-4.7 │ skill custom-skill",
-		},
+		{[]dispatch.WorkerMarker{{Mode: "observe", Model: "swe-2-flash-max"}}, "⠋ observe · swe-2-flash-max"},
+		{[]dispatch.WorkerMarker{{Mode: "orient", Model: "grok-4.7"}}, "⠋ orient · grok-4.7"},
+		{[]dispatch.WorkerMarker{{Mode: "act", Model: "claude-opus-5-5-high"}}, "⠋ act · claude-opus-5-5-high"},
+		{[]dispatch.WorkerMarker{{Mode: "act:verify", Model: "minimax/MiniMax-M3.1-Flash"}}, "⠋ verify · MiniMax-M3.1-Flash"},
+		{[]dispatch.WorkerMarker{{Mode: "act", Model: "grok-4.7"},
+			{Mode: "act", Model: "fusion-claude-opus-5-5-high-sidekick-swe-2-medium"}}, "⠋ act ×2 · grok-4.7, devin-fusion"},
+		{[]dispatch.WorkerMarker{{Mode: "act", Model: "grok-4.7", Skills: []string{"agent-ooda", "ooda", "router",
+			"custom-skill"}}}, "⠋ act · grok-4.7 │ skill custom-skill"},
 	}
 	for _, tc := range cases {
 		setTestWorkers(t, hudDir, tc.workers)
@@ -252,5 +231,24 @@ func TestHookAndDeadWorkerGC(t *testing.T) {
 	_ = callHook(`{"conversationId":"c2","hookEventName":"SessionStart"}`, "1")
 	if _, err := os.Stat(filepath.Join(hudDir, "sessions", "c2.json")); !os.IsNotExist(err) {
 		t.Fatalf("nested ROUTER_DEPTH=1 hook must be ignored")
+	}
+}
+
+func TestSanitizeTerminalEscapes(t *testing.T) {
+	hudDir := filepath.Join(t.TempDir(), "hud")
+	t.Setenv("ROUTER_HUD_DIR", hudDir)
+	t.Setenv("NO_COLOR", "1")
+	if got := HudShortModel("\x1b]52;c;ZXY=\x07claude\x1b[2J\x07"); got != "claude" {
+		t.Fatalf("expected stripped HudShortModel == 'claude', got %q", got)
+	}
+	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{{
+		Mode: "act", Model: "grok\x1b]52;c;ZXY=\x07-4", Skills: []string{"dev\x1b]0;pwn\x07in"},
+	}})
+	sum, now := FleetSummary{Active: 5, Total: 8, Pins: "act:m\x1b[2J"}, 1000.0
+	line := RenderStatusLine("{}", true, &now, &sum)
+	for _, bad := range []string{"\x1b]52", "\x1b]0", "\x1b[2J", "\x07"} {
+		if strings.Contains(line, bad) {
+			t.Fatalf("HUD output leaked terminal escape %q: %q", bad, line)
+		}
 	}
 }

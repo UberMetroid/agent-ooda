@@ -61,6 +61,48 @@ func Colorize(text, code string, useColor bool) string {
 	return code + text + Reset
 }
 
+// SanitizePlain strips terminal control bytes, CSI, and OSC escapes from untrusted text.
+func SanitizePlain(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		if s[i] == 0x1b {
+			if i+1 < len(s) && s[i+1] == ']' {
+				i += 2
+				for i < len(s) && s[i] != 0x07 && !(s[i] == 0x1b && i+1 < len(s) && s[i+1] == '\\') {
+					i++
+				}
+				if i < len(s) && s[i] == 0x07 {
+					i++
+				} else if i+1 < len(s) {
+					i += 2
+				}
+				continue
+			}
+			if i+1 < len(s) && s[i+1] == '[' {
+				i += 2
+				for i < len(s) && (s[i] < 0x40 || s[i] > 0x7e) {
+					i++
+				}
+				if i < len(s) {
+					i++
+				}
+				continue
+			}
+			i += min(2, len(s)-i)
+			continue
+		}
+		if s[i] < 0x20 || s[i] == 0x7f {
+			i++
+			continue
+		}
+		r, sz := utf8.DecodeRuneInString(s[i:])
+		b.WriteRune(r)
+		i += sz
+	}
+	return b.String()
+}
+
 // VisibleLen returns printable rune width after skipping ANSI CSI escapes without allocations.
 func VisibleLen(text string) int {
 	n := 0
@@ -147,7 +189,7 @@ func FormatCD(deltaSec float64) string {
 
 // HudShortModel returns a compact display label for worker models on the HUD.
 func HudShortModel(modelName string) string {
-	m := strings.TrimSpace(modelName)
+	m := strings.TrimSpace(SanitizePlain(modelName))
 	if m == "" {
 		return "-"
 	}

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 )
@@ -62,10 +61,19 @@ func writeWireJSON(path string, data any) error {
 	if st, err := os.Stat(path); err == nil {
 		mode = st.Mode().Perm()
 	}
-	tmp := filepath.Join(parent, "."+filepath.Base(path)+".tmp."+strconv.Itoa(os.Getpid()))
-	if err := os.WriteFile(tmp, buf.Bytes(), mode); err != nil {
-		_ = os.Remove(tmp)
+	f, err := os.CreateTemp(parent, "."+filepath.Base(path)+".tmp.*")
+	if err != nil {
 		return err
+	}
+	tmp := f.Name()
+	_, werr := f.Write(buf.Bytes())
+	cerr := f.Close()
+	if werr != nil || cerr != nil {
+		_ = os.Remove(tmp)
+		if werr != nil {
+			return werr
+		}
+		return cerr
 	}
 	if err := os.Chmod(tmp, mode); err != nil {
 		_ = os.Remove(tmp)

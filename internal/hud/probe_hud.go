@@ -143,7 +143,7 @@ func CollectSkills(
 	var merged []string
 	for _, g := range groups {
 		for _, s := range g {
-			name := strings.TrimSpace(s)
+			name := strings.TrimSpace(SanitizePlain(s))
 			if name == "agent-router" {
 				name = "router"
 			}

@@ -3,6 +3,7 @@ package fleet
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -48,11 +49,15 @@ func TestLanesAndGeminiGuard(t *testing.T) {
 }
 
 func TestResetTSAndMigrate(t *testing.T) {
-	future := ExtractResetTS("HTTP 429 Too Many Requests: resets at 2099-01-02T03:04:05Z")
+	near := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Second)
+	future := ExtractResetTS("HTTP 429 Too Many Requests: resets at " + near.Format(time.RFC3339))
 	if future == nil {
-		t.Fatal("expected parsed future reset timestamp")
+		t.Fatal("expected parsed near-future reset timestamp")
 	}
-	if dt, ok := ParseISOUTC(*future); !ok || dt.Year() != 2099 {
+	if ExtractResetTS("HTTP 429 Too Many Requests: resets at 2099-01-02T03:04:05Z") != nil {
+		t.Fatal("expected far-future reset timestamp (>45d) to be ignored")
+	}
+	if dt, ok := ParseISOUTC(*future); !ok || dt.Unix() != near.Unix() {
 		t.Fatalf("unexpected parsed UTC timestamp: %v (%v)", dt, ok)
 	}
 	if ExtractResetTS("429 quota exceeded, resets at 2001-01-01T00:00:00Z") != nil {
@@ -141,18 +146,16 @@ func TestParallelLeasesAndTimeout(t *testing.T) {
 		}
 		held = append(held, fh)
 	}
-	if CountActiveLeases("devin-fast", 4) != 4 {
-		t.Fatalf("expected 4 active leases, got %d", CountActiveLeases("devin-fast", 4))
-	}
-	if extra, _, err := AcquireParallelLease("devin-fast", 4, false, 0); err != nil || extra != nil {
-		t.Fatalf("expected nil lease when 4/4 busy, got %v (%v)", extra, err)
+	if extra, _, err := AcquireParallelLease("devin-fast", 4, false, 0); CountActiveLeases("devin-fast", 4) != 4 ||
+		err != nil || extra != nil {
+		t.Fatalf("expected 4 active leases and nil 5th, got extra=%v err=%v", extra, err)
 	}
 	ReleaseParallelLease(held[0])
-	fifth, _, err := AcquireParallelLease("devin-fast", 4, false, 0)
-	if err != nil || fifth == nil {
+	if fifth, _, err := AcquireParallelLease("devin-fast", 4, false, 0); err != nil || fifth == nil {
 		t.Fatalf("expected lease after releasing slot 0: %v", err)
+	} else {
+		ReleaseParallelLease(fifth)
 	}
-	ReleaseParallelLease(fifth)
 	for _, fh := range held[1:] {
 		ReleaseParallelLease(fh)
 	}
@@ -201,31 +204,52 @@ func TestV8WindowsResetAndEscalate(t *testing.T) {
 		t.Fatalf("MarkProviderCooldown failed: %v", err)
 	}
 	q, _ = LoadQuota(qPath)
-	mc := q.Providers["mcode"]
-	if mc.Status != "cooldown" || mc.Reason == nil || !strings.Contains(*mc.Reason, "outer window") {
+	if mc := q.Providers["mcode"]; mc.Status != "cooldown" || mc.Reason == nil ||
+		!strings.Contains(*mc.Reason, "outer window") {
 		t.Fatalf("expected outer-window cooldown escalation, got %+v", mc)
 	}
 }
 
 func TestParseMuseUsagePaygAndSub(t *testing.T) {
+	soon := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
 	payg := ParseMuseUsageJSON(`{"allowance":null,"hint":null,"reason":"api_key","schemaVersion":1}`, 0, false)
 	if !payg.PayAsYouGo || payg.Fresh || !payg.Installed {
 		t.Fatalf("expected PayAsYouGo=true on api_key payload, got %+v", payg)
 	}
-	sub := ParseMuseUsageJSON(`{"allowance":{"resetsAt":"2030-01-01T00:00:00Z"},"hint":"Power","reason":"sub"}`, 0, false)
+	sub := ParseMuseUsageJSON(`{"allowance":{"resetsAt":"`+soon+`"},"hint":"Power","reason":"sub"}`, 0, false)
 	if sub.PayAsYouGo || !sub.Fresh || sub.ResetAt == nil {
 		t.Fatalf("expected subscription active probe, got %+v", sub)
 	}
-	if stale := ParseMuseUsageJSON(`{"allowance":{"resetsAt":"2030-01-01T00:00:00Z"}}`, 1, false); stale.Fresh {
+	if stale := ParseMuseUsageJSON(`{"allowance":{"resetsAt":"`+soon+`"}}`, 1, false); stale.Fresh {
 		t.Fatalf("expected Fresh=false on non-zero muse exit, got %+v", stale)
 	}
-	if got, err := NormalizeModel("muse", "ember"); err != nil || got != "muse-ember-1.0" {
-		t.Fatalf("expected muse-ember-1.0, got %q (%v)", got, err)
-	}
-	if got, err := NormalizeModel("muse", "wonder"); err != nil || got != "muse-wonder-1.0" {
-		t.Fatalf("expected muse-wonder-1.0, got %q (%v)", got, err)
+	if e, _ := NormalizeModel("muse", "ember"); e != "muse-ember-1.0" {
+		t.Fatalf("expected muse-ember-1.0, got %q", e)
+	} else if w, _ := NormalizeModel("muse", "wonder"); w != "muse-wonder-1.0" {
+		t.Fatalf("expected muse-wonder-1.0, got %q", w)
 	}
 	if _, err := NormalizeModel("muse", "gemini-4-carbon-low"); err == nil {
 		t.Fatal("expected Gemini guardrail refusal on NormalizeModel")
+	}
+}
+
+func TestResolveCLIAndBoundedRunCmd(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "sub")
+	_ = os.MkdirAll(sub, 0o755)
+	_ = os.WriteFile(filepath.Join(dir, "evil"), []byte("#!/bin/sh\necho evil\n"), 0o755)
+	echoBin, err := exec.LookPath("echo")
+	if err != nil {
+		t.Skip("echo not found")
+	}
+	t.Setenv("PATH", sub)
+	if ResolveCLI("../evil") != "" || ResolveCLI("/bin/sh") != "" {
+		t.Fatalf("expected unsafe CLI paths blocked")
+	}
+	defer func(p int64) { maxCmdOutBytes = p }(maxCmdOutBytes)
+	maxCmdOutBytes = 64
+	res, err := RunCmd(CmdSpec{Argv: []string{echoBin, strings.Repeat("x", 200)}, TimeoutSec: 5})
+	if err != nil || int64(len(res.Stdout)) > maxCmdOutBytes {
+		t.Fatalf("expected RunCmd stdout <= %d bytes, got len=%d err=%v", maxCmdOutBytes, len(res.Stdout), err)
 	}
 }

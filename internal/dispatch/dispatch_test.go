@@ -1,6 +1,7 @@
 package dispatch
 
 import (
+	"bufio"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -24,20 +25,18 @@ func setEnvs(t *testing.T, kv map[string]string) {
 
 func TestBuildWorkerCommandAllCLIs(t *testing.T) {
 	wt, slot := t.TempDir(), t.TempDir()
-	setEnvs(t, map[string]string{"AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "2",
-		"ANTIGRAVITY_TOKEN": "sec", "GH_TOKEN": "sec", "GITHUB_TOKEN": "sec"})
+	setEnvs(t, map[string]string{"AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "2", "ANTIGRAVITY_TOKEN": "sec",
+		"GH_TOKEN": "sec", "GITHUB_TOKEN": "sec", "AWS_SECRET_ACCESS_KEY": "sec", "OPENAI_API_KEY": "sec",
+		"ANTHROPIC_API_KEY": "sec", "NPM_TOKEN": "sec", "SSH_AUTH_SOCK": "/tmp/s"})
 	for _, lane := range []string{"agy-opus", "devin-pro", "mcode", "grok", "muse", "mistral"} {
 		built, err := BuildWorkerCommand(CmdReq{Provider: lane, CLIPath: "/bin/" + lane,
 			Prompt: "fix bug", Worktree: wt, SlotDir: slot, TaskID: "t1"})
-		if err != nil {
-			t.Fatalf("%s unpinned failed: %v", lane, err)
-		}
-		if slices.Contains(built.Argv, "--model") || slices.Contains(built.Argv, "--effort") ||
+		if err != nil || slices.Contains(built.Argv, "--model") || slices.Contains(built.Argv, "--effort") ||
 			slices.Contains(built.Argv, "--reasoning-effort") {
-			t.Fatalf("%s unpinned leaked flag: %v", lane, built.Argv)
+			t.Fatalf("%s unpinned failed/leaked: err=%v argv=%v", lane, err, built.Argv)
 		}
-		for _, kv := range []string{"ROUTER_DEPTH=3", "AGENT_OODA_DEPTH=3", "GIT_TERMINAL_PROMPT=0",
-			"GH_TOKEN=sec", "GITHUB_TOKEN=sec"} {
+		for _, kv := range []string{"ROUTER_DEPTH=3", "AGENT_OODA_DEPTH=3",
+			"GIT_TERMINAL_PROMPT=0", "GH_TOKEN=sec", "GITHUB_TOKEN=sec"} {
 			if !slices.Contains(built.Env, kv) {
 				t.Fatalf("%s missing env %s: %v", lane, kv, built.Env)
 			}
@@ -51,21 +50,19 @@ func TestBuildWorkerCommandAllCLIs(t *testing.T) {
 		if err != nil || !slices.Contains(ro.Argv, "m-ovr") {
 			t.Fatalf("%s ro failed: err=%v argv=%v", lane, err, ro.Argv)
 		}
-		for _, k := range []string{"ANTIGRAVITY_", "GH_TOKEN=", "GITHUB_TOKEN="} {
+		for _, k := range []string{"ANTIGRAVITY_", "GH_TOKEN=", "GITHUB_TOKEN=", "AWS_SECRET_ACCESS_KEY=", "OPENAI_API_KEY=",
+			"ANTHROPIC_API_KEY=", "NPM_TOKEN=", "SSH_AUTH_SOCK="} {
 			if slices.ContainsFunc(ro.Env, func(s string) bool { return strings.HasPrefix(s, k) }) {
 				t.Fatalf("%s read-only leaked %s", lane, k)
 			}
 		}
-		if lane == "mcode" {
-			for _, tc := range [][3]string{
-				{"", "a", "20"}, {"inline", "a", "35"}, {"inline", ".. <diff capped", "45"}, {"native", "a", "review"},
-			} {
-				b, _ := BuildWorkerCommand(CmdReq{Provider: lane, CLIPath: "/bin/m", Prompt: tc[1],
-					Worktree: wt, SlotDir: slot, TaskID: "t3", ReadOnly: true, ReviewMode: tc[0]})
-				if !slices.Contains(b.Argv, tc[2]) || (tc[0] == "native" && b.StreamFmt != "plain") {
-					t.Fatalf("mcode mode=%q want %q got %v", tc[0], tc[2], b.Argv)
-				}
-			}
+	}
+	for _, tc := range [][3]string{{"", "a", "20"}, {"inline", "a", "35"},
+		{"inline", ".. <diff capped", "45"}, {"native", "a", "review"}} {
+		b, _ := BuildWorkerCommand(CmdReq{Provider: "mcode", CLIPath: "/bin/m", Prompt: tc[1],
+			Worktree: wt, SlotDir: slot, TaskID: "t3", ReadOnly: true, ReviewMode: tc[0]})
+		if !slices.Contains(b.Argv, tc[2]) || (tc[0] == "native" && b.StreamFmt != "plain") {
+			t.Fatalf("mcode mode=%q want %q got %v", tc[0], tc[2], b.Argv)
 		}
 	}
 }
@@ -110,8 +107,8 @@ func TestNDJSONRealCLISchemas(t *testing.T) {
 	st.consumeLine(`{"type":"turn.completed","usage":{"inputTokens":1030,"outputTokens":20,"totalTokens":1050}}`, 11.1)
 	st.consumeLine(`{"type":"exec.completed","result":{"status":"succeeded",`+
 		`"output":"VERDICT: ACCEPT","usage":{"totalTokens":1050}}}`, 11.2)
-	if rate, _ := st.currentRate(11.2); rate <= 0 || !st.hasFinal ||
-		st.finalResp != "VERDICT: ACCEPT" || st.usage.Tokens == nil || *st.usage.Tokens != 1050 {
+	if rate, _ := st.currentRate(11.2); rate <= 0 || !st.hasFinal || st.finalResp != "VERDICT: ACCEPT" ||
+		st.usage.Tokens == nil || *st.usage.Tokens != 1050 {
 		t.Fatalf("mcode schema mismatch: hasFinal=%v resp=%q usage=%+v", st.hasFinal, st.finalResp, st.usage)
 	}
 	grok := &streamTracker{phase: "wait"}
@@ -134,20 +131,19 @@ func TestExecStreamAndGeminiGuard(t *testing.T) {
 	_ = os.MkdirAll(filepath.Join(fakeHome, ".gemini", "antigravity-cli"), 0o755)
 	_ = os.WriteFile(filepath.Join(fakeHome, ".gemini", "antigravity-cli", "settings.json"),
 		[]byte(`{"model":{"name":"Orchestrator (Carbon)"}}`), 0o644)
-	setEnvs(t, map[string]string{"HOME": fakeHome, "ROUTER_HUD_DIR": filepath.Join(tmp, "hud"),
-		"AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "0"})
-	if b := ExecuteOnce(ExecReq{Provider: "agy-opus", CLIPath: "/bin/true", Prompt: "hi", Worktree: tmp,
-		SlotDir: tmp, TaskID: "g1", TimeoutSec: 5}); b.ExitCode != 2 || !strings.Contains(b.Output, "Gemini guardrail") {
+	setEnvs(t, map[string]string{"HOME": fakeHome, "ROUTER_HUD_DIR": tmp, "AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "0"})
+	if b := ExecuteOnce(ExecReq{Provider: "agy-opus", CLIPath: "/bin/true", Prompt: "hi", Worktree: tmp, SlotDir: tmp,
+		TaskID: "g1", TimeoutSec: 5}); b.ExitCode != 2 || !strings.Contains(b.Output, "Gemini guardrail") {
 		t.Fatalf("expected Gemini settings block exit 2, got %+v", b)
 	}
-	script := filepath.Join(tmp, "fake_cli.sh")
-	_ = os.WriteFile(script, []byte("#!/usr/bin/env bash\n"+
-		"printf '{\"type\":\"result\",\"result\":\"hello streamed text.\",\"usage\":{\"total_tokens\":99}}\\n'\n"), 0o755)
+	script := filepath.Join(tmp, "s.sh")
+	_ = os.WriteFile(script, []byte("#!/bin/sh\n"+
+		"echo '{\"type\":\"result\",\"result\":\"ok_stream\",\"usage\":{\"total_tokens\":99}}'\n"), 0o755)
 	mPath := HudWorkerStart(WorkerMarker{PID: os.Getpid(), TaskID: "s1", Mode: "observe", Lane: "mcode", Cwd: tmp})
 	defer HudWorkerFinish(mPath, LastRunMarker{Mode: "observe", Lane: "mcode", ExitCode: 0})
 	if res := ExecuteOnce(ExecReq{Provider: "mcode", CLIPath: script, Prompt: "hi", Worktree: tmp, SlotDir: tmp,
 		TaskID: "s1", TimeoutSec: 10, ReadOnly: true, MarkerPath: mPath}); res.ExitCode != 0 ||
-		!strings.Contains(res.Output, "streamed text") || res.ExportInfo == nil || *res.ExportInfo.Tokens != 99 {
+		!strings.Contains(res.Output, "ok_stream") || res.ExportInfo == nil || *res.ExportInfo.Tokens != 99 {
 		t.Fatalf("unexpected ExecuteOnce stream result: %+v", res)
 	}
 }
@@ -168,12 +164,18 @@ func TestManifestScopeAndReject(t *testing.T) {
 	_ = fleet.AtomicWriteJSON(qPath, fleet.DefaultQuotaData(), false, true)
 	setEnvs(t, map[string]string{"AGENT_QUOTA_FILE": qPath, "ROUTER_HUD_DIR": filepath.Join(repo, ".hud"),
 		"ROUTER_SLOTS_DIR": filepath.Join(repo, ".slots"), "AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "0"})
-	rc := RunManifestBatch(repo, []worktree.TaskSpec{{ID: "1", Prompt: "p", Files: []string{"a.go"}, Lane: "mcode"}}, BatchOpts{
+	rc := RunManifestBatch(repo, []worktree.TaskSpec{
+		{ID: "1", Prompt: "p", Files: []string{"a.go"}, Lane: "mcode"},
+		{ID: "2", Prompt: "p", Files: []string{"a.go"}, Lane: "mcode"}}, BatchOpts{
 		Lane: "grok", Model: "grok-4.7", Effort: "xhigh", Jobs: 1, NoStripe: true, QuotaPath: qPath,
 		ResolveCLI: func(string) string { return "/bin/true" },
 		TaskRunner: func(r ExecReq) ExecRes {
 			if r.Provider != "mcode" || r.Model == "grok-4.7" || r.Effort == "xhigh" {
 				t.Fatalf("batch act-pin leaked onto task lane: %+v", r)
+			}
+			if r.TaskID == "2" {
+				_ = os.RemoveAll(filepath.Join(r.Worktree, ".git"))
+				return ExecRes{ExitCode: 0, Output: "done"}
 			}
 			_ = os.WriteFile(filepath.Join(r.Worktree, "a.go"), []byte("package a\nvar X = 1\n"), 0o644)
 			runGit(r.Worktree, "commit", "-am", "worker commit")
@@ -188,8 +190,9 @@ func TestManifestScopeAndReject(t *testing.T) {
 	})
 	raw, _ := os.ReadFile(filepath.Join(repo, ".worktrees", "results.json"))
 	var rows []BatchRecord
-	if rc != 1 || json.Unmarshal(raw, &rows) != nil || len(rows) != 1 || rows[0].Review.Verdict != "REJECT" {
-		t.Fatalf("unexpected REJECT batch rc=%d json=%s", rc, string(raw))
+	if rc != 1 || json.Unmarshal(raw, &rows) != nil || len(rows) != 2 || rows[0].Review.Verdict != "REJECT" ||
+		rows[1].Review.Verdict != "REJECT" || !slices.Contains(rows[1].ScopeViolations, "@GIT_BINDING_TAMPERED") {
+		t.Fatalf("unexpected batch rc=%d json=%s", rc, string(raw))
 	}
 }
 
@@ -201,13 +204,19 @@ func TestCorruptQuotaAndBoundedStream(t *testing.T) {
 		t.Fatal("expected RunTaskWithFallback to fail closed on corrupt quota file")
 	}
 	var tb tailBuf
-	for chunk, i := strings.Repeat("é", 4096), 0; i < 80; i++ {
-		tb.addStr(chunk)
+	for i := 0; i < 80; i++ {
+		tb.addStr(strings.Repeat("é", 4096))
 	}
 	tb.addStr("END_TAIL")
 	if out := tb.str(); len(out) > maxStreamBytes || len(tb.buf) > 2*maxStreamBytes ||
 		!utf8.ValidString(out) || !strings.HasSuffix(out, "END_TAIL") {
 		t.Fatalf("tailBuf invariant failed: out=%d buf=%d valid=%v", len(out), len(tb.buf), utf8.ValidString(out))
+	}
+	br := bufio.NewReaderSize(strings.NewReader(strings.Repeat("a", 2048)+"\ntail\n"), 64)
+	if ln, err := readBoundedLine(br, 128); err != nil || len(ln) > 129 || maxLineBytes < 1<<20 {
+		t.Fatalf("bounded line check failed: len=%d max=%d err=%v", len(ln), maxLineBytes, err)
+	} else if next, nerr := readBoundedLine(br, 128); nerr != nil || next != "tail\n" {
+		t.Fatalf("expected next line 'tail\\n' after drain, got %q (%v)", next, nerr)
 	}
 	for _, tc := range [][2]string{{"benign note", "VERDICT:"}, {"error: disk", "[stderr] error: disk\n"}} {
 		var s streamTracker
@@ -217,30 +226,24 @@ func TestCorruptQuotaAndBoundedStream(t *testing.T) {
 			t.Fatalf("finalizeOutput err=%q rc=%d out=%q", tc[0], fc, fo)
 		}
 	}
-	if !fleet.HasErrorPattern(`Error: Status 402 {"type":"billing_vibe_budget_exhausted"}`, 2, fleet.QuotaErrorPats) {
-		t.Fatal("expected QuotaErrorPats to match vibe HTTP 402 budget exhausted")
-	}
-	if ts, _ := ResolveTaskTimeout("", 0, false, "deep", true); ts != fleet.RegimeTimeouts["deep"] {
-		t.Fatalf("expected orient/deep ro timeout %d, got %d", fleet.RegimeTimeouts["deep"], ts)
+	if ts, _ := ResolveTaskTimeout("", 0, false, "deep", true); ts != fleet.RegimeTimeouts["deep"] ||
+		!fleet.HasErrorPattern(`Error: Status 402 {"type":"billing_vibe_budget_exhausted"}`, 2, fleet.QuotaErrorPats) {
+		t.Fatalf("expected vibe 402 match and deep timeout %d, got %d", fleet.RegimeTimeouts["deep"], ts)
 	}
 }
 
 func TestMidStreamQuotaAbortAndLine(t *testing.T) {
 	tmp := t.TempDir()
 	setEnvs(t, map[string]string{"ROUTER_HUD_DIR": filepath.Join(tmp, "hud"), "AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "0"})
-	prev := stallIdleSec
+	defer func(p float64) { stallIdleSec = p }(stallIdleSec)
 	stallIdleSec = 0.3
-	defer func() { stallIdleSec = prev }()
 	for _, tc := range [][4]string{
-		{"h.sh", "mcode", `{"error":"insufficient_quota"}`, "insufficient_quota"},
-		{"st.sh", "mcode", `{"type":"content_block_delta","delta":{"text":"x"}}`, "stream stalled"},
-		{"ok.sh", "devin-fast", "Handled HTTP 429 retry cleanly.", "HTTP 429"},
+		{"h.sh", "mcode", "echo '{\"error\":\"insufficient_quota\"}'\nsleep 30", "insufficient_quota"},
+		{"st.sh", "mcode", "echo '{\"type\":\"content_block_delta\",\"delta\":{\"text\":\"x\"}}'\nsleep 30", "stream stalled"},
+		{"ok.sh", "devin-fast", "echo 'Handled HTTP 429 retry cleanly.'", "HTTP 429"},
 	} {
-		p, body := filepath.Join(tmp, tc[0]), "#!/usr/bin/env bash\nprintf '%s\\n' '"+tc[2]+"'\n"
-		if tc[0] != "ok.sh" {
-			body += "sleep 30\n"
-		}
-		_ = os.WriteFile(p, []byte(body), 0o755)
+		p := filepath.Join(tmp, tc[0])
+		_ = os.WriteFile(p, []byte("#!/usr/bin/env bash\n"+tc[2]+"\n"), 0o755)
 		if r := ExecuteOnce(ExecReq{Provider: tc[1], CLIPath: p, Prompt: "hi", Worktree: tmp, SlotDir: tmp,
 			TaskID: tc[0], TimeoutSec: 25}); (r.ExitCode != 0) != (tc[0] != "ok.sh") || r.TimedOut != (tc[0] == "st.sh") ||
 			r.DurationS >= 5 || !strings.Contains(r.Output, tc[3]) {

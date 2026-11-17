@@ -71,7 +71,7 @@ func pumpStream(
 	defer wg.Done()
 	br := bufio.NewReaderSize(r, 16*1024)
 	for {
-		line, err := br.ReadString('\n')
+		line, err := readBoundedLine(br, maxLineBytes)
 		if line != "" {
 			now := nowFloatSec()
 			mu.Lock()

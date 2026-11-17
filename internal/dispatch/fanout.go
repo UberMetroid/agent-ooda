@@ -1,6 +1,7 @@
 package dispatch
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +16,24 @@ import (
 	"github.com/UberMetroid/agent-ooda/internal/worktree"
 )
 
+var maxLineBytes = 1 << 20
+
+func readBoundedLine(br *bufio.Reader, limit int) (string, error) {
+	var out []byte
+	for {
+		frag, err := br.ReadSlice('\n')
+		if len(out) < limit {
+			out = append(out, frag[:min(len(frag), limit-len(out))]...)
+		}
+		if err != bufio.ErrBufferFull {
+			if len(out) > 0 && out[len(out)-1] != '\n' {
+				out = append(out, '\n')
+			}
+			return string(out), err
+		}
+	}
+}
+
 // BatchOpts configures parallel manifest execution across git worktrees.
 type BatchOpts struct {
 	Lane, Model, Effort, Timeout, QuotaPath string
@@ -28,40 +47,6 @@ type BatchOpts struct {
 	ResolveCLI                              func(string) string
 }
 
-// BatchReview is the serialized review section written into results.json.
-type BatchReview struct {
-	Ran      bool   `json:"ran"`
-	Lane     string `json:"lane"`
-	Model    string `json:"model"`
-	Verdict  string `json:"verdict"`
-	ExitCode *int   `json:"exit_code"`
-	Reason   string `json:"reason,omitempty"`
-	Output   string `json:"output"`
-}
-
-// BatchRecord summarizes one worktree task outcome in .worktrees/results.json.
-type BatchRecord struct {
-	ID              string        `json:"id"`
-	Branch          string        `json:"branch"`
-	Worktree        string        `json:"worktree"`
-	Slot            string        `json:"slot"`
-	RequestedLane   string        `json:"requested_lane"`
-	Lane            string        `json:"lane"`
-	CLI             string        `json:"cli"`
-	Model           string        `json:"model"`
-	Effort          string        `json:"effort"`
-	FallbackFrom    string        `json:"fallback_from"`
-	Attempts        []TaskAttempt `json:"attempts"`
-	ExitCode        int           `json:"exit_code"`
-	TimedOut        bool          `json:"timed_out"`
-	DurationS       float64       `json:"duration_s"`
-	ChangedFiles    []string      `json:"changed_files"`
-	ScopeViolations []string      `json:"scope_violations"`
-	DiffStat        string        `json:"diff_stat"`
-	Output          string        `json:"output"`
-	Review          BatchReview   `json:"review"`
-}
-
 type batchJob struct {
 	idx                       int
 	task                      worktree.TaskSpec
@@ -69,10 +54,8 @@ type batchJob struct {
 	wtErr                     error
 }
 
-func reviewWorktreeTask(
-	task worktree.TaskSpec, wt string, slotNum int,
-	changed, viols []string, opts BatchOpts, authors []string, dc verify.DiffContext,
-) BatchReview {
+func reviewWorktreeTask(task worktree.TaskSpec, wt string, slotNum int,
+	changed, viols []string, opts BatchOpts, authors []string, dc verify.DiffContext) BatchReview {
 	if len(viols) > 0 {
 		return BatchReview{Model: fleet.ReviewModelEnv(), Verdict: "REJECT", ExitCode: fleet.Ptr(1),
 			Reason: "scope violation", Output: "[P0] scope violation: " + strings.Join(viols, ", ")}
@@ -97,8 +80,7 @@ func reviewWorktreeTask(
 }
 
 func dedupMerge(a, b []string) []string {
-	seen := make(map[string]bool, len(a)+len(b))
-	var out []string
+	seen, out := make(map[string]bool, len(a)+len(b)), []string(nil)
 	for _, s := range append(append([]string(nil), a...), b...) {
 		if s != "" && !seen[s] {
 			seen[s] = true
@@ -110,24 +92,23 @@ func dedupMerge(a, b []string) []string {
 
 func processBatchTask(slotPool chan int, job batchJob, opts BatchOpts) BatchRecord {
 	if job.wtErr != nil {
-		return BatchRecord{ID: job.task.ID, Branch: job.branch, Worktree: filepath.Base(job.wt),
-			ExitCode: 1, Output: job.wtErr.Error(),
-			Review: BatchReview{Model: fleet.ReviewModelEnv(), Verdict: "SKIPPED", Reason: "worktree error"}}
+		return BatchRecord{ID: job.task.ID, Branch: job.branch, Worktree: filepath.Base(job.wt), ExitCode: 1,
+			Output: job.wtErr.Error(), Review: BatchReview{Model: fleet.ReviewModelEnv(),
+				Verdict: "SKIPPED", Reason: "worktree error"}}
 	}
 	slotNum := <-slotPool
 	defer func() { slotPool <- slotNum }()
 	slotDir, err := worktree.EnsureSlot(strconv.Itoa(slotNum))
 	if err != nil {
-		return BatchRecord{ID: job.task.ID, Branch: job.branch, Worktree: filepath.Base(job.wt),
-			ExitCode: -1, Output: err.Error(),
-			Review: BatchReview{Model: fleet.ReviewModelEnv(), Verdict: "SKIPPED", Reason: "slot error"}}
+		return BatchRecord{ID: job.task.ID, Branch: job.branch, Worktree: filepath.Base(job.wt), ExitCode: -1,
+			Output: err.Error(), Review: BatchReview{Model: fleet.ReviewModelEnv(), Verdict: "SKIPPED", Reason: "slot error"}}
 	}
 	tCopy := job.task
 	if tCopy.Complexity == "" {
 		tCopy.Complexity = worktree.InferComplexity(tCopy.Prompt, tCopy.Files, tCopy.ReadOnly)
 	}
-	rawSkills := dedupMerge(job.task.Skills, worktree.ParseCSVArg(opts.Skills))
-	tCopy.Skills = worktree.ResolveTaskSkills(rawSkills, tCopy.Prompt, tCopy.Files, job.root)
+	tCopy.Skills = worktree.ResolveTaskSkills(dedupMerge(job.task.Skills, worktree.ParseCSVArg(opts.Skills)),
+		tCopy.Prompt, tCopy.Files, job.root)
 	excl := dedupMerge(job.task.ExcludeLanes, worktree.ParseCSVArg(opts.ExcludeLanes))
 	var stripe *int
 	if !opts.NoStripe {
@@ -140,21 +121,27 @@ func processBatchTask(slotPool chan int, job batchJob, opts BatchOpts) BatchReco
 	if runErr != nil {
 		res = TaskRes{ExitCode: -1, Output: runErr.Error(), RequestedLane: opts.Lane}
 	}
-	var dc verify.DiffContext
-	if job.baseRef != "" && verify.HeadRef(job.wt) != job.baseRef {
-		dc = verify.CollectDiffContext(job.wt, false, job.baseRef)
-	} else {
-		dc = verify.CollectDiffContext(job.wt, false)
-	}
-	changed, stat := dc.ChangedFiles, dc.DiffStat
-	viols := worktree.FindScopeViolations(changed, job.task.Files)
+	var changed, viols []string
+	var stat string
 	rev := BatchReview{Model: fleet.ReviewModelEnv(), Verdict: "SKIPPED", Reason: "worker exited non-zero"}
-	if res.ExitCode == 0 {
-		rev = reviewWorktreeTask(job.task, job.wt, slotNum, changed, viols, opts, res.UsedLanes(), dc)
+	if bErr := worktree.VerifyWorktreeBinding(job.root, job.wt); bErr != nil {
+		viols = []string{"@GIT_BINDING_TAMPERED"}
+		rev = BatchReview{Model: fleet.ReviewModelEnv(), Verdict: "REJECT", ExitCode: fleet.Ptr(1),
+			Reason: "worktree git binding tampered", Output: "[P0] " + bErr.Error()}
+	} else {
+		dc := verify.CollectDiffContext(job.wt, false)
+		if job.baseRef != "" && verify.HeadRef(job.wt) != job.baseRef {
+			dc = verify.CollectDiffContext(job.wt, false, job.baseRef)
+		}
+		changed, stat = dc.ChangedFiles, dc.DiffStat
+		viols = worktree.FindScopeViolations(changed, job.task.Files)
+		if res.ExitCode == 0 {
+			rev = reviewWorktreeTask(job.task, job.wt, slotNum, changed, viols, opts, res.UsedLanes(), dc)
+		}
 	}
-	relWT := filepath.Base(job.wt)
-	if r, rerr := filepath.Rel(job.root, job.wt); rerr == nil {
-		relWT = r
+	relWT, rerr := filepath.Rel(job.root, job.wt)
+	if rerr != nil {
+		relWT = filepath.Base(job.wt)
 	}
 	return BatchRecord{ID: job.task.ID, Branch: job.branch, Worktree: relWT, Slot: filepath.Base(slotDir),
 		RequestedLane: res.RequestedLane, Lane: res.Lane, CLI: res.CLI, Model: res.Model, Effort: res.Effort,
@@ -169,7 +156,7 @@ func runBatchWorkers(root string, tasks []worktree.TaskSpec, opts BatchOpts, job
 		_, _ = worktree.EnsureSlot(strconv.Itoa(n))
 		slotPool <- n
 	}
-	items := make([]batchJob, len(tasks))
+	items, ch := make([]batchJob, len(tasks)), make(chan int, len(tasks))
 	for i, t := range tasks {
 		p, br, err := worktree.EnsureWorktree(root, t.ID)
 		it := batchJob{idx: i, task: t, root: root, wt: p, branch: br, wtErr: err}
@@ -181,9 +168,6 @@ func runBatchWorkers(root string, tasks []worktree.TaskSpec, opts BatchOpts, job
 			fmt.Fprintf(outW, "[%s] worktree=%s branch=%s\n", t.ID, p, br)
 		}
 		items[i] = it
-	}
-	ch := make(chan int, len(tasks))
-	for i := range tasks {
 		ch <- i
 	}
 	close(ch)
@@ -198,16 +182,13 @@ func runBatchWorkers(root string, tasks []worktree.TaskSpec, opts BatchOpts, job
 				rec := processBatchTask(slotPool, items[i], opts)
 				mu.Lock()
 				results = append(results, rec)
-				status := "OK"
-				if rec.ExitCode != 0 {
-					status = fmt.Sprintf("FAIL(%d)", rec.ExitCode)
-				}
+				st := map[bool]string{true: fmt.Sprintf("FAIL(%d)", rec.ExitCode), false: "OK"}[rec.ExitCode != 0]
 				viol := ""
 				if len(rec.ScopeViolations) > 0 {
 					viol = fmt.Sprintf(" SCOPE_VIOLATION(%d)", len(rec.ScopeViolations))
 				}
 				fmt.Fprintf(outW, "[%s] %s lane=%s effort=%s %.1fs review=%s%s\n%s\n---\n",
-					rec.ID, status, rec.Lane, rec.Effort, rec.DurationS, rec.Review.Verdict, viol, rec.DiffStat)
+					rec.ID, st, rec.Lane, rec.Effort, rec.DurationS, rec.Review.Verdict, viol, rec.DiffStat)
 				mu.Unlock()
 			}
 		}()

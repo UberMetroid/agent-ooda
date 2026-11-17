@@ -21,8 +21,9 @@ trust-boundary defects without fabricating noise.
 **Vocabulary Rule:** Frame every `--recon`, `--orient`, `--task`, and `--review`
 prompt strictly in systems-engineering terms (*trust boundaries*, *input
 invariants*, *path/command containment*, *capability-token integrity*,
-*ambient-authority bypass*, *fail-closed error handling*, *refusal unit tests*).
-Do **not** use offensive or dual-use trigger words across any fleet CLI.
+*ambient-authority bypass*, *arithmetic/overflow invariants*, *spatial/temporal
+memory-safety & lifetime invariants*, *fail-closed error handling*, *refusal unit
+tests*). Do **not** use offensive or dual-use trigger words across any fleet CLI.
 
 ---
 
@@ -60,7 +61,9 @@ Allowed SINK categories:
   4. Fail-open auth, signature, snapshot, or review verdict handling
   5. Unbounded memory, file, goroutine, or stream growth from untrusted input
   6. Credential/secret leakage into diffs, logs, prompts, or child processes
-  7. State-corrupting concurrency or lock races" --timeout 480 --skill harden
+  7. State-corrupting concurrency or lock races
+  8. Arithmetic, overflow & numerical invariants (signed/unsigned wraparound or truncation before allocation/indexing, division/modulo by zero, NaN/Inf fail-open comparisons, off-by-one bounds, quota/fee rounding drift)
+  9. Spatial/temporal memory-safety & lifetime invariants (out-of-bounds slice/array/pointer indexing, length-vs-capacity mismatches, borrowed-buffer/reference lifetime escapes across async/FFI boundaries, uninitialized reads, unsafe/ptrCast alignment or aliasing violations)" --timeout 480 --skill harden
 ```
 
 Disqualify any claim missing an exact `SOURCE -> MISSING_GUARD -> SINK` chain
@@ -110,8 +113,12 @@ For each approved finding (use sequential `--task --files ...` or parallel
 1. **Compile-Clean Red Proof (Mandatory Before Editing Production Code):**
    - Write a standard boundary/refusal unit test (`Test...`) using safe malformed
      or out-of-scope inputs (`../outside`, forged/missing capability scope,
-     oversized payload, malformed header) against **untouched production code**.
-   - Run the unit test command directly:
+     oversized payload, malformed header, integer-boundary wraparound,
+     out-of-bounds/lifetime-escape slice or buffer) against **untouched
+     production code**.
+   - Run the unit test command directly (with `-race`, ASan/UBSan, or Zig
+     `ReleaseSafe` / `std.testing.allocator` leak & bounds checks where supported
+     by the target language):
      - It **MUST compile cleanly** (`0` missing-symbol, signature, or syntax
        errors) against the existing production code and **fail at runtime**
        via test assertion (*Red*).

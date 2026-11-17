@@ -41,8 +41,8 @@ func EnsureWorktree(repoRoot, taskID string) (string, string, error) {
 	wtPath := filepath.Join(wtRoot, taskID)
 	branch := "ooda/" + taskID
 	if _, err := os.Stat(wtPath); err == nil {
-		if len(ChangedFilesIn(wtPath, nil)) > 0 {
-			return "", "", fleet.UsageErr("error: existing worktree %s has uncommitted changes", wtPath)
+		if VerifyWorktreeBinding(rootAbs, wtPath) != nil || len(ChangedFilesIn(wtPath, nil)) > 0 {
+			return "", "", fleet.UsageErr("error: existing worktree %s has uncommitted/tampered state", wtPath)
 		}
 		_, _ = fleet.RunCmd(fleet.CmdSpec{
 			Argv: []string{"git", "worktree", "remove", "--force", wtPath},
@@ -215,4 +215,41 @@ func SafeWorktreeFiles(files []string, wt string) []string {
 		}
 	}
 	return out
+}
+
+// VerifyWorktreeBinding verifies wt resolves to its worktree root and repo common gitdir.
+func VerifyWorktreeBinding(root, wt string) error {
+	st, err := os.Lstat(filepath.Join(wt, ".git"))
+	if err != nil || !st.Mode().IsRegular() {
+		return fmt.Errorf("worktree .git pointer missing or non-regular")
+	}
+	res, err := fleet.RunCmd(fleet.CmdSpec{
+		Argv: []string{"git", "rev-parse", "--show-toplevel", "--git-common-dir"}, Cwd: wt, TimeoutSec: 15,
+	})
+	if err != nil || res.ExitCode != 0 {
+		return fmt.Errorf("worktree git binding check failed")
+	}
+	lines := strings.Split(strings.TrimSpace(res.Stdout), "\n")
+	if len(lines) < 2 {
+		return fmt.Errorf("incomplete git rev-parse output")
+	}
+	normReal := func(base, p string) string {
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(base, p)
+		}
+		if r, rerr := filepath.EvalSymlinks(p); rerr == nil {
+			return r
+		}
+		abs, _ := filepath.Abs(p)
+		return abs
+	}
+	gotCommon := normReal(wt, strings.TrimSpace(lines[1]))
+	expRes, eerr := fleet.RunCmd(fleet.CmdSpec{
+		Argv: []string{"git", "rev-parse", "--git-common-dir"}, Cwd: root, TimeoutSec: 15,
+	})
+	if eerr != nil || expRes.ExitCode != 0 || normReal(wt, strings.TrimSpace(lines[0])) != normReal(wt, ".") ||
+		gotCommon != normReal(root, strings.TrimSpace(expRes.Stdout)) {
+		return fmt.Errorf("worktree %s escaped repository git binding", wt)
+	}
+	return nil
 }

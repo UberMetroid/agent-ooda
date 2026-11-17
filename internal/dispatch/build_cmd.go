@@ -12,41 +12,57 @@ import (
 
 // CmdReq defines parameters to construct a single headless CLI invocation.
 type CmdReq struct {
-	Provider   string
-	CLIPath    string
-	Model      string
-	Effort     string
-	Prompt     string
-	Files      []string
-	Worktree   string
-	SlotDir    string
-	TaskID     string
-	ReadOnly   bool
-	ReviewMode string
+	Provider, CLIPath, Model, Effort, Prompt, Worktree, SlotDir, TaskID, ReviewMode string
+	Files                                                                           []string
+	ReadOnly                                                                        bool
 }
 
 // BuiltCmd holds the argv, environment, stream mode, and temp paths for cleanup.
 type BuiltCmd struct {
-	Argv          []string
-	Env           []string
-	PromptFile    string
-	VibeExportDir string
-	StreamFmt     string
+	Argv                                []string
+	Env                                 []string
+	PromptFile, VibeExportDir, StreamFmt string
 }
 
-func childEnv(depth int, stripAgy, readOnly bool) []string {
+var roStripPrefixes = []string{
+	"ANTIGRAVITY_", "GH_TOKEN=", "GITHUB_TOKEN=", "GITLAB_TOKEN=", "GL_TOKEN=",
+	"NPM_TOKEN=", "PYPI_API_TOKEN=", "CARGO_REGISTRY_TOKEN=", "AWS_SECRET_ACCESS_KEY=",
+	"AWS_SESSION_TOKEN=", "AZURE_CLIENT_SECRET=", "GOOGLE_APPLICATION_CREDENTIALS=", "GCP_",
+	"KUBECONFIG=", "SSH_AUTH_SOCK=", "DATABASE_URL=", "PGPASSWORD=", "REDIS_URL=",
+	"OPENAI_API_KEY=", "GEMINI_API_KEY=", "GOOGLE_API_KEY=", "ANTHROPIC_API_KEY=", "CLAUDE_",
+}
+
+func childEnv(depth int, prov string, readOnly bool) []string {
+	var strip []string
+	if readOnly {
+		strip = append(strip, roStripPrefixes...)
+		if prov != "grok" {
+			strip = append(strip, "XAI_API_KEY=")
+		}
+		if prov != "mcode" {
+			strip = append(strip, "MINIMAX_")
+		}
+		if prov != "mistral" {
+			strip = append(strip, "MISTRAL_API_KEY=", "ZAI_API_KEY=")
+		}
+		if !strings.HasPrefix(prov, "devin-") {
+			strip = append(strip, "DEVIN_")
+		}
+	}
 	var out []string
 	for _, kv := range os.Environ() {
-		if strings.HasPrefix(kv, "ROUTER_DEPTH=") || strings.HasPrefix(kv, "AGENT_OODA_DEPTH=") ||
+		skip := strings.HasPrefix(kv, "ROUTER_DEPTH=") || strings.HasPrefix(kv, "AGENT_OODA_DEPTH=") ||
 			strings.HasPrefix(kv, "GIT_TERMINAL_PROMPT=") ||
-			((stripAgy || readOnly) && strings.HasPrefix(kv, "ANTIGRAVITY_")) {
-			continue
+			(prov == "agy-opus" && strings.HasPrefix(kv, "ANTIGRAVITY_"))
+		for _, pfx := range strip {
+			if strings.HasPrefix(kv, pfx) {
+				skip = true
+				break
+			}
 		}
-		if readOnly && (strings.HasPrefix(kv, "GH_TOKEN=") || strings.HasPrefix(kv, "GITHUB_TOKEN=") ||
-			strings.HasPrefix(kv, "GITLAB_TOKEN=") || strings.HasPrefix(kv, "GL_TOKEN=")) {
-			continue
+		if !skip {
+			out = append(out, kv)
 		}
-		out = append(out, kv)
 	}
 	return append(out, fmt.Sprintf("ROUTER_DEPTH=%d", depth),
 		fmt.Sprintf("AGENT_OODA_DEPTH=%d", depth), "GIT_TERMINAL_PROMPT=0")
@@ -68,9 +84,7 @@ func buildAgyCmd(req CmdReq, model string) (BuiltCmd, error) {
 	}
 	argv = append(argv, "--disable-slash-commands", "--output-format", "stream-json",
 		"--add-dir", req.Worktree)
-	return BuiltCmd{
-		Argv: argv, Env: childEnv(fleet.RouterDepth()+1, true, ro), StreamFmt: "ndjson",
-	}, nil
+	return BuiltCmd{Argv: argv, Env: childEnv(fleet.RouterDepth()+1, "agy-opus", ro), StreamFmt: "ndjson"}, nil
 }
 
 func buildDevinCmd(req CmdReq, model, promptFile string) (BuiltCmd, error) {
@@ -85,10 +99,8 @@ func buildDevinCmd(req CmdReq, model, promptFile string) (BuiltCmd, error) {
 	}
 	argv = append(argv, "--permission-mode", perm, "--respect-workspace-trust", "false",
 		"--prompt-file", promptFile, "-p")
-	return BuiltCmd{
-		Argv: argv, Env: childEnv(fleet.RouterDepth()+1, false, ro),
-		PromptFile: promptFile, StreamFmt: "plain",
-	}, nil
+	return BuiltCmd{Argv: argv, Env: childEnv(fleet.RouterDepth()+1, req.Provider, ro),
+		PromptFile: promptFile, StreamFmt: "plain"}, nil
 }
 
 func buildMcodeCmd(req CmdReq, model string) (BuiltCmd, error) {
@@ -112,9 +124,7 @@ func buildMcodeCmd(req CmdReq, model string) (BuiltCmd, error) {
 		if req.Prompt != "" {
 			argv = append(argv, "--append-system-prompt", req.Prompt)
 		}
-		return BuiltCmd{
-			Argv: argv, Env: childEnv(fleet.RouterDepth()+1, false, true), StreamFmt: "plain",
-		}, nil
+		return BuiltCmd{Argv: argv, Env: childEnv(fleet.RouterDepth()+1, req.Provider, true), StreamFmt: "plain"}, nil
 	}
 	if req.ReviewMode != "" {
 		steps := "35"
@@ -123,9 +133,7 @@ func buildMcodeCmd(req CmdReq, model string) (BuiltCmd, error) {
 		}
 		argv = append(argv, "--permission", "smart", "--prompt-mode", "coding",
 			"--max-steps", steps, "--output-format", "stream-json", req.Prompt)
-		return BuiltCmd{
-			Argv: argv, Env: childEnv(fleet.RouterDepth()+1, false, true), StreamFmt: "ndjson",
-		}, nil
+		return BuiltCmd{Argv: argv, Env: childEnv(fleet.RouterDepth()+1, req.Provider, true), StreamFmt: "ndjson"}, nil
 	}
 	perm := "full"
 	if req.ReadOnly {
@@ -140,9 +148,7 @@ func buildMcodeCmd(req CmdReq, model string) (BuiltCmd, error) {
 		argv = append(argv, "--file", f)
 	}
 	argv = append(argv, req.Prompt)
-	return BuiltCmd{
-		Argv: argv, Env: childEnv(fleet.RouterDepth()+1, false, req.ReadOnly), StreamFmt: "ndjson",
-	}, nil
+	return BuiltCmd{Argv: argv, Env: childEnv(fleet.RouterDepth()+1, req.Provider, req.ReadOnly), StreamFmt: "ndjson"}, nil
 }
 
 func buildGrokCmd(req CmdReq, model, promptFile string) (BuiltCmd, error) {
@@ -164,7 +170,7 @@ func buildGrokCmd(req CmdReq, model, promptFile string) (BuiltCmd, error) {
 		argv = append(argv, "--reasoning-effort", eff)
 	}
 	return BuiltCmd{
-		Argv: argv, Env: childEnv(fleet.RouterDepth()+1, false, ro),
+		Argv: argv, Env: childEnv(fleet.RouterDepth()+1, req.Provider, ro),
 		PromptFile: promptFile, StreamFmt: "ndjson",
 	}, nil
 }
@@ -183,7 +189,7 @@ func buildMistralCmd(req CmdReq, model, promptFile, safeTID string) (BuiltCmd, e
 		argv = append(argv, "--model", model)
 	}
 	return BuiltCmd{
-		Argv: argv, Env: childEnv(fleet.RouterDepth()+1, false, ro),
+		Argv: argv, Env: childEnv(fleet.RouterDepth()+1, req.Provider, ro),
 		PromptFile: promptFile, VibeExportDir: exportDir, StreamFmt: "ndjson",
 	}, nil
 }
@@ -205,7 +211,7 @@ func buildMuseCmd(req CmdReq, model, promptFile string) (BuiltCmd, error) {
 		argv = append(argv, "--model", model)
 	}
 	return BuiltCmd{
-		Argv: argv, Env: childEnv(fleet.RouterDepth()+1, false, ro),
+		Argv: argv, Env: childEnv(fleet.RouterDepth()+1, req.Provider, ro),
 		PromptFile: promptFile, StreamFmt: "ndjson",
 	}, nil
 }

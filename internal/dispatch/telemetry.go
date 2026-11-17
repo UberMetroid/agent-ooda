@@ -51,6 +51,40 @@ type LastRunMarker struct {
 	FinishedAt float64  `json:"finished_at"`
 }
 
+// BatchReview is the serialized review section written into results.json.
+type BatchReview struct {
+	Ran      bool   `json:"ran"`
+	Lane     string `json:"lane"`
+	Model    string `json:"model"`
+	Verdict  string `json:"verdict"`
+	ExitCode *int   `json:"exit_code"`
+	Reason   string `json:"reason,omitempty"`
+	Output   string `json:"output"`
+}
+
+// BatchRecord summarizes one worktree task outcome in .worktrees/results.json.
+type BatchRecord struct {
+	ID              string        `json:"id"`
+	Branch          string        `json:"branch"`
+	Worktree        string        `json:"worktree"`
+	Slot            string        `json:"slot"`
+	RequestedLane   string        `json:"requested_lane"`
+	Lane            string        `json:"lane"`
+	CLI             string        `json:"cli"`
+	Model           string        `json:"model"`
+	Effort          string        `json:"effort"`
+	FallbackFrom    string        `json:"fallback_from"`
+	Attempts        []TaskAttempt `json:"attempts"`
+	ExitCode        int           `json:"exit_code"`
+	TimedOut        bool          `json:"timed_out"`
+	DurationS       float64       `json:"duration_s"`
+	ChangedFiles    []string      `json:"changed_files"`
+	ScopeViolations []string      `json:"scope_violations"`
+	DiffStat        string        `json:"diff_stat"`
+	Output          string        `json:"output"`
+	Review          BatchReview   `json:"review"`
+}
+
 // VisibleExtraSkills filters built-in core skills out of banner and HUD display.
 func VisibleExtraSkills(skills []string) []string {
 	var out []string
