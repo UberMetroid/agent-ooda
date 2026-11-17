@@ -467,7 +467,7 @@
   <main id="top">
     <section class="hero">
       <div class="wrap">
-        <span class="eyebrow">agent-ooda v2.4.0 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Zero-Trust Per-Stage Router (v9)</span>
+        <span class="eyebrow">agent-ooda v2.4.1 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Zero-Trust Per-Stage Router (v9)</span>
         <h1>Turn one session into a<br><span>token-routed agent fleet.</span></h1>
         <p class="lead">
           <strong>UberMetroid/agent-ooda</strong> ships one zero-dependency static Go OODA engine
@@ -483,7 +483,7 @@
         </div>
         <div class="hero-actions">
           <a class="btn btn-primary" href="#quickstart">Install &amp; Quickstart</a>
-          <a class="btn" href="https://github.com/UberMetroid/agent-ooda/releases/latest">Release Binaries (v2.4.0)</a>
+          <a class="btn" href="https://github.com/UberMetroid/agent-ooda/releases/latest">Release Binaries (v2.4.1)</a>
           <a class="btn" href="#architecture">Go Architecture</a>
         </div>
         <div class="telemetry-strip">
@@ -514,9 +514,9 @@
           <span class="sec-tag">bin/agent-ooda-hud &bull; statusLine</span>
         </div>
         <p class="sec-sub">
-          <code>bin/agent-ooda-hud</code> stays silent when idle, tracks the active orchestrator OODA phase
-          (<code>observe</code>, <code>orient</code>, <code>decide</code>, <code>act</code>), and renders one line per live worker
-          with agent, model, velocity-scaled spinner, and 5-band thermal <code>tok/s</code> heat.
+          <code>bin/agent-ooda-hud</code> shows <code>OODA</code> on standby, tracks the active orchestrator phase
+          (<code>◎ observe</code>, <code>◈ orient</code>, <code>◇ decide</code>, <code>▸ act</code>, <code>✦ verify</code>) in <code>agy</code>&apos;s live
+          <code>colorScheme</code>, and renders one line per live worker with 5-band thermal <code>tok/s</code> heat.
         </p>
         <div class="terminal" role="region" aria-label="Live thermal statusLine HUD states">
           <div class="term-bar">
@@ -525,28 +525,32 @@
           </div>
           <ul class="hud-list">
             <li class="hud-row">
+              <span class="hud-stage">Standby</span>
+              <span class="hud-line"><span class="c-muted">OODA</span></span>
+            </li>
+            <li class="hud-row">
               <span class="hud-stage">Orchestrator Orient</span>
-              <span class="hud-line"><span class="c-amber">&#x25d0; orient</span> <span class="c-muted">&middot;</span> <span class="c-amber">Gemini 4 Argon (Low)</span></span>
+              <span class="hud-line"><span class="c-amber">&#x25c8; orient</span> <span class="c-muted">&middot;</span> <span class="c-amber">Gemini 4 Argon (Low)</span></span>
             </li>
             <li class="hud-row">
               <span class="hud-stage">Orchestrator Decide</span>
-              <span class="hud-line"><span class="c-amber">&#x25d0; decide</span> <span class="c-muted">&middot;</span> <span class="c-amber">Gemini 4 Argon (Low)</span></span>
+              <span class="hud-line"><span class="c-amber">&#x25c7; decide</span> <span class="c-muted">&middot;</span> <span class="c-amber">Gemini 4 Argon (Low)</span></span>
             </li>
             <li class="hud-row">
               <span class="hud-stage">Observe (Steady 25+)</span>
-              <span class="hud-line"><span class="c-cyan">&#x280b; observe</span> <span class="c-muted">&middot;</span> <span class="c-cyan">devin-fast (swe-2-flash-max)</span> <span class="c-muted">&middot;</span> <span class="c-tok-cruise">~42 tok/s</span></span>
+              <span class="hud-line"><span class="c-cyan">&#x25ce; observe</span> <span class="c-muted">&middot;</span> <span class="c-cyan">devin-fast (swe-2-flash-max)</span> <span class="c-muted">&middot;</span> <span class="c-tok-cruise">~42 tok/s</span></span>
             </li>
             <li class="hud-row">
               <span class="hud-stage">Act (Warm 60+)</span>
-              <span class="hud-line"><span class="c-green">&#x280b; act</span> <span class="c-muted">&middot;</span> <span class="c-green">muse (muse-ember-1.0)</span> <span class="c-muted">&middot;</span> <span class="c-tok-warm">~96 tok/s</span></span>
+              <span class="hud-line"><span class="c-green">&#x25b8; act</span> <span class="c-muted">&middot;</span> <span class="c-green">muse (muse-ember-1.0)</span> <span class="c-muted">&middot;</span> <span class="c-tok-warm">~96 tok/s</span></span>
             </li>
             <li class="hud-row">
               <span class="hud-stage">Parallel (1 Line Each)</span>
-              <span class="hud-line"><span class="c-green">&#x280b; act</span> <span class="c-muted">&middot;</span> <span class="c-green">devin-pro (swe-2-max)</span> <span class="c-muted">&middot;</span> <span class="c-tok-hot">~118 tok/s</span><br/><span class="c-green">&#x280b; act</span> <span class="c-muted">&middot;</span> <span class="c-green">devin-pro (swe-2-max)</span> <span class="c-muted">&middot;</span> <span class="c-tok-hot">~112 tok/s</span></span>
+              <span class="hud-line"><span class="c-green">&#x25b8; act</span> <span class="c-muted">&middot;</span> <span class="c-green">devin-pro (swe-2-max)</span> <span class="c-muted">&middot;</span> <span class="c-tok-hot">~118 tok/s</span><br/><span class="c-green">&#x25b8; act</span> <span class="c-muted">&middot;</span> <span class="c-green">devin-pro (swe-2-max)</span> <span class="c-muted">&middot;</span> <span class="c-tok-hot">~112 tok/s</span></span>
             </li>
             <li class="hud-row">
               <span class="hud-stage">Verify (Red-Hot 180+)</span>
-              <span class="hud-line"><span class="c-violet">&#x280b; verify</span> <span class="c-muted">&middot;</span> <span class="c-violet">mcode (MiniMax-M3.1-Flash)</span> <span class="c-muted">&middot;</span> <span class="c-tok-redhot">~195 tok/s</span></span>
+              <span class="hud-line"><span class="c-violet">&#x2726; verify</span> <span class="c-muted">&middot;</span> <span class="c-violet">mcode (MiniMax-M3.1-Flash)</span> <span class="c-muted">&middot;</span> <span class="c-tok-redhot">~195 tok/s</span></span>
             </li>
           </ul>
         </div>
@@ -882,7 +886,7 @@ git clone https://github.com/UberMetroid/agent-ooda.git
 cd agent-ooda &amp;&amp; ./install.sh
 
 # restart agy so the plugin, 8 /agents profiles, /lane, /harden &amp; statusLine load
-agy plugin list       # confirm "agent-ooda" is enabled (2.4.0)
+agy plugin list       # confirm "agent-ooda" is enabled (2.4.1)
 agent-ooda --version  # print binary version
 agent-ooda --status   # OODA stage matrix, fleet tiers, resets &amp; skills
 agent-ooda --hygiene  # 0-token P0 secret, key &amp; P1 hardening scan

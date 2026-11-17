@@ -105,16 +105,18 @@ func ResolveThemeName(data map[string]any, home string, now time.Time) string {
 	if (pick == "" || pick == "terminal" || pick == "auto") && home != "" {
 		cfgPath := filepath.Join(home, ".gemini", "antigravity-cli", "settings.json")
 		if raw, err := os.ReadFile(cfgPath); err == nil && json.Unmarshal(raw, &cfg) == nil {
-			if s, _ := cfg["colorScheme"].(string); strings.TrimSpace(s) != "" {
-				pick = strings.ToLower(strings.TrimSpace(s))
+			for _, k := range []string{"colorScheme", "theme"} {
+				if s, _ := cfg[k].(string); strings.TrimSpace(s) != "" {
+					pick = strings.ToLower(strings.TrimSpace(s))
+					break
+				}
 			}
 		}
 	}
 	if pick == "" || pick == "terminal" || pick == "auto" {
-		if season, _ := cfg["seasonalThemesOptIn"].(string); strings.HasPrefix(season, "halloween") {
-			if (now.Month() == time.October && now.Day() >= 25) || (now.Month() == time.November && now.Day() == 1) {
-				return "halloween"
-			}
+		if season, _ := cfg["seasonalThemesOptIn"].(string); strings.HasPrefix(season, "halloween") &&
+			((now.Month() == time.October && now.Day() >= 25) || (now.Month() == time.November && now.Day() == 1)) {
+			return "halloween"
 		}
 		if fgbg := strings.TrimSpace(os.Getenv("COLORFGBG")); fgbg != "" {
 			parts := strings.Split(fgbg, ";")

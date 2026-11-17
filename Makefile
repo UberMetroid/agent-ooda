@@ -40,8 +40,8 @@ dogfood: build
 	./plugins/agent-ooda/bin/agent-ooda --status >/dev/null; \
 	./plugins/agent-ooda/bin/agent-ooda --discover >/dev/null; \
 	./plugins/agent-ooda/bin/agent-ooda --usage >/dev/null; \
-	test -z "$$(printf '{"terminal_width":120}\n' | NO_COLOR=1 ./plugins/agent-ooda/bin/agent-ooda-hud)"; \
-	printf '{"terminal_width":120,"agent_state":"working","cycle_mode":"plan"}\n' | NO_COLOR=1 ./plugins/agent-ooda/bin/agent-ooda-hud | grep -q "orient"; \
+	test "$$(printf '{"terminal_width":120}\n' | NO_COLOR=1 ./plugins/agent-ooda/bin/agent-ooda-hud)" = "OODA"; \
+	printf '{"terminal_width":120,"agent_state":"working","cycle_mode":"plan"}\n' | NO_COLOR=1 ./plugins/agent-ooda/bin/agent-ooda-hud | grep -q "◈ orient"; \
 	printf '{"conversationId":"dogfood","hookEventName":"SessionStart"}\n' | ./plugins/agent-ooda/bin/agent-ooda-hook >/dev/null; \
 	test -f "$$tmp/hud/current_session.json"; \
 	out=$$(AGENT_OODA_DEPTH=0 ROUTER_DEPTH=1 ./plugins/agent-ooda/bin/agent-ooda --recon "probe" 2>&1 || true); \

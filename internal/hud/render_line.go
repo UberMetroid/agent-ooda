@@ -19,16 +19,18 @@ var idleStates = map[string]bool{
 	"paused": true, "error": true, "none": true,
 }
 
-func stepStyle(mode string, pal Palette) (string, string, string) {
+func stepStyle(mode string, pal Palette) (string, string, string, string) {
 	switch mode {
 	case "observe", "recon":
-		return "observe", pal.Observe, pal.ObserveMod
+		return "◎", "observe", pal.Observe, pal.ObserveMod
 	case "orient":
-		return "orient", pal.Orient, pal.OrientMod
+		return "◈", "orient", pal.Orient, pal.OrientMod
+	case "decide":
+		return "◇", "decide", pal.Orient, pal.OrientMod
 	case "act:verify", "review":
-		return "verify", pal.Verify, pal.VerifyMod
+		return "✦", "verify", pal.Verify, pal.VerifyMod
 	default:
-		return "act", pal.Act, pal.ActMod
+		return "▸", "act", pal.Act, pal.ActMod
 	}
 }
 
@@ -71,11 +73,10 @@ func renderWorkersLines(
 	lim := min(8, len(workers))
 	lines := make([]string, 0, lim)
 	for _, w := range workers[:lim] {
-		spin := WorkerSpin(w.Phase, w.TokS, now)
-		step, stepCol, modCol := stepStyle(w.Mode, pal)
+		icon, step, stepCol, modCol := stepStyle(w.Mode, pal)
 		build := func(compact bool) string {
 			lbl := formatAgentLabel(w.Lane, w.Model, compact)
-			out := Colorize(spin+" "+step, stepCol, useColor)
+			out := Colorize(icon+" "+step, stepCol, useColor)
 			if lbl != "" {
 				out += dot + Colorize(lbl, modCol, useColor)
 			}
@@ -93,7 +94,7 @@ func renderWorkersLines(
 	return strings.Join(lines, "\n")
 }
 
-func renderSubagents(data map[string]any, useColor bool, pal Palette, dot string, now float64, maxW int) string {
+func renderSubagents(data map[string]any, useColor bool, pal Palette, dot string, maxW int) string {
 	raw, ok := data["subagents"].([]any)
 	if !ok {
 		return ""
@@ -110,16 +111,16 @@ func renderSubagents(data map[string]any, useColor bool, pal Palette, dot string
 		}
 		name, _ := m["name"].(string)
 		role, _ := m["role"].(string)
-		name = strings.TrimSpace(SanitizePlain(name))
-		lbl := name
+		lbl := strings.TrimSpace(SanitizePlain(name))
 		if lbl == "" {
 			lbl = strings.TrimSpace(SanitizePlain(role))
 		}
-		step, stepCol, modCol := "act", pal.Act, pal.ActMod
-		if strings.EqualFold(name, "research") {
-			step, stepCol, modCol = "observe", pal.Observe, pal.ObserveMod
+		mode := "act"
+		if strings.EqualFold(lbl, "research") {
+			mode = "observe"
 		}
-		out := Colorize(WorkerSpin("tool", 0, now)+" "+step, stepCol, useColor)
+		icon, step, stepCol, modCol := stepStyle(mode, pal)
+		out := Colorize(icon+" "+step, stepCol, useColor)
 		if lbl != "" {
 			out += dot + Colorize(lbl, modCol, useColor)
 		}
@@ -170,19 +171,19 @@ func orchestratorLine(
 	if orchMod == "" && sessMod != "" && sessUpd > 0 && (now-sessUpd) <= sessionTTLSecs {
 		orchMod = sessMod
 	}
-	recentSess := sessUpd > 0 && (now-sessUpd) >= -2
-	stage, spin, stepCol, modCol := "orient", OrientSpin(now), pal.Orient, pal.OrientMod
+	recentSess := sessUpd > 0 && (now-sessUpd) >= -2 && (now-sessUpd) <= 30
+	mode := "orient"
 	switch {
-	case confirmPending || stateStr == "reviewing" ||
-		(recentSess && sessPhase == "decide" && (stateStr == "tool_use" || (now-sessUpd) <= 30)):
-		stage = "decide"
+	case confirmPending || stateStr == "reviewing" || (recentSess && sessPhase == "decide"):
+		mode = "decide"
 	case recentSess && sessPhase == "observe" && (stateStr == "tool_use" || (now-sessUpd) <= 15):
-		stage, spin, stepCol, modCol = "observe", WorkerSpin("tool", 0, now), pal.Observe, pal.ObserveMod
+		mode = "observe"
 	case cycleMode == "accept-edits" || cycleMode == "auto" ||
 		(recentSess && sessPhase == "act" && (stateStr == "tool_use" || (now-sessUpd) <= 15)):
-		stage, spin, stepCol, modCol = "act", WorkerSpin("tool", 0, now), pal.Act, pal.ActMod
+		mode = "act"
 	}
-	out := Colorize(spin+" "+stage, stepCol, useColor)
+	icon, stage, stepCol, modCol := stepStyle(mode, pal)
+	out := Colorize(icon+" "+stage, stepCol, useColor)
 	if sm := HudShortModel(orchMod); sm != "" && sm != "-" {
 		out += dot + Colorize(sm, modCol, useColor)
 	}
@@ -190,9 +191,7 @@ func orchestratorLine(
 }
 
 // RenderStatusLine composes one width-bounded statusLine HUD output for rawInput JSON.
-func RenderStatusLine(
-	rawInput string, useColor bool, nowTS *float64, _ *FleetSummary,
-) string {
+func RenderStatusLine(rawInput string, useColor bool, nowTS *float64, _ *FleetSummary) string {
 	if os.Getenv("NO_COLOR") != "" {
 		useColor = false
 	}
@@ -218,7 +217,7 @@ func RenderStatusLine(
 	if workers := LoadActiveWorkers(hudBase); len(workers) > 0 {
 		return renderWorkersLines(workers, useColor, pal, dot, now, maxWidth)
 	}
-	if sub := renderSubagents(data, useColor, pal, dot, now, maxWidth); sub != "" {
+	if sub := renderSubagents(data, useColor, pal, dot, maxWidth); sub != "" {
 		return sub
 	}
 	if orch := orchestratorLine(hudBase, data, useColor, pal, dot, now, maxWidth); orch != "" {
@@ -226,9 +225,9 @@ func RenderStatusLine(
 	}
 	last := LoadRecentFinish(hudBase, now)
 	if last == nil {
-		return ""
+		return Colorize("OODA", pal.IdleText, useColor)
 	}
-	step, _, _ := stepStyle(last.Mode, pal)
+	_, step, _, _ := stepStyle(last.Mode, pal)
 	lbl := formatAgentLabel(last.Lane, last.Model, false)
 	mark, stCol, tail := "✓ "+step, pal.FleetFull, Colorize(fmt.Sprintf("%.1fs", last.DurationS), pal.Muted, useColor)
 	if last.ExitCode != 0 {

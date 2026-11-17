@@ -36,16 +36,16 @@ func TestStatusLineModes(t *testing.T) {
 	t.Setenv("ROUTER_HUD_DIR", hudDir)
 	t.Setenv("NO_COLOR", "1")
 	now := float64(((time.Now().Unix() / 10) + 1) * 10)
-	if got := RenderStatusLine("{}", true, &now, nil); got != "" {
-		t.Fatalf("expected silent empty idle bar, got %q", got)
+	if got := RenderStatusLine("{}", true, &now, nil); got != "OODA" {
+		t.Fatalf("expected active OODA idle badge, got %q", got)
 	}
 	for _, tc := range [][2]string{
-		{`{"agent":{"state":"thinking"}}`, "◐ orient"},
-		{`{"agent_state":"reviewing","model":{"display_name":"Gemini 4 Carbon"}}`, "◐ decide · Gemini 4 Carbon"},
-		{`{"agent_state":"idle","tool_confirmation_pending":true}`, "◐ decide"},
-		{`{"agent_state":"working","cycle_mode":"auto","model":"gemini-4-argon"}`, "⠋ act · gemini-4-argon"},
+		{`{"agent":{"state":"thinking"}}`, "◈ orient"},
+		{`{"agent_state":"reviewing","model":{"display_name":"Gemini 4 Carbon"}}`, "◇ decide · Gemini 4 Carbon"},
+		{`{"agent_state":"idle","tool_confirmation_pending":true}`, "◇ decide"},
+		{`{"agent_state":"working","cycle_mode":"auto","model":"gemini-4-argon"}`, "▸ act · gemini-4-argon"},
 		{`{"subagents":[{"name":"research","status":"running"},{"name":"self","role":"Builder","status":"running"}]}`,
-			"⠋ observe · research\n⠋ act · self"},
+			"◎ observe · research\n▸ act · self"},
 	} {
 		if got := RenderStatusLine(tc[0], true, &now, nil); got != tc[1] {
 			t.Fatalf("input %s: got %q, want %q", tc[0], got, tc[1])
@@ -54,11 +54,11 @@ func TestStatusLineModes(t *testing.T) {
 	var out bytes.Buffer
 	HandleHookStdin(strings.NewReader(`{"conversationId":"hc1","hookEventName":"PostToolUse",`+
 		`"toolCall":{"name":"read_file","args":{"Path":"a.go"}}}`), &out)
-	if got := RenderStatusLine(`{"conversation_id":"hc1","agent_state":"tool_use"}`, true, &now, nil); got != "⠋ observe" {
+	if got := RenderStatusLine(`{"conversation_id":"hc1","agent_state":"tool_use"}`, true, &now, nil); got != "◎ observe" {
 		t.Fatalf("expected observe from read_file hook, got %q", got)
 	}
 	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{{Mode: "observe", Model: "swe-2-flash-max"}})
-	if got := RenderStatusLine("{}", true, &now, nil); got != "⠋ observe · swe-2-flash-max" {
+	if got := RenderStatusLine("{}", true, &now, nil); got != "◎ observe · swe-2-flash-max" {
 		t.Fatalf("single worker mismatch: %q", got)
 	}
 	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{
@@ -66,8 +66,8 @@ func TestStatusLineModes(t *testing.T) {
 		{Mode: "act", Lane: "muse", Model: "muse-ember-1.0", Phase: "tool", StartedAt: now - 4},
 	})
 	multi := strings.Split(RenderStatusLine("{}", true, &now, nil), "\n")
-	if len(multi) != 2 || multi[0] != "⠋ act · muse (muse-ember-1.0) · ~102 tok/s" ||
-		multi[1] != "⠋ act · muse (muse-ember-1.0) · tool 4s" {
+	if len(multi) != 2 || multi[0] != "▸ act · muse (muse-ember-1.0) · ~102 tok/s" ||
+		multi[1] != "▸ act · muse (muse-ember-1.0) · tool 4s" {
 		t.Fatalf("unexpected multi-line workers: %#v", multi)
 	}
 }
@@ -87,28 +87,28 @@ func TestStatusLineTelemetryANSI(t *testing.T) {
 				Mode: "act", Lane: "mcode", Model: "minimax/MiniMax-M3.1-Flash",
 				Phase: "stream", TokS: 118, UpdatedAt: 999.0, StartedAt: 995.0,
 			}},
-			"⠋ act · mcode (MiniMax-M3.1-Flash) · ~118 tok/s",
+			"▸ act · mcode (MiniMax-M3.1-Flash) · ~118 tok/s",
 		},
 		{
 			[]dispatch.WorkerMarker{{
 				Mode: "act", Model: "minimax/MiniMax-M3.1-Flash",
 				Phase: "stream", TokS: 118, TokExact: true, UpdatedAt: 999.0, StartedAt: 995.0,
 			}},
-			"⠋ act · MiniMax-M3.1-Flash · 118 tok/s",
+			"▸ act · MiniMax-M3.1-Flash · 118 tok/s",
 		},
 		{
 			[]dispatch.WorkerMarker{{
 				Mode: "act", Model: "swe-2-flash-max",
 				Phase: "tool", StartedAt: 992.0, UpdatedAt: 999.0,
 			}},
-			"⠋ act · swe-2-flash-max · tool 8s",
+			"▸ act · swe-2-flash-max · tool 8s",
 		},
 		{
 			[]dispatch.WorkerMarker{{
 				Mode: "act", Model: "swe-2-flash-max",
 				Phase: "wait", StartedAt: 994.0, UpdatedAt: 994.0,
 			}},
-			"◜ act · swe-2-flash-max · 6s",
+			"▸ act · swe-2-flash-max · 6s",
 		},
 	}
 	for _, tc := range cases {
@@ -118,14 +118,14 @@ func TestStatusLineTelemetryANSI(t *testing.T) {
 		}
 	}
 	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{{Mode: "act", Lane: "grok", Model: "grok-4.7"}})
-	if narrow := RenderStatusLine(`{"terminal_width":40}`, true, &now, nil); narrow != "⠋ act · grok (grok-4.7)" {
+	if narrow := RenderStatusLine(`{"terminal_width":40}`, true, &now, nil); narrow != "▸ act · grok (grok-4.7)" {
 		t.Fatalf("width check mismatch: %q (len=%d)", narrow, VisibleLen(narrow))
 	}
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("AGENT_OODA_THEME", "dark")
 	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{{Mode: "act:verify", Model: "minimax/MiniMax-M3.1-Flash"}})
 	ansi := RenderStatusLine("{}", true, &now, nil)
-	if !strings.Contains(ansi, CVerify+"⠋ verify"+Reset) ||
+	if !strings.Contains(ansi, CVerify+"✦ verify"+Reset) ||
 		!strings.Contains(ansi, CVerifyModel+"MiniMax-M3.1-Flash"+Reset) {
 		t.Fatalf("unexpected ANSI output: %q", ansi)
 	}
@@ -167,8 +167,12 @@ func TestThermalTokSAndIdlePins(t *testing.T) {
 		t.Fatalf("expected tokyo night completion flash, got %q", flash)
 	}
 	_ = os.WriteFile(filepath.Join(cfgDir, "settings.json"), []byte(`{"colorScheme":"light"}`), 0o600)
+	_ = os.Remove(filepath.Join(hudDir, "last.json"))
+	if idleLight := RenderStatusLine("{}", true, &now, nil); idleLight != PaletteFor("light").IdleText+"OODA"+Reset {
+		t.Fatalf("expected light theme OODA idle badge, got %q", idleLight)
+	}
 	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{{Mode: "act", Model: "grok-4.7"}})
-	if light := RenderStatusLine("{}", true, &now, nil); !strings.Contains(light, PaletteFor("light").Act+"⠋ act") {
+	if light := RenderStatusLine("{}", true, &now, nil); !strings.Contains(light, PaletteFor("light").Act+"▸ act") {
 		t.Fatalf("expected live light theme swap, got %q", light)
 	}
 	if WorkerSpin("wait", 0, 1000.35) == WorkerSpin("stream", 190, 1000.35) ||
