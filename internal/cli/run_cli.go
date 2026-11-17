@@ -212,14 +212,14 @@ func RunCLI(prog string, argv []string, outW, errW io.Writer) int {
 		fmt.Fprintf(outW, "agent-ooda v%s\n", fleet.Version)
 		return 0
 	}
-	if opts.Status {
-		return ReportStatus(outW, false, opts)
-	}
-	if opts.Discover {
-		return ReportStatus(outW, true, opts)
+	if opts.Status || opts.Discover {
+		return ReportStatus(outW, opts.Discover, opts)
 	}
 	if opts.Usage {
 		return DoUsage(outW)
+	}
+	if opts.Hygiene != nil {
+		return DoHygiene(*opts.Hygiene, opts, outW, errW)
 	}
 	if fleet.RouterDepth() >= 1 {
 		fmt.Fprintln(errW, "error: recursive agent-ooda dispatch blocked (AGENT_OODA_DEPTH>=1 / ROUTER_DEPTH>=1). "+
@@ -249,7 +249,7 @@ func RunCLI(prog string, argv []string, outW, errW io.Writer) int {
 	}
 	if opts.Recon == nil && opts.Orient == nil && opts.Task == nil && opts.Review == nil && opts.Manifest == "" {
 		fmt.Fprintln(errW, "error: manifest path is required (or pass --select, --recon, --orient, --task, "+
-			"--review, --status, --usage, --set-stage, --reset-stages, --cleanup)")
+			"--review, --hygiene, --status, --usage, --set-stage, --reset-stages, --cleanup)")
 		return 2
 	}
 	return runDispatchMode(opts, outW, errW)

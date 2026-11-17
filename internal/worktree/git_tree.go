@@ -210,7 +210,7 @@ func SafeWorktreeFiles(files []string, wt string) []string {
 		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 			continue
 		}
-		if _, serr := os.Stat(cand); serr == nil {
+		if st, serr := os.Stat(cand); serr == nil && st.Mode().IsRegular() {
 			out = append(out, cand)
 		}
 	}

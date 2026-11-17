@@ -13,25 +13,24 @@ import (
 
 // CLIOpts holds parsed command-line options for the agent-ooda CLI.
 type CLIOpts struct {
-	Manifest, Complexity, Lane, Model, Effort, Timeout    string
-	Enable, Disable, SetCycle, Reason                     string
-	SetStage, Profile                                     string
-	Recon, Orient, Task, Review                           *string
-	Files, Skills, ExcludeLanes                           []string
-	Jobs                                                  int
-	Hours, CostBudget                                     *float64
-	TokenBudget, MaxParallel                              *int
-	LaneSet, NoStripe, NoPivot, NoReview, NoCache, Status bool
-	Discover, Usage, Probe, AutoWake, ResetNow            bool
-	Select, ResetStages, Local, UntilReset                bool
-	Cleanup, Help, Version                                bool
+	Manifest, Complexity, Lane, Model, Effort, Timeout          string
+	Enable, Disable, SetCycle, Reason, SetStage, Profile        string
+	Recon, Orient, Task, Review, Hygiene                        *string
+	Files, Skills, ExcludeLanes                                 []string
+	Jobs                                                        int
+	Hours, CostBudget                                           *float64
+	TokenBudget, MaxParallel                                    *int
+	LaneSet, NoStripe, NoPivot, NoReview, NoCache, Status       bool
+	Discover, Usage, Probe, AutoWake, ResetNow, Select, Local   bool
+	ResetStages, UntilReset, Cleanup, Help, Version             bool
 }
 
 func usageText(prog string) string {
 	return fmt.Sprintf(
 		"usage: %s [--version | --select | --status | --discover | --usage | --probe |\n"+
-			"             --recon P | --orient P | --task P | --review [PATH] | --cleanup |\n"+
-			"             --set-stage S=L | --reset-stages | --enable P | --disable P | --set-cycle P | manifest]\n\n"+
+			"             --recon P | --orient P | --task P | --review [PATH] | --hygiene [PATH] |\n"+
+			"             --cleanup | --set-stage S=L | --reset-stages | --enable P | --disable P |\n"+
+			"             --set-cycle P | manifest]\n\n"+
 			"options:\n"+
 			"  -h, --help             show this help message and exit\n"+
 			"  -v, --version          show binary version and exit\n"+
@@ -39,6 +38,7 @@ func usageText(prog string) string {
 			"  --recon/--orient PROMPT  read-only Observe recon or Orient architecture analysis\n"+
 			"  --task PROMPT          execute scoped coding task in CWD\n"+
 			"  --review [PATH]        standalone read-only cross-model review (default CWD)\n"+
+			"  --hygiene [PATH]       0-token secret, key & hardening footgun scan (default CWD)\n"+
 			"  --files / --skill CSV  scoped paths / skills to inject (repeatable)\n"+
 			"  --complexity HINT      heavy, deep, architecture, fast, tests, recon, review\n"+
 			"  --lane / --exclude-lane / --profile  auto, lane CSV, or preset profile\n"+
@@ -72,11 +72,7 @@ func applyNumFlag(opts *CLIOpts, name, val string) error {
 		if err != nil {
 			return fleet.UsageErr("error: %s: invalid number %q", name, val)
 		}
-		if name == "--hours" {
-			opts.Hours = &f
-		} else {
-			opts.CostBudget = &f
-		}
+		*map[string]**float64{"--hours": &opts.Hours, "--cost-budget": &opts.CostBudget}[name] = &f
 		return nil
 	}
 	n, err := strconv.Atoi(val)
@@ -153,17 +149,19 @@ func consumeFlag(opts *CLIOpts, argv []string, i *int) error {
 	if !hasEq && applyBoolFlag(opts, name) {
 		return nil
 	}
-	if name == "--review" {
+	if name == "--review" || name == "--hygiene" {
+		dest := &opts.Review
+		if name == "--hygiene" {
+			dest = &opts.Hygiene
+		}
 		if hasEq {
-			opts.Review = fleet.Ptr(eqVal)
-			return nil
-		}
-		if *i+1 < len(argv) && !strings.HasPrefix(argv[*i+1], "-") {
+			*dest = fleet.Ptr(eqVal)
+		} else if *i+1 < len(argv) && !strings.HasPrefix(argv[*i+1], "-") {
 			*i++
-			opts.Review = fleet.Ptr(argv[*i])
-			return nil
+			*dest = fleet.Ptr(argv[*i])
+		} else {
+			*dest = fleet.Ptr(".")
 		}
-		opts.Review = fleet.Ptr(".")
 		return nil
 	}
 	knownVal := map[string]bool{
@@ -198,7 +196,8 @@ func validateModes(opts CLIOpts) error {
 	modes := 0
 	for _, on := range []bool{
 		opts.Version, opts.Select, opts.Status, opts.Discover, opts.Usage, opts.Probe,
-		quotaAdmin, stageAdmin, opts.Cleanup, opts.Recon != nil, opts.Orient != nil, opts.Task != nil, opts.Review != nil,
+		quotaAdmin, stageAdmin, opts.Cleanup, opts.Recon != nil, opts.Orient != nil,
+		opts.Task != nil, opts.Review != nil, opts.Hygiene != nil,
 	} {
 		if on {
 			modes++
@@ -207,7 +206,7 @@ func validateModes(opts CLIOpts) error {
 	if modes > 1 {
 		return fleet.UsageErr("error: conflicting mode flags; specify one action")
 	}
-	if opts.Manifest != "" && modes > 0 && opts.Review == nil {
+	if opts.Manifest != "" && modes > 0 && opts.Review == nil && opts.Hygiene == nil {
 		return fleet.UsageErr("error: unexpected positional manifest %q with mode flag", opts.Manifest)
 	}
 	if opts.Profile != "" {

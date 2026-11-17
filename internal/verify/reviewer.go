@@ -15,11 +15,10 @@ import (
 
 // ReviewExecReq parameterizes one headless reviewer execution.
 type ReviewExecReq struct {
-	Provider, CLIPath, Model, Effort string
-	Info                             *fleet.ProviderConfig
-	Prompt, TargetDir, SlotDir       string
-	TaskID, ReviewMode, MarkerPath   string
-	TimeoutSec                       int
+	Provider, CLIPath, Model, Effort, Prompt, TargetDir, SlotDir string
+	TaskID, ReviewMode, MarkerPath                               string
+	Info                                                         *fleet.ProviderConfig
+	TimeoutSec                                                   int
 }
 
 // ReviewExecRes captures raw output and exit status from one reviewer run.
@@ -67,10 +66,8 @@ func hasAltReviewer(q *fleet.QuotaState, tried, avoid map[string]bool, cur strin
 	return alt.Lane != "" && !avoid[envelope.ModelFamily(alt.Lane)]
 }
 
-func reviewLease(
-	prov string, info *fleet.ProviderConfig, q *fleet.QuotaState,
-	tried, avoid map[string]bool, timeout int, req ReviewReq,
-) (*os.File, bool) {
+func reviewLease(prov string, info *fleet.ProviderConfig, q *fleet.QuotaState,
+	tried, avoid map[string]bool, timeout int, req ReviewReq) (*os.File, bool) {
 	if info == nil || info.MaxParallel == nil || *info.MaxParallel <= 0 {
 		return nil, false
 	}
@@ -103,9 +100,7 @@ func resolveReviewModel(prov string, req ReviewReq) string {
 	return ""
 }
 
-func invokeReviewer(
-	req ReviewReq, sel envelope.SelectRes, lease *os.File, prompt string,
-) (ReviewExecRes, string) {
+func invokeReviewer(req ReviewReq, sel envelope.SelectRes, lease *os.File, prompt string) (ReviewExecRes, string) {
 	rawM, rawEff := resolveReviewModel(sel.Lane, req), req.Effort
 	if prim := strings.Split(req.ReqLane, ",")[0]; req.ReqLane != "" && req.ReqLane != "auto" {
 		if cp, err := fleet.NormalizeLane(prim, true); err == nil && cp != "" {
@@ -151,10 +146,8 @@ func invokeReviewer(
 	return res, spec.DisplayModel
 }
 
-func shouldRetryReview(
-	sel envelope.SelectRes, res ReviewExecRes, verdict string,
-	q *fleet.QuotaState, tried, avoid map[string]bool, req ReviewReq,
-) bool {
+func shouldRetryReview(sel envelope.SelectRes, res ReviewExecRes, verdict string,
+	q *fleet.QuotaState, tried, avoid map[string]bool, req ReviewReq) bool {
 	if verdict == "REJECT" || (!res.TimedOut && res.ExitCode == 0 && verdict != "UNKNOWN") ||
 		!hasAltReviewer(q, tried, avoid, sel.Lane, req.ResolveCLI) {
 		return false
@@ -167,9 +160,7 @@ func shouldRetryReview(
 	return true
 }
 
-func handleReviewErr(
-	lane, prompt, verdict string, res ReviewExecRes, qPath string, tried map[string]bool,
-) bool {
+func handleReviewErr(lane, prompt, verdict string, res ReviewExecRes, qPath string, tried map[string]bool) bool {
 	u := fleet.ExportUsage{}
 	if res.ExportInfo != nil {
 		u = *res.ExportInfo
@@ -180,23 +171,31 @@ func handleReviewErr(
 	if !qHit && !fleet.HasErrorPattern(res.Output, res.ExitCode, fleet.AuthErrorPats) {
 		return false
 	}
-	kind := "auth"
-	if qHit {
-		kind = "quota/rate-limit"
-	}
+	kind := map[bool]string{true: "quota/rate-limit", false: "auth"}[qHit]
 	_, _ = fleet.MarkProviderCooldown(lane, "Auto-detected "+kind+" error on "+fleet.NowISO(), qHit, res.Output, qPath)
 	tried[lane] = true
 	return true
 }
 
-// RunReview performs calibrated cross-model read-only diff review with off-family fallback.
-func RunReview(req ReviewReq) ReviewResult {
+func reviewPreflight(req ReviewReq) (ReviewResult, bool) {
 	if req.Runner == nil {
-		return ReviewResult{Verdict: "SKIPPED", Reason: "no review runner configured"}
+		return ReviewResult{Verdict: "SKIPPED", Reason: "no review runner configured"}, true
 	}
 	if len(req.ScopeViols) > 0 {
 		msg := "[P0] scope violation: " + strings.Join(req.ScopeViols, ", ") + "\nVERDICT: REJECT - scope violation"
-		return ReviewResult{Verdict: "REJECT", ExitCode: 1, Reason: "scope violation", Output: msg}
+		return ReviewResult{Verdict: "REJECT", ExitCode: 1, Reason: "scope violation", Output: msg}, true
+	}
+	if hf := CheckDiffHygiene(req.DiffCtx); len(hf) > 0 {
+		msg := FormatHygieneReport(hf) + "\nVERDICT: REJECT - diff hygiene violation"
+		return ReviewResult{Verdict: "REJECT", ExitCode: 1, Reason: "diff hygiene violation", Output: msg}, true
+	}
+	return ReviewResult{}, false
+}
+
+// RunReview performs calibrated cross-model read-only diff review with off-family fallback.
+func RunReview(req ReviewReq) ReviewResult {
+	if pre, done := reviewPreflight(req); done {
+		return pre
 	}
 	if req.TimeoutSec <= 0 {
 		req.TimeoutSec = fleet.ReviewTimeout

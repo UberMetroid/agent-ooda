@@ -96,11 +96,11 @@ func syntheticFileDiff(targetDir, rel string) string {
 		return head + fmt.Sprintf("new file mode 100644\n<untracked file unreadable: %v>\n", err)
 	}
 	if st.Mode()&os.ModeSymlink != 0 {
-		dest, rerr := os.Readlink(full)
-		if rerr != nil {
-			dest = "?"
-		}
+		dest, _ := os.Readlink(full)
 		return head + fmt.Sprintf("new file mode 120000\n<untracked symlink -> %s>\n", dest)
+	}
+	if !st.Mode().IsRegular() {
+		return head + fmt.Sprintf("new file mode %o\n<untracked non-regular file (%s) skipped>\n", st.Mode(), st.Mode().Type())
 	}
 	raw, rerr := readBounded(full, maxUntracked)
 	if rerr != nil {

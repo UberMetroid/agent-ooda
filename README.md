@@ -74,13 +74,14 @@ on any `gemini*`/`orchestrator*` worker model and block recursive execution (`ag
 `--task`, `--review`, `--probe`, `--cleanup`, `--enable`, `--disable`, `--set-cycle`) whenever
 `AGENT_OODA_DEPTH>=1` or `ROUTER_DEPTH>=1`.
 
-**Stage clocks & Per-Stage OODA Routing (`v2.2.0`):**
+**Stage clocks & Per-Stage OODA Routing (`v2.3.0`):**
 
 - **Per-Stage Matrix (`observe`, `orient`, `act`, `verify`):** Each worker stage defaults to `auto` (`Decide` remains with you and the top-level orchestrator) and resolves via **`CLI flag > --local > --profile > global > auto`**. CLI `--lane`/`--model`/`--effort` target the primary command stage (`--recon`, `--orient`, `--task`, or standalone `--review`); post-task `verify` follows `--local`/`--profile`/global pins so `--task` worker flags never leak onto the off-family reviewer.
 - **Soft-Pin Failover & Off-Family Verify:** Pinned stages soft-failover on 429s/cooldown down their lane CSV or quota-aware `auto`, scrubbing primary-lane `--model`/`--effort` overrides when failing over to another lane (and never falling back onto `devin-fusion` credits or PAYG `muse`); `verify` always enforces a non-authoring model family.
-- **3 Synchronized Arrow-Key Selectors:**
+- **Selectors & Hardening Skills:**
   - `agent-ooda --select` (`-s`): Interactive terminal TUI (`↑`/`↓`, `Enter`, `b`/Backspace to go back, `q` to quit, `Tab` to switch scope; live `agy` theme colors, sticky or `--until-reset`, global `quota.json` `v9` or `--local` `~/.local/state/agent-ooda/workspaces/<id>.json`).
   - `/lane`: Native Antigravity in-chat selector skill (`ask_question`) for per-stage pins, presets, and resets.
+  - `/harden`: 4-phase zero-hallucination trust-boundary skill (`--hygiene` + Finder `--orient` + off-family Skeptic falsification + compile-clean Red-to-Green refusal unit tests).
   - `/agents`: `8` native `agy` workflow profiles (`ooda-auto`, `ooda-conserve`, `ooda-deep`, `ooda-devin`, `ooda-grok`, `ooda-mcode`, `ooda-muse`, `ooda-mistral`).
 - **Observe & Orient (Token-Lean & Read-Only Guarded):** `--recon` (`observe`) and `--orient` (`orient`) skip auto-matched workspace skills unless `--skill` is passed, run `mcode` read-only recon/orient with `--max-steps 20` (while inline `mcode` `--review` scales dynamically up to `35`/`45` steps), cache identical Merkle-hashed read-only results across `--recon`/`--orient`/`--review` (`--no-cache` to bypass), strip `GH_TOKEN`/`GITHUB_TOKEN` (plus `ANTIGRAVITY_*`) from read-only workers, snapshot the repo before/after to fail closed on any unexpected file write, and isolate clean worktrees via `git worktree add -B`.
 - **Act & Parallel:** Soonest-resetting capped lanes drain first with EWMA health scoring (`health_ewma` demoting flaky lanes and recovering on clean runs) plus an NDJSON stream stall watchdog (`180s` idle kill + immediate failover); manifest batches isolate `git worktree` stripes with atomic `flock` slot leases.
@@ -141,7 +142,8 @@ agent-ooda --recon "Map auth flow"          # OODA Observe: read-only recon (fre
 agent-ooda --orient "Trace cache race"      # OODA Orient: read-only root-cause & architecture plan
 agent-ooda --task "Fix parser bug" --files internal/cli/parse_args.go --skill devin
 agent-ooda .worktrees/tasks.json -j 4
-agent-ooda --review .                       # standalone cross-model working-tree/HEAD diff gate
+agent-ooda --review .                       # standalone cross-model working-tree/HEAD diff gate + P0 hygiene check
+agent-ooda --hygiene .                      # 0-token P0 secret, key & P1 hardening footgun scan
 agent-ooda --cleanup                        # remove .worktrees and temporary ooda/* branches
 ```
 

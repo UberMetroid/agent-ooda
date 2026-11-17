@@ -25,7 +25,7 @@ func UsageErr(format string, args ...any) error {
 }
 
 const (
-	Version             = "2.2.0"
+	Version             = "2.3.0"
 	QuotaSchemaVersion  = 9
 	CornerWindowSecs    = 5400
 	SoonWakeSecs        = 2700
@@ -60,7 +60,8 @@ var (
 var (
 	CoreHiddenSkills = map[string]bool{
 		"agent-ooda": true, "agent-ooda:agent-ooda": true, "lane": true, "agent-ooda:lane": true,
-		"router": true, "agent-router": true, "ooda": true, "ooda:ooda": true, "ooda:router": true,
+		"harden": true, "agent-ooda:harden": true, "router": true, "agent-router": true,
+		"ooda": true, "ooda:ooda": true, "ooda:router": true,
 		"agy-customizations": true, "antigravity-guide": true, "antigravity_guide": true,
 		"run-workflow": true, "swarm": true, "swarm_monitor": true,
 	}

@@ -89,16 +89,17 @@ overridable via `AGENT_OODA_QUOTA_FILE`), and `--local` per-repo stage pins pers
 `~/.local/state/agent-ooda/workspaces/<id>.json` (surviving `agent-ooda --cleanup`). HUD markers and `flock`
 leases live in `/tmp/agent-ooda-hud` (`AGENT_OODA_HUD_DIR`).
 
-### Per-Stage OODA Routing Matrix & 3 Selector Surfaces (`v2.2.0`)
+### Per-Stage OODA Routing Matrix & 3 Selector Surfaces (`v2.3.0`)
 Each worker OODA stage (`observe`, `orient`, `act`, `verify`) defaults to `auto` (`Decide` stays with the user /
 top-level orchestrator) and resolves via: **`CLI flag > --local > --profile > global > auto`**.
 - **Soft Pin Failover:** When a stage's primary pinned lane hits a 429/cooldown or is omitted, execution fails over
   down its priority CSV or quota-aware `auto`, scrubbing primary-lane `--model`/`--effort` overrides when failing over to another lane.
 - **Strict Off-Family Verify:** `verify` always excludes the authoring model family even if pinned identically.
-- **3 Selector Interfaces:**
+- **Selector & Hardening Skills:**
   1. `agent-ooda --select` (`-s`): Terminal arrow-key configurator (`↑`/`↓`, `Enter`, `b`/Backspace back, `q` quit, `Tab` scope; live `agy` theme colors, sticky & `--until-reset`, global & `--local`).
   2. `/lane`: Interactive in-chat stage/preset selector skill (`ask_question`).
-  3. `/agents`: `8` native `agy` workflow profiles under `plugins/agent-ooda/agents/`:
+  3. `/harden`: 4-phase trust-boundary hardening (`--hygiene` + Finder `--orient` + off-family Skeptic falsification + Red-to-Green refusal unit test).
+  4. `/agents`: `8` native `agy` workflow profiles under `plugins/agent-ooda/agents/`:
      `ooda-auto`, `ooda-conserve`, `ooda-deep`, `ooda-devin`, `ooda-grok`, `ooda-mcode`, `ooda-muse`, `ooda-mistral`.
 
 | Lane | CLI | Effort Control & Defaults | Tier | Cycle / Cap |
@@ -140,7 +141,8 @@ top-level orchestrator) and resolves via: **`CLI flag > --local > --profile > gl
 | Route deep reasoning task (`xhigh` on muse/grok) | `agent-ooda --task "<prompt>" --complexity deep` |
 | Override lane / model / effort | `agent-ooda --task "<prompt>" --lane agy-opus --model sonnet` |
 | Auto-expire stage pin when lane quota resets | `agent-ooda --set-stage act=muse --until-reset` |
-| OODA Verify: cross-model diff gate (`mcode` first) | `agent-ooda --review [repo_dir]` |
+| OODA Verify: cross-model diff gate + P0 hygiene check | `agent-ooda --review [repo_dir]` |
+| Run 0-token P0 secret & P1 hardening hygiene scan | `agent-ooda --hygiene [repo_dir]` |
 | OODA Act: parallel worktrees | `agent-ooda .worktrees/tasks.json` |
 | Parallel worktrees without striping | `agent-ooda .worktrees/tasks.json --no-stripe` |
 | Exclude a failed lane on Loop 2 | `agent-ooda --task "<prompt>" --exclude-lane agy-opus` |

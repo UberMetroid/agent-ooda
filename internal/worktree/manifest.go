@@ -57,7 +57,7 @@ func NormalizeRelPath(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	p := strings.ReplaceAll(trimmed, "\\", "/")
 	hasDrive := len(p) >= 2 && ((p[0] >= 'A' && p[0] <= 'Z') || (p[0] >= 'a' && p[0] <= 'z')) && p[1] == ':'
-	if strings.ContainsRune(trimmed, 0) || strings.HasPrefix(p, "/") || hasDrive {
+	if strings.ContainsAny(trimmed, "\x00\r\n") || strings.HasPrefix(p, "/") || hasDrive {
 		return "", fleet.UsageErr("error: path %q escapes the workspace", raw)
 	}
 	for strings.HasPrefix(p, "./") {

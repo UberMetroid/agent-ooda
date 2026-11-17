@@ -99,7 +99,8 @@ func BuildReviewPrompt(
 			"Report concisely:\n"+
 			"1. Logic bugs or broken invariants in the diff\n"+
 			"2. Scope or unintended file modifications\n"+
-			"3. Missing error handling or fail-open paths\n"+
+			"3. Missing error handling, fail-open paths, or unguarded external input reaching path/exec/query/auth sinks "+
+			"(verify callers first; ignore internal constants)\n"+
 			"4. Final line MUST be exactly: VERDICT: ACCEPT  or  VERDICT: REJECT - <reason>",
 		dc.Source, targetDir, scopeNote, violNote, dc.Status, dc.DiffStat, dc.Diff,
 	)

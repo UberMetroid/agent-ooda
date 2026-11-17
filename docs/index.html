@@ -467,14 +467,15 @@
   <main id="top">
     <section class="hero">
       <div class="wrap">
-        <span class="eyebrow">agent-ooda v2.2.0 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Zero-Trust Per-Stage Router (v9)</span>
+        <span class="eyebrow">agent-ooda v2.3.0 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Zero-Trust Per-Stage Router (v9)</span>
         <h1>Turn one session into a<br><span>token-routed agent fleet.</span></h1>
         <p class="lead">
           <strong>UberMetroid/agent-ooda</strong> ships one zero-dependency static Go OODA engine
           (<code>agent-ooda</code>, <code>agent-ooda-hud</code>, <code>agent-ooda-hook</code>) paired with
           host plugin adapters (<code>plugins/agent-ooda</code> for Antigravity <code>agy</code> today): v9 per-stage
-          OODA routing (<code>--select</code> TUI, <code>/lane</code>, 8 <code>/agents</code> profiles),
-          <code>--orient</code> synthesis, cross-model verification, and an <code>agy</code>-theme-synced thermal <code>tok/s</code> HUD.
+          OODA routing (<code>--select</code> TUI, <code>/lane</code>, <code>/harden</code>, 8 <code>/agents</code> profiles),
+          <code>--hygiene</code> 0-token secret/footgun scanning, <code>--orient</code> synthesis, cross-model verification,
+          and an <code>agy</code>-theme-synced thermal <code>tok/s</code> HUD.
         </p>
         <div class="install-bar" role="region" aria-label="One-line web installer">
           <code id="install-cmd">curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash</code>
@@ -482,7 +483,7 @@
         </div>
         <div class="hero-actions">
           <a class="btn btn-primary" href="#quickstart">Install &amp; Quickstart</a>
-          <a class="btn" href="https://github.com/UberMetroid/agent-ooda/releases/latest">Release Binaries (v2.2.0)</a>
+          <a class="btn" href="https://github.com/UberMetroid/agent-ooda/releases/latest">Release Binaries (v2.3.0)</a>
           <a class="btn" href="#architecture">Go Architecture</a>
         </div>
         <div class="telemetry-strip">
@@ -886,10 +887,11 @@ curl -fsSL https://ubermetroid.github.io/agent-ooda/install.sh | bash
 git clone https://github.com/UberMetroid/agent-ooda.git
 cd agent-ooda &amp;&amp; ./install.sh
 
-# restart agy so the plugin, 8 /agents profiles, /lane &amp; statusLine load
-agy plugin list       # confirm "agent-ooda" is enabled (2.2.0)
+# restart agy so the plugin, 8 /agents profiles, /lane, /harden &amp; statusLine load
+agy plugin list       # confirm "agent-ooda" is enabled (2.3.0)
 agent-ooda --version  # print binary version
 agent-ooda --status   # OODA stage matrix, fleet tiers, resets &amp; skills
+agent-ooda --hygiene  # 0-token P0 secret, key &amp; P1 hardening scan
 agent-ooda --select   # arrow-key TUI configurator (-s; add --local for repo)
 agent-ooda --set-stage act=grok --effort xhigh
 agent-ooda --set-stage preset=deep   # or --reset-stages

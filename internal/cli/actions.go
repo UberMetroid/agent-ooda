@@ -123,7 +123,8 @@ func reviewAndTrackTask(
 				rev := dispatch.ExecReview(verify.ReviewReq{
 					TargetDir: cwd, SlotDir: revSlot, DiffCtx: dc, TimeoutSec: fleet.ReviewTimeout,
 					ScopeViols: viols, Declared: files, LogWriter: outW, AuthorLane: res.Lane,
-					AuthorLanes: res.UsedLanes(), ReqLane: verSt.Lane, Model: verSt.Model, Effort: verSt.Effort,
+					AuthorLanes: res.UsedLanes(), ReqLane: verSt.Lane, Model: verSt.Model,
+					Effort: verSt.Effort, NoCache: opts.NoCache,
 				})
 				verdict = rev.Verdict
 				revFailed = verdict != "REJECT" && (verdict != "ACCEPT" || rev.ExitCode != 0)

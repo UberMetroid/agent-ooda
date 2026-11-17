@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/UberMetroid/agent-ooda/internal/dispatch"
 	"github.com/UberMetroid/agent-ooda/internal/envelope"
 	"github.com/UberMetroid/agent-ooda/internal/fleet"
+	"github.com/UberMetroid/agent-ooda/internal/verify"
 	"github.com/UberMetroid/agent-ooda/internal/worktree"
 )
 
@@ -128,6 +130,46 @@ func DoProbe(outW, errW io.Writer) int {
 		fmt.Fprintf(outW, "  %-11s : %s\n", lane, msg)
 	}
 	if anyFail {
+		return 1
+	}
+	return 0
+}
+
+// DoHygiene runs a deterministic 0-token P0 secret & P1 hardening scan.
+func DoHygiene(targetArg string, opts CLIOpts, outW, errW io.Writer) int {
+	if outW == nil {
+		outW = os.Stdout
+	}
+	if errW == nil {
+		errW = os.Stderr
+	}
+	if targetArg == "." && opts.Manifest != "" {
+		targetArg = opts.Manifest
+	}
+	if targetArg == "" {
+		targetArg = "."
+	}
+	absT, err := filepath.Abs(targetArg)
+	if err != nil {
+		fmt.Fprintf(errW, "error: invalid target %q: %v\n", targetArg, err)
+		return 2
+	}
+	if st, serr := os.Stat(absT); serr != nil || !st.IsDir() {
+		fmt.Fprintf(errW, "error: hygiene target is not a directory: %s\n", absT)
+		return 2
+	}
+	_, _, files, err := validateRunArgs(opts, fleet.ReviewTimeout, true)
+	if err != nil {
+		fmt.Fprintln(errW, err)
+		return 2
+	}
+	findings, err := verify.ScanRepoHygiene(absT, files)
+	if err != nil {
+		fmt.Fprintf(errW, "error: %v\n", err)
+		return 2
+	}
+	fmt.Fprintln(outW, verify.FormatHygieneReport(findings))
+	if len(findings) > 0 {
 		return 1
 	}
 	return 0

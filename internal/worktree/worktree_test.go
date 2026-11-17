@@ -182,3 +182,18 @@ func TestInferComplexityAndSkills(t *testing.T) {
 		t.Fatalf("expected --skill none to opt out of auto-matching, got %v", off)
 	}
 }
+
+func TestSafeFilesAndControlPaths(t *testing.T) {
+	wt := t.TempDir()
+	_ = os.WriteFile(filepath.Join(wt, "a.go"), []byte("package a\n"), 0o644)
+	_ = os.MkdirAll(filepath.Join(wt, "sub"), 0o755)
+	got := SafeWorktreeFiles([]string{"a.go", "sub"}, wt)
+	if len(got) != 1 || filepath.Base(got[0]) != "a.go" {
+		t.Fatalf("expected SafeWorktreeFiles to return only regular file a.go, got %v", got)
+	}
+	for _, bad := range []string{"dir/bad\n+++ /dev/null\n+++ b/.env", "dir/bad\rname"} {
+		if _, err := NormalizeRelPath(bad); err == nil {
+			t.Fatalf("expected NormalizeRelPath to reject control char path %q", bad)
+		}
+	}
+}

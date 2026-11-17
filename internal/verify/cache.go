@@ -59,8 +59,11 @@ func LoadStageCache(key string, noCache bool) (CacheEntry, bool) {
 		return CacheEntry{}, false
 	}
 	var e CacheEntry
-	if json.Unmarshal(raw, &e) != nil || e.SavedAt <= 0 ||
-		(time.Now().Unix()-e.SavedAt) > cacheTTLSecs || strings.TrimSpace(e.Output) == "" {
+	if json.Unmarshal(raw, &e) != nil || e.SavedAt <= 0 || strings.TrimSpace(e.Output) == "" {
+		_ = os.Remove(path)
+		return CacheEntry{}, false
+	}
+	if age := time.Now().Unix() - e.SavedAt; age < -60 || age > cacheTTLSecs {
 		_ = os.Remove(path)
 		return CacheEntry{}, false
 	}
