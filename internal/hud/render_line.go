@@ -3,7 +3,6 @@ package hud
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"os"
 	"strings"
@@ -244,8 +243,8 @@ func RenderStatusLine(rawInput string, useColor bool, nowTS *float64, _ *FleetSu
 func RunStatusLine() int {
 	raw := ""
 	if info, err := os.Stdin.Stat(); err == nil && (info.Mode()&os.ModeCharDevice) == 0 {
-		if b, rerr := io.ReadAll(os.Stdin); rerr == nil {
-			raw = string(b)
+		if b, ok := readBoundedStdin(os.Stdin); ok {
+			raw = b
 		}
 	}
 	if out := RenderStatusLine(raw, true, nil, nil); out != "" {

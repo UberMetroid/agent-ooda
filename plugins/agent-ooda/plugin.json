@@ -1,7 +1,7 @@
 {
   "name": "agent-ooda",
   "displayName": "agent-ooda — Multi-Agent OODA Router & HUD",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "description": "Zero-trust multi-agent OODA router, quota-aware stage scheduler, independent cross-model diff verifier, and theme-synced thermal tok/s HUD for Antigravity.",
   "author": "UberMetroid",
   "homepage": "https://ubermetroid.github.io/agent-ooda/",

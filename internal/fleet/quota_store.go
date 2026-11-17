@@ -23,8 +23,7 @@ func migratePool(cur []string, def []string, oldVer int) ([]string, bool) {
 		cleaned = append(cleaned, p)
 	}
 	if oldVer < 8 || len(cleaned) == 0 {
-		out := append([]string(nil), def...)
-		return out, true
+		return append([]string(nil), def...), true
 	}
 	return cleaned, changed
 }
@@ -47,8 +46,7 @@ func migrateProvider(name string, info *ProviderConfig, tmpl *ProviderConfig, ol
 	}
 	if oldVer < 8 {
 		if len(tmpl.Windows) > 0 {
-			info.Windows = append([]string(nil), tmpl.Windows...)
-			changed = true
+			info.Windows, changed = append([]string(nil), tmpl.Windows...), true
 		}
 		if tmpl.CycleHours != nil && (info.CycleHours == nil || *info.CycleHours == 5.0 || *info.CycleHours == 1.0) {
 			info.CycleHours, changed = Ptr(*tmpl.CycleHours), true
@@ -63,18 +61,16 @@ func migrateProvider(name string, info *ProviderConfig, tmpl *ProviderConfig, ol
 		}
 	}
 	if info.Status == "cooldown" && info.CooldownUntil == nil && info.CycleHours != nil && !info.ManualDisable {
-		base := legacyUpd
-		if base.IsZero() {
-			base = time.Now().UTC()
+		if legacyUpd.IsZero() {
+			legacyUpd = time.Now().UTC()
 		}
-		wake := FormatLocalISO(base.Add(time.Duration(min(*info.CycleHours, 5.0) * float64(time.Hour))))
+		wake := FormatLocalISO(legacyUpd.Add(time.Duration(min(*info.CycleHours, 5.0) * float64(time.Hour))))
 		info.CooldownUntil, changed = &wake, true
 		if *info.CycleHours <= 6.0 && (info.NextResetAt == nil || *info.NextResetAt == "") {
 			info.NextResetAt = &wake
 		}
 		if info.CycleStartedAt == nil || *info.CycleStartedAt == "" {
-			started := FormatLocalISO(base)
-			info.CycleStartedAt = &started
+			info.CycleStartedAt = Ptr(FormatLocalISO(legacyUpd))
 		}
 	}
 	if name == "devin-fusion" && strings.Contains(info.Role, "reserve") {
@@ -109,8 +105,7 @@ func MigrateQuota(q *QuotaState) bool {
 	for name, tmpl := range DefaultProviders() {
 		if cur, ok := q.Providers[name]; !ok || cur == nil {
 			cp := *tmpl
-			q.Providers[name] = &cp
-			changed = true
+			q.Providers[name], changed = &cp, true
 		} else if migrateProvider(name, cur, tmpl, oldVer, legacyUpd) {
 			changed = true
 		}
@@ -121,6 +116,16 @@ func MigrateQuota(q *QuotaState) bool {
 	for _, st := range StageNames {
 		if r := q.Stages[st]; r.Lane == "" {
 			q.Stages[st], changed = StageRoute{Lane: "auto"}, true
+		}
+	}
+	for _, info := range q.Providers {
+		if info == nil || info.MaxParallel == nil {
+			continue
+		}
+		if *info.MaxParallel <= 0 {
+			info.MaxParallel, changed = nil, true
+		} else if *info.MaxParallel > MaxParallelCap {
+			info.MaxParallel, changed = Ptr(MaxParallelCap), true
 		}
 	}
 	return changed || c1 || c2
@@ -145,24 +150,21 @@ func ExpireAndReset(q *QuotaState, nowUTC time.Time) bool {
 		}
 		if info.OuterResetAt != nil {
 			if dt, ok := ParseISOUTC(*info.OuterResetAt); ok && !dt.After(nowUTC) {
-				info.OuterTokens, info.OuterStartedAt, info.OuterResetAt = 0, nil, nil
-				info.ConsecCooldowns, changed = 0, true
+				info.OuterTokens, info.OuterStartedAt, info.OuterResetAt, info.ConsecCooldowns, changed = 0, nil, nil, 0, true
 			}
 		}
 		if info.NextResetAt != nil {
 			if dt, ok := ParseISOUTC(*info.NextResetAt); ok && !dt.After(nowUTC) {
 				info.CycleRuns, info.CycleTokens, info.CycleTokensExact, info.CycleCostUSD = 0, 0, false, 0
-				info.CycleStartedAt, info.NextResetAt = nil, nil
+				info.CycleStartedAt, info.NextResetAt, changed = nil, nil, true
 				if info.Status == "cooldown" && !info.ManualDisable {
 					info.Status, info.CooldownUntil, info.Reason = "active", nil, nil
 				}
-				changed = true
 			}
 		}
 		if info.Status == "cooldown" && info.CooldownUntil != nil {
 			if dt, ok := ParseISOUTC(*info.CooldownUntil); ok && !dt.After(nowUTC) {
-				info.Status, info.CooldownUntil, info.Reason, info.ManualDisable = "active", nil, nil, false
-				changed = true
+				info.Status, info.CooldownUntil, info.Reason, info.ManualDisable, changed = "active", nil, nil, false, true
 			}
 		}
 	}

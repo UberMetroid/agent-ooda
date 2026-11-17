@@ -57,10 +57,18 @@ func SkillRoots(cwd string) []string {
 	}
 	seen := make(map[string]bool)
 	var out []string
+	wsReal, _ := filepath.EvalSymlinks(ws)
 	for _, r := range cands {
 		key := r
-		if realR, err := filepath.EvalSymlinks(r); err == nil {
+		realR, rerr := filepath.EvalSymlinks(r)
+		if rerr == nil {
 			key = realR
+		}
+		if r == filepath.Join(ws, ".agents", "skills") {
+			rel, _ := filepath.Rel(wsReal, realR)
+			if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+				continue
+			}
 		}
 		if !seen[key] {
 			seen[key] = true
@@ -125,6 +133,17 @@ func parseFrontmatter(fm []string, fallback string) (string, string) {
 	return name, strings.Join(parts, " ")
 }
 
+func safeSkillFile(root, name string) (string, bool) {
+	realRoot, err := filepath.EvalSymlinks(root)
+	realFile, ferr := filepath.EvalSymlinks(filepath.Join(root, name, "SKILL.md"))
+	rel, rerr := filepath.Rel(realRoot, realFile)
+	if err != nil || ferr != nil || rerr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", false
+	}
+	st, serr := os.Stat(realFile)
+	return realFile, serr == nil && st.Mode().IsRegular() && st.Size() <= 256<<10
+}
+
 // DiscoverSkills lists all SKILL.md packages sorted domain-first then core.
 func DiscoverSkills(cwd string) []SkillMeta {
 	roots := SkillRoots(cwd)
@@ -146,8 +165,8 @@ func DiscoverSkills(cwd string) []SkillMeta {
 			if !ent.IsDir() || seen[ent.Name()] {
 				continue
 			}
-			skillMD := filepath.Join(root, ent.Name(), "SKILL.md")
-			if st, err := os.Stat(skillMD); err != nil || st.IsDir() {
+			skillMD, ok := safeSkillFile(root, ent.Name())
+			if !ok {
 				continue
 			}
 			seen[ent.Name()] = true
@@ -177,7 +196,7 @@ func availableSkills(roots []string) string {
 			if !ent.IsDir() || seen[ent.Name()] {
 				continue
 			}
-			if _, err := os.Stat(filepath.Join(root, ent.Name(), "SKILL.md")); err == nil {
+			if _, ok := safeSkillFile(root, ent.Name()); ok {
 				seen[ent.Name()] = true
 				names = append(names, ent.Name())
 			}
@@ -206,8 +225,7 @@ func LoadSkillBlocks(names []string, cwd string) (string, error) {
 		}
 		var skillFile string
 		for _, r := range roots {
-			cand := filepath.Join(r, name, "SKILL.md")
-			if st, err := os.Stat(cand); err == nil && !st.IsDir() {
+			if cand, ok := safeSkillFile(r, name); ok {
 				skillFile = cand
 				break
 			}

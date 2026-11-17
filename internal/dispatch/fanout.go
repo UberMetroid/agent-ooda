@@ -52,6 +52,24 @@ type batchJob struct {
 	task                      worktree.TaskSpec
 	root, wt, branch, baseRef string
 	wtErr                     error
+	wtMu                      *sync.Mutex
+}
+
+// ensureBatchTree lazily creates the task worktree under the shared wtMu so
+// concurrent `git worktree add` calls serialize on the repo .git dir.
+func ensureBatchTree(job *batchJob, opts BatchOpts) {
+	job.wtMu.Lock()
+	defer job.wtMu.Unlock()
+	p, br, err := worktree.EnsureWorktree(job.root, job.task.ID)
+	job.wt, job.branch, job.wtErr = p, br, err
+	if err != nil {
+		job.wt = filepath.Join(job.root, ".worktrees", job.task.ID)
+		job.branch = "ooda/" + job.task.ID
+		fmt.Fprintf(opts.LogWriter, "[%s] worktree error: %v\n", job.task.ID, err)
+		return
+	}
+	job.baseRef = verify.HeadRef(p)
+	fmt.Fprintf(opts.LogWriter, "[%s] worktree=%s branch=%s\n", job.task.ID, p, br)
 }
 
 func reviewWorktreeTask(task worktree.TaskSpec, wt string, slotNum int,
@@ -91,13 +109,14 @@ func dedupMerge(a, b []string) []string {
 }
 
 func processBatchTask(slotPool chan int, job batchJob, opts BatchOpts) BatchRecord {
+	slotNum := <-slotPool
+	defer func() { slotPool <- slotNum }()
+	ensureBatchTree(&job, opts)
 	if job.wtErr != nil {
 		return BatchRecord{ID: job.task.ID, Branch: job.branch, Worktree: filepath.Base(job.wt), ExitCode: 1,
 			Output: job.wtErr.Error(), Review: BatchReview{Model: fleet.ReviewModelEnv(),
 				Verdict: "SKIPPED", Reason: "worktree error"}}
 	}
-	slotNum := <-slotPool
-	defer func() { slotPool <- slotNum }()
 	slotDir, err := worktree.EnsureSlot(strconv.Itoa(slotNum))
 	if err != nil {
 		return BatchRecord{ID: job.task.ID, Branch: job.branch, Worktree: filepath.Base(job.wt), ExitCode: -1,
@@ -156,22 +175,13 @@ func runBatchWorkers(root string, tasks []worktree.TaskSpec, opts BatchOpts, job
 		_, _ = worktree.EnsureSlot(strconv.Itoa(n))
 		slotPool <- n
 	}
+	wtMu := &sync.Mutex{}
 	items, ch := make([]batchJob, len(tasks)), make(chan int, len(tasks))
 	for i, t := range tasks {
-		p, br, err := worktree.EnsureWorktree(root, t.ID)
-		it := batchJob{idx: i, task: t, root: root, wt: p, branch: br, wtErr: err}
-		if err != nil {
-			it.wt, it.branch = filepath.Join(root, ".worktrees", t.ID), "ooda/"+t.ID
-			fmt.Fprintf(outW, "[%s] worktree error: %v\n", t.ID, err)
-		} else {
-			it.baseRef = verify.HeadRef(p)
-			fmt.Fprintf(outW, "[%s] worktree=%s branch=%s\n", t.ID, p, br)
-		}
-		items[i] = it
+		items[i] = batchJob{idx: i, task: t, root: root, wtMu: wtMu}
 		ch <- i
 	}
 	close(ch)
-	var mu sync.Mutex
 	var results []BatchRecord
 	var wg sync.WaitGroup
 	for w := 0; w < jobs; w++ {
@@ -180,7 +190,7 @@ func runBatchWorkers(root string, tasks []worktree.TaskSpec, opts BatchOpts, job
 			defer wg.Done()
 			for i := range ch {
 				rec := processBatchTask(slotPool, items[i], opts)
-				mu.Lock()
+				wtMu.Lock()
 				results = append(results, rec)
 				st := map[bool]string{true: fmt.Sprintf("FAIL(%d)", rec.ExitCode), false: "OK"}[rec.ExitCode != 0]
 				viol := ""
@@ -189,7 +199,7 @@ func runBatchWorkers(root string, tasks []worktree.TaskSpec, opts BatchOpts, job
 				}
 				fmt.Fprintf(outW, "[%s] %s lane=%s effort=%s %.1fs review=%s%s\n%s\n---\n",
 					rec.ID, st, rec.Lane, rec.Effort, rec.DurationS, rec.Review.Verdict, viol, rec.DiffStat)
-				mu.Unlock()
+				wtMu.Unlock()
 			}
 		}()
 	}

@@ -25,9 +25,9 @@ func setEnvs(t *testing.T, kv map[string]string) {
 
 func TestBuildWorkerCommandAllCLIs(t *testing.T) {
 	wt, slot := t.TempDir(), t.TempDir()
-	setEnvs(t, map[string]string{"AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "2", "ANTIGRAVITY_TOKEN": "sec",
-		"GH_TOKEN": "sec", "GITHUB_TOKEN": "sec", "AWS_SECRET_ACCESS_KEY": "sec", "OPENAI_API_KEY": "sec",
-		"ANTHROPIC_API_KEY": "sec", "NPM_TOKEN": "sec", "SSH_AUTH_SOCK": "/tmp/s"})
+	setEnvs(t, map[string]string{"AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "2", "ANTIGRAVITY_TOKEN": "sec", "GH_TOKEN": "sec",
+		"GITHUB_TOKEN": "sec", "AWS_SECRET_ACCESS_KEY": "sec", "OPENAI_API_KEY": "sec", "ANTHROPIC_API_KEY": "sec",
+		"NPM_TOKEN": "sec", "SSH_AUTH_SOCK": "/tmp/s", "ACME_API_TOKEN": "sec", "STRIPE_SECRET_KEY": "sec"})
 	for _, lane := range []string{"agy-opus", "devin-pro", "mcode", "grok", "muse", "mistral"} {
 		built, err := BuildWorkerCommand(CmdReq{Provider: lane, CLIPath: "/bin/" + lane,
 			Prompt: "fix bug", Worktree: wt, SlotDir: slot, TaskID: "t1"})
@@ -51,7 +51,7 @@ func TestBuildWorkerCommandAllCLIs(t *testing.T) {
 			t.Fatalf("%s ro failed: err=%v argv=%v", lane, err, ro.Argv)
 		}
 		for _, k := range []string{"ANTIGRAVITY_", "GH_TOKEN=", "GITHUB_TOKEN=", "AWS_SECRET_ACCESS_KEY=", "OPENAI_API_KEY=",
-			"ANTHROPIC_API_KEY=", "NPM_TOKEN=", "SSH_AUTH_SOCK="} {
+			"ANTHROPIC_API_KEY=", "NPM_TOKEN=", "SSH_AUTH_SOCK=", "ACME_API_TOKEN=", "STRIPE_SECRET_KEY="} {
 			if slices.ContainsFunc(ro.Env, func(s string) bool { return strings.HasPrefix(s, k) }) {
 				t.Fatalf("%s read-only leaked %s", lane, k)
 			}
@@ -149,7 +149,7 @@ func TestExecStreamAndGeminiGuard(t *testing.T) {
 }
 
 func TestManifestScopeAndReject(t *testing.T) {
-	repo := t.TempDir()
+	repo, rows := t.TempDir(), []BatchRecord{}
 	runGit := func(dir string, args ...string) {
 		b := []string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@invalid", "-c", "commit.gpgsign=false"}
 		if out, err := exec.Command("git", append(b, args...)...).CombinedOutput(); err != nil {
@@ -164,9 +164,9 @@ func TestManifestScopeAndReject(t *testing.T) {
 	_ = fleet.AtomicWriteJSON(qPath, fleet.DefaultQuotaData(), false, true)
 	setEnvs(t, map[string]string{"AGENT_QUOTA_FILE": qPath, "ROUTER_HUD_DIR": filepath.Join(repo, ".hud"),
 		"ROUTER_SLOTS_DIR": filepath.Join(repo, ".slots"), "AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "0"})
-	rc := RunManifestBatch(repo, []worktree.TaskSpec{
-		{ID: "1", Prompt: "p", Files: []string{"a.go"}, Lane: "mcode"},
-		{ID: "2", Prompt: "p", Files: []string{"a.go"}, Lane: "mcode"}}, BatchOpts{
+	tasks := []worktree.TaskSpec{{ID: "1", Prompt: "p", Files: []string{"a.go"}, Lane: "mcode"},
+		{ID: "2", Prompt: "p", Files: []string{"a.go"}, Lane: "mcode"}}
+	rc := RunManifestBatch(repo, tasks, BatchOpts{
 		Lane: "grok", Model: "grok-4.7", Effort: "xhigh", Jobs: 1, NoStripe: true, QuotaPath: qPath,
 		ResolveCLI: func(string) string { return "/bin/true" },
 		TaskRunner: func(r ExecReq) ExecRes {
@@ -176,6 +176,9 @@ func TestManifestScopeAndReject(t *testing.T) {
 			if r.TaskID == "2" {
 				_ = os.RemoveAll(filepath.Join(r.Worktree, ".git"))
 				return ExecRes{ExitCode: 0, Output: "done"}
+			}
+			if _, err := os.Stat(filepath.Join(repo, ".worktrees", "2")); !os.IsNotExist(err) {
+				t.Fatalf("lazy worktree violated: .worktrees/2 exists while task 1 runs")
 			}
 			_ = os.WriteFile(filepath.Join(r.Worktree, "a.go"), []byte("package a\nvar X = 1\n"), 0o644)
 			runGit(r.Worktree, "commit", "-am", "worker commit")
@@ -189,7 +192,6 @@ func TestManifestScopeAndReject(t *testing.T) {
 		},
 	})
 	raw, _ := os.ReadFile(filepath.Join(repo, ".worktrees", "results.json"))
-	var rows []BatchRecord
 	if rc != 1 || json.Unmarshal(raw, &rows) != nil || len(rows) != 2 || rows[0].Review.Verdict != "REJECT" ||
 		rows[1].Review.Verdict != "REJECT" || !slices.Contains(rows[1].ScopeViolations, "@GIT_BINDING_TAMPERED") {
 		t.Fatalf("unexpected batch rc=%d json=%s", rc, string(raw))
@@ -237,11 +239,9 @@ func TestMidStreamQuotaAbortAndLine(t *testing.T) {
 	setEnvs(t, map[string]string{"ROUTER_HUD_DIR": filepath.Join(tmp, "hud"), "AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "0"})
 	defer func(p float64) { stallIdleSec = p }(stallIdleSec)
 	stallIdleSec = 0.3
-	for _, tc := range [][4]string{
+	for _, tc := range [][4]string{{"ok.sh", "devin-fast", "echo 'Handled HTTP 429 retry cleanly.'", "HTTP 429"},
 		{"h.sh", "mcode", "echo '{\"error\":\"insufficient_quota\"}'\nsleep 30", "insufficient_quota"},
-		{"st.sh", "mcode", "echo '{\"type\":\"content_block_delta\",\"delta\":{\"text\":\"x\"}}'\nsleep 30", "stream stalled"},
-		{"ok.sh", "devin-fast", "echo 'Handled HTTP 429 retry cleanly.'", "HTTP 429"},
-	} {
+		{"st.sh", "mcode", "echo '{\"delta\":{\"text\":\"x\"}}'\nsleep 30", "stream stalled"}} {
 		p := filepath.Join(tmp, tc[0])
 		_ = os.WriteFile(p, []byte("#!/usr/bin/env bash\n"+tc[2]+"\n"), 0o755)
 		if r := ExecuteOnce(ExecReq{Provider: tc[1], CLIPath: p, Prompt: "hi", Worktree: tmp, SlotDir: tmp,

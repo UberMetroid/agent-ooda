@@ -25,7 +25,7 @@ func UsageErr(format string, args ...any) error {
 }
 
 const (
-	Version             = "2.4.1"
+	Version             = "2.4.2"
 	QuotaSchemaVersion  = 9
 	CornerWindowSecs    = 5400
 	SoonWakeSecs        = 2700
@@ -33,6 +33,8 @@ const (
 	McodeMaxPar         = 4
 	DefaultJobs         = 4
 	MaxJobs             = 8
+	MaxParallelCap      = 32
+	MaxHoursCap         = 1080.0
 	DefaultTimeout      = 480
 	ReviewTimeout       = 240
 	DefaultAgyOpusModel = "claude-opus-5-5-high"

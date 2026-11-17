@@ -43,10 +43,13 @@ func walkRepoFiles(root string, goOnly bool) []string {
 		if err != nil {
 			return nil
 		}
-		if d.IsDir() {
-			if skipWalkDirs[d.Name()] {
+		if skipWalkDirs[d.Name()] {
+			if d.IsDir() {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+		if d.IsDir() {
 			return nil
 		}
 		if !goOnly || strings.HasSuffix(p, ".go") {

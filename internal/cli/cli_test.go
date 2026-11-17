@@ -198,12 +198,21 @@ func TestSingleTaskScopeAndReject(t *testing.T) {
 }
 
 func TestSkippedReviewFailsClosed(t *testing.T) {
-	_, _, binDir, _ := setupCLIEnv(t)
+	_, _, binDir, run := setupCLIEnv(t)
 	writeExecFile(t, binDir, "grok", "echo 'package a\nvar Y = 1' > a.go\necho '{\"content\":\"edited\"}'\n")
 	var out, errB bytes.Buffer
 	if rc := RunCLI("router", []string{"--task", "edit", "--lane", "grok", "--files", "a.go"}, &out, &errB); rc != 1 ||
 		!strings.Contains(out.String(), "[review verdict: SKIPPED]") {
 		t.Fatalf("expected SKIPPED review fail-closed exit 1, got rc=%d out=%q err=%q", rc, out.String(), errB.String())
+	}
+	for _, bad := range [][]string{
+		{"--disable", "grok", "--hours", "NaN"}, {"--disable", "grok", "--hours", "+Inf"},
+		{"--disable", "grok", "--hours", "0"}, {"--set-cycle", "grok", "--cost-budget", "NaN"},
+		{"--set-cycle", "devin-fast", "--max-parallel", "100000"},
+	} {
+		if rc, _, errS := run(bad...); rc != 2 {
+			t.Fatalf("expected exit 2 for %v, got rc=%d err=%q", bad, rc, errS)
+		}
 	}
 }
 

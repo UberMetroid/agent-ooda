@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -69,15 +70,17 @@ func takeArg(argv []string, idx *int, hasEq bool, eqVal, flag string) (string, e
 func applyNumFlag(opts *CLIOpts, name, val string) error {
 	if name == "--hours" || name == "--cost-budget" {
 		f, err := strconv.ParseFloat(val, 64)
-		if err != nil {
-			return fleet.UsageErr("error: %s: invalid number %q", name, val)
+		if err != nil || math.IsNaN(f) || math.IsInf(f, 0) || f < 0 ||
+			(name == "--hours" && f > fleet.MaxHoursCap) || (name == "--cost-budget" && f > 1e6) {
+			return fleet.UsageErr("error: %s: invalid or out-of-range number %q", name, val)
 		}
 		*map[string]**float64{"--hours": &opts.Hours, "--cost-budget": &opts.CostBudget}[name] = &f
 		return nil
 	}
 	n, err := strconv.Atoi(val)
-	if err != nil {
-		return fleet.UsageErr("error: %s: invalid integer %q", name, val)
+	if err != nil || ((name == "--max-parallel" || name == "--token-budget") && n < 0) ||
+		(name == "--max-parallel" && n > fleet.MaxParallelCap) {
+		return fleet.UsageErr("error: %s: invalid or out-of-range integer %q", name, val)
 	}
 	switch name {
 	case "--jobs", "-j", "--slots":

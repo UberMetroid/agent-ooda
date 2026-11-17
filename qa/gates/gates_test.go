@@ -30,6 +30,7 @@ func padGoLines(pkg string, n int) string {
 func TestPortableAndLineCapGates(t *testing.T) {
 	root := t.TempDir()
 	writeGateFile(t, filepath.Join(root, "go.mod"), "module example.invalid/clean\n\ngo 1.22\n")
+	writeGateFile(t, filepath.Join(root, ".git"), "gitdir: /"+"home/alice/x\n")
 	writeGateFile(t, filepath.Join(root, "internal", "p", "ok.go"), padGoLines("p", 16))
 	if v := checkPortable(root); len(v) != 0 {
 		t.Fatalf("clean repo failed portable: %v", v)

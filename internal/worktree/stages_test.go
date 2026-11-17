@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -182,6 +183,67 @@ func TestStageRefusalsAndPAYG(t *testing.T) {
 			var ee *fleet.ExitError
 			if !errors.As(err, &ee) || ee.Code != 2 {
 				t.Fatalf("expected ExitError(2) for %+v, got %v", bad, err)
+			}
+		}
+	}
+}
+
+func TestManifestBoundsAndSkillEscape(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", filepath.Join(tmp, "home"))
+	t.Setenv("AGENT_OODA_PLUGIN_ROOT", filepath.Join(tmp, "plug"))
+	_ = os.MkdirAll(filepath.Join(tmp, "home"), 0o755)
+
+	m1 := filepath.Join(tmp, "many.json")
+	var sb strings.Builder
+	sb.WriteString(`{"tasks":[{"id":"t0","prompt":"p"}`)
+	for i := 1; i < 65; i++ {
+		sb.WriteString(`,{"id":"t` + strconv.Itoa(i) + `","prompt":"p"}`)
+	}
+	sb.WriteString(`]}`)
+	if err := os.WriteFile(m1, []byte(sb.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadManifest(m1); err == nil {
+		t.Fatal("expected manifest task-count refusal")
+	}
+
+	m2 := filepath.Join(tmp, "big.json")
+	big := `{"tasks":[{"id":"big","prompt":"` + strings.Repeat("x", (1<<20)+4096) + `"}]}`
+	if err := os.WriteFile(m2, []byte(big), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadManifest(m2); err == nil {
+		t.Fatal("expected manifest byte-size refusal")
+	}
+
+	outside := filepath.Join(tmp, "outside")
+	skillMD := "---\nname: esc\ndescription: Escaped skill\n---\nbody\n"
+	_ = os.MkdirAll(filepath.Join(outside, "dir", "esc"), 0o755)
+	_ = os.WriteFile(filepath.Join(outside, "outside.md"), []byte(skillMD), 0o644)
+	_ = os.WriteFile(filepath.Join(outside, "dir", "esc", "SKILL.md"), []byte(skillMD), 0o644)
+
+	ws := filepath.Join(tmp, "ws")
+	escDir := filepath.Join(ws, ".agents", "skills", "esc")
+	_ = os.MkdirAll(escDir, 0o755)
+	if err := os.Symlink(filepath.Join(outside, "outside.md"),
+		filepath.Join(escDir, "SKILL.md")); err != nil {
+		t.Fatal(err)
+	}
+	ws2 := filepath.Join(tmp, "ws2")
+	_ = os.MkdirAll(filepath.Join(ws2, ".agents"), 0o755)
+	if err := os.Symlink(filepath.Join(outside, "dir"),
+		filepath.Join(ws2, ".agents", "skills")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := LoadSkillBlocks([]string{"esc"}, ws); err == nil {
+		t.Fatal("expected escaped SKILL.md refusal")
+	}
+	for _, w := range []string{ws, ws2} {
+		for _, m := range DiscoverSkills(w) {
+			if m.Name == "esc" {
+				t.Fatalf("DiscoverSkills(%s) leaked escaped skill", w)
 			}
 		}
 	}

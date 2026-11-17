@@ -24,45 +24,46 @@ type BuiltCmd struct {
 	PromptFile, VibeExportDir, StreamFmt string
 }
 
-var roStripPrefixes = []string{
-	"ANTIGRAVITY_", "GH_TOKEN=", "GITHUB_TOKEN=", "GITLAB_TOKEN=", "GL_TOKEN=",
-	"NPM_TOKEN=", "PYPI_API_TOKEN=", "CARGO_REGISTRY_TOKEN=", "AWS_SECRET_ACCESS_KEY=",
-	"AWS_SESSION_TOKEN=", "AZURE_CLIENT_SECRET=", "GOOGLE_APPLICATION_CREDENTIALS=", "GCP_",
-	"KUBECONFIG=", "SSH_AUTH_SOCK=", "DATABASE_URL=", "PGPASSWORD=", "REDIS_URL=",
-	"OPENAI_API_KEY=", "GEMINI_API_KEY=", "GOOGLE_API_KEY=", "ANTHROPIC_API_KEY=", "CLAUDE_",
+var roEnvExact = strings.Fields("PATH HOME USER LOGNAME SHELL TMPDIR TEMP TMP TZ LANG TERM " +
+	"NO_COLOR COLORTERM SSL_CERT_FILE SSL_CERT_DIR CURL_CA_BUNDLE NODE_EXTRA_CA_CERTS " +
+	"HTTPS_PROXY HTTP_PROXY NO_PROXY https_proxy http_proxy no_proxy GOROOT GOPATH GOMODCACHE " +
+	"GOCACHE CARGO_HOME RUSTUP_HOME VIRTUAL_ENV NVM_DIR PYTHONPATH NODE_OPTIONS " +
+	"SYSTEMROOT WINDIR COMSPEC APPDATA LOCALAPPDATA USERPROFILE")
+
+var roEnvProv = map[string][]string{
+	"grok": {"XAI_API_KEY", "GROK_"}, "mcode": {"MINIMAX_"},
+	"mistral": {"MISTRAL_", "ZAI_", "VIBE_"}, "muse": {"MUSE_"},
 }
 
 func childEnv(depth int, prov string, readOnly bool) []string {
-	var strip []string
+	exact, pfxs := map[string]bool{}, append([]string{"LC_", "XDG_"}, roEnvProv[prov]...)
 	if readOnly {
-		strip = append(strip, roStripPrefixes...)
-		if prov != "grok" {
-			strip = append(strip, "XAI_API_KEY=")
+		for _, k := range roEnvExact {
+			exact[k] = true
 		}
-		if prov != "mcode" {
-			strip = append(strip, "MINIMAX_")
+		if strings.HasPrefix(prov, "devin-") {
+			pfxs = append(pfxs, "DEVIN_")
 		}
-		if prov != "mistral" {
-			strip = append(strip, "MISTRAL_API_KEY=", "ZAI_API_KEY=")
+	}
+	hasPfx := func(k string) bool {
+		for _, p := range pfxs {
+			if (strings.HasSuffix(p, "_") && strings.HasPrefix(k, p)) || k == p {
+				return true
+			}
 		}
-		if !strings.HasPrefix(prov, "devin-") {
-			strip = append(strip, "DEVIN_")
-		}
+		return false
 	}
 	var out []string
 	for _, kv := range os.Environ() {
-		skip := strings.HasPrefix(kv, "ROUTER_DEPTH=") || strings.HasPrefix(kv, "AGENT_OODA_DEPTH=") ||
-			strings.HasPrefix(kv, "GIT_TERMINAL_PROMPT=") ||
-			(prov == "agy-opus" && strings.HasPrefix(kv, "ANTIGRAVITY_"))
-		for _, pfx := range strip {
-			if strings.HasPrefix(kv, pfx) {
-				skip = true
-				break
+		if readOnly {
+			if k, _, _ := strings.Cut(kv, "="); !exact[k] && !hasPfx(k) {
+				continue
 			}
+		} else if strings.HasPrefix(kv, "ROUTER_DEPTH=") || strings.HasPrefix(kv, "AGENT_OODA_DEPTH=") ||
+			strings.HasPrefix(kv, "GIT_TERMINAL_PROMPT=") || (prov == "agy-opus" && strings.HasPrefix(kv, "ANTIGRAVITY_")) {
+			continue
 		}
-		if !skip {
-			out = append(out, kv)
-		}
+		out = append(out, kv)
 	}
 	return append(out, fmt.Sprintf("ROUTER_DEPTH=%d", depth),
 		fmt.Sprintf("AGENT_OODA_DEPTH=%d", depth), "GIT_TERMINAL_PROMPT=0")

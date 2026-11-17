@@ -190,6 +190,7 @@ func CountActiveLeases(provider string, maxPar int) int {
 	if maxPar <= 0 {
 		return 0
 	}
+	maxPar = min(maxPar, MaxParallelCap)
 	ldir, busy := leaseDir(), 0
 	for i := 0; i < maxPar; i++ {
 		path := filepath.Join(ldir, fmt.Sprintf("%s-%d.lock", SafeID(provider), i))
@@ -213,6 +214,7 @@ func AcquireParallelLease(provider string, maxPar int, blocking bool, timeoutSec
 	if maxPar <= 0 {
 		return nil, false, nil
 	}
+	maxPar = min(maxPar, MaxParallelCap)
 	if blocking && timeoutSec <= 0 {
 		timeoutSec = DefaultTimeout
 	}

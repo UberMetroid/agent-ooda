@@ -74,7 +74,7 @@ on any `gemini*`/`orchestrator*` worker model and block recursive execution (`ag
 `--task`, `--review`, `--probe`, `--cleanup`, `--enable`, `--disable`, `--set-cycle`) whenever
 `AGENT_OODA_DEPTH>=1` or `ROUTER_DEPTH>=1`.
 
-**Stage clocks & Per-Stage OODA Routing (`v2.4.1`):**
+**Stage clocks & Per-Stage OODA Routing (`v2.4.2`):**
 
 - **Per-Stage Matrix (`observe`, `orient`, `act`, `verify`):** Each worker stage defaults to `auto` (`Decide` remains with you and the top-level orchestrator) and resolves via **`CLI flag > --local > --profile > global > auto`**. CLI `--lane`/`--model`/`--effort` target the primary command stage (`--recon`, `--orient`, `--task`, or standalone `--review`); post-task `verify` follows `--local`/`--profile`/global pins so `--task` worker flags never leak onto the off-family reviewer.
 - **Soft-Pin Failover & Off-Family Verify:** Pinned stages soft-failover on 429s/cooldown down their lane CSV or quota-aware `auto`, scrubbing primary-lane `--model`/`--effort` overrides when failing over to another lane (and never falling back onto `devin-fusion` credits or PAYG `muse`); `verify` always enforces a non-authoring model family.

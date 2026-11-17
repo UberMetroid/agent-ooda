@@ -3,6 +3,7 @@ package worktree
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path"
 	"strconv"
@@ -12,6 +13,11 @@ import (
 )
 
 var ignoredCacheDirs = []string{".pytest_cache", ".ruff_cache", ".mypy_cache"}
+
+const (
+	MaxManifestBytes = 1 << 20
+	MaxManifestTasks = 64
+)
 
 // TaskSpec represents a single manifest task entry.
 type TaskSpec struct {
@@ -173,9 +179,24 @@ func validateTask(t TaskSpec, seen map[string]bool, owners map[string]string) er
 
 // LoadManifest reads and validates [], {tasks: []}, or {subtasks: []} JSON.
 func LoadManifest(filePath string) ([]TaskSpec, error) {
-	raw, err := os.ReadFile(filePath)
+	st, err := os.Stat(filePath)
 	if err != nil {
 		return nil, fleet.UsageErr("error: cannot read manifest %s: %v", filePath, err)
+	}
+	if !st.Mode().IsRegular() {
+		return nil, fleet.UsageErr("error: manifest %s is not a regular file", filePath)
+	}
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, fleet.UsageErr("error: cannot read manifest %s: %v", filePath, err)
+	}
+	raw, rerr := io.ReadAll(io.LimitReader(f, MaxManifestBytes+1))
+	_ = f.Close()
+	if rerr != nil {
+		return nil, fleet.UsageErr("error: cannot read manifest %s: %v", filePath, rerr)
+	}
+	if len(raw) > MaxManifestBytes {
+		return nil, fleet.UsageErr("error: manifest %s exceeds %d bytes", filePath, MaxManifestBytes)
 	}
 	trimmed := strings.TrimSpace(string(raw))
 	var tasks []TaskSpec
@@ -199,6 +220,9 @@ func LoadManifest(filePath string) ([]TaskSpec, error) {
 		return nil, fleet.UsageErr(
 			"error: manifest must be a non-empty JSON list (or {tasks/subtasks: [...]})",
 		)
+	}
+	if len(tasks) > MaxManifestTasks {
+		return nil, fleet.UsageErr("error: manifest %s exceeds %d tasks", filePath, MaxManifestTasks)
 	}
 	seen := make(map[string]bool)
 	owners := make(map[string]string)

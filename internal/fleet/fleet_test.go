@@ -3,6 +3,7 @@ package fleet
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -70,21 +71,15 @@ func TestResetTSAndMigrate(t *testing.T) {
 		DefaultFallbackChain: []string{"cursor", "agy-opus", "muse"},
 		Providers: map[string]*ProviderConfig{
 			"cursor": {CLI: "cursor"},
-			"mcode":  {CLI: "mcode", Tier: "unlimited"},
-			"muse": {
-				CLI: "muse", Tier: "capped", Status: "cooldown",
-				CooldownUntil: &wake, CycleHours: Ptr(5.0),
-			},
+			"mcode":  {CLI: "mcode", Tier: "unlimited", MaxParallel: Ptr(99999)},
+			"muse":   {CLI: "muse", Tier: "capped", Status: "cooldown", CooldownUntil: &wake, CycleHours: Ptr(5.0)},
 		},
 	}
-	if !MigrateQuota(q) {
-		t.Fatal("expected MigrateQuota to report changes")
-	}
-	if q.Version != QuotaSchemaVersion || q.Providers["cursor"] != nil {
+	if !MigrateQuota(q) || q.Version != QuotaSchemaVersion || q.Providers["cursor"] != nil {
 		t.Fatalf("unexpected migration result: version=%d", q.Version)
 	}
-	if q.Providers["mcode"].Tier != "high-cap" || q.Providers["mcode"].MaxParallel == nil {
-		t.Fatalf("mcode upgrade failed: %+v", q.Providers["mcode"])
+	if mp := q.Providers["mcode"].MaxParallel; q.Providers["mcode"].Tier != "high-cap" || mp == nil || *mp > 32 {
+		t.Fatalf("mcode upgrade/clamp failed: %+v", q.Providers["mcode"])
 	}
 	if q.Providers["muse"].Status != "cooldown" || q.Providers["muse"].CooldownUntil == nil {
 		t.Fatalf("expected active future cooldown preserved: %+v", q.Providers["muse"])
@@ -96,11 +91,15 @@ func TestUsageBudgetsAndLock(t *testing.T) {
 	if _, _, err := ConfigureCycle(CyclePatch{Provider: "grok", TokenBudget: Ptr(50), QuotaPath: qPath}); err != nil {
 		t.Fatalf("ConfigureCycle failed: %v", err)
 	}
-	_, _, err := ConfigureCycle(CyclePatch{
+	if _, _, err := ConfigureCycle(CyclePatch{
 		Provider: "agy-opus", Model: Ptr("gemini-4-argon-low"), QuotaPath: qPath,
-	})
-	if err == nil {
+	}); err == nil {
 		t.Fatal("expected ConfigureCycle to block gemini model")
+	}
+	if nan := math.NaN(); true {
+		if _, _, err := SetProviderStatus("grok", "cooldown", "m", &nan, false, qPath); err == nil {
+			t.Fatal("expected SetProviderStatus to reject NaN hours")
+		}
 	}
 	var wg sync.WaitGroup
 	for i := 0; i < 6; i++ {

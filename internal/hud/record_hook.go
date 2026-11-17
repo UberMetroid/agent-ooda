@@ -168,11 +168,21 @@ func handleHookEvent(payload map[string]any) {
 	_ = fleet.AtomicWriteJSON(filepath.Join(base, "current_session.json"), ptr, true, true)
 }
 
+const maxHudStdinBytes = 1 << 20
+
+func readBoundedStdin(r io.Reader) (string, bool) {
+	b, err := io.ReadAll(io.LimitReader(r, maxHudStdinBytes+1))
+	if err != nil || len(b) > maxHudStdinBytes {
+		return "", false
+	}
+	return string(b), true
+}
+
 // HandleHookStdin processes one hook event from r and writes "{}\n" to w.
 func HandleHookStdin(r io.Reader, w io.Writer) {
 	if fleet.RouterDepth() < 1 {
-		if raw, err := io.ReadAll(r); err == nil {
-			s := strings.TrimSpace(string(raw))
+		if raw, ok := readBoundedStdin(r); ok {
+			s := strings.TrimSpace(raw)
 			var payload map[string]any
 			if s != "" && json.Unmarshal([]byte(s), &payload) == nil && payload != nil {
 				handleHookEvent(payload)

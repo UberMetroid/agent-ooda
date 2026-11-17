@@ -78,40 +78,21 @@ func TestStatusLineTelemetryANSI(t *testing.T) {
 	t.Setenv("ROUTER_HUD_DIR", hudDir)
 	t.Setenv("NO_COLOR", "1")
 	now := 1000.0
-	cases := []struct {
+	for _, tc := range []struct {
 		workers []dispatch.WorkerMarker
 		want    string
 	}{
-		{
-			[]dispatch.WorkerMarker{{
-				Mode: "act", Lane: "mcode", Model: "minimax/MiniMax-M3.1-Flash",
-				Phase: "stream", TokS: 118, UpdatedAt: 999.0, StartedAt: 995.0,
-			}},
-			"▸ act · mcode (MiniMax-M3.1-Flash) · ~118 tok/s",
-		},
-		{
-			[]dispatch.WorkerMarker{{
-				Mode: "act", Model: "minimax/MiniMax-M3.1-Flash",
-				Phase: "stream", TokS: 118, TokExact: true, UpdatedAt: 999.0, StartedAt: 995.0,
-			}},
-			"▸ act · MiniMax-M3.1-Flash · 118 tok/s",
-		},
-		{
-			[]dispatch.WorkerMarker{{
-				Mode: "act", Model: "swe-2-flash-max",
-				Phase: "tool", StartedAt: 992.0, UpdatedAt: 999.0,
-			}},
-			"▸ act · swe-2-flash-max · tool 8s",
-		},
-		{
-			[]dispatch.WorkerMarker{{
-				Mode: "act", Model: "swe-2-flash-max",
-				Phase: "wait", StartedAt: 994.0, UpdatedAt: 994.0,
-			}},
-			"▸ act · swe-2-flash-max · 6s",
-		},
-	}
-	for _, tc := range cases {
+		{[]dispatch.WorkerMarker{{Mode: "act", Lane: "mcode", Model: "minimax/MiniMax-M3.1-Flash",
+			Phase: "stream", TokS: 118, UpdatedAt: 999.0, StartedAt: 995.0}},
+			"▸ act · mcode (MiniMax-M3.1-Flash) · ~118 tok/s"},
+		{[]dispatch.WorkerMarker{{Mode: "act", Model: "minimax/MiniMax-M3.1-Flash",
+			Phase: "stream", TokS: 118, TokExact: true, UpdatedAt: 999.0, StartedAt: 995.0}},
+			"▸ act · MiniMax-M3.1-Flash · 118 tok/s"},
+		{[]dispatch.WorkerMarker{{Mode: "act", Model: "swe-2-flash-max",
+			Phase: "tool", StartedAt: 992.0, UpdatedAt: 999.0}}, "▸ act · swe-2-flash-max · tool 8s"},
+		{[]dispatch.WorkerMarker{{Mode: "act", Model: "swe-2-flash-max",
+			Phase: "wait", StartedAt: 994.0, UpdatedAt: 994.0}}, "▸ act · swe-2-flash-max · 6s"},
+	} {
 		setTestWorkers(t, hudDir, tc.workers)
 		if got := RenderStatusLine("{}", true, &now, nil); got != tc.want {
 			t.Fatalf("got %q, want %q", got, tc.want)
@@ -240,5 +221,36 @@ func TestSanitizeTerminalEscapes(t *testing.T) {
 		if strings.Contains(line, bad) {
 			t.Fatalf("HUD output leaked terminal escape %q: %q", bad, line)
 		}
+	}
+}
+
+func TestBoundedHudAndHookStdin(t *testing.T) {
+	hudDir := filepath.Join(t.TempDir(), "hud")
+	for k, v := range map[string]string{"ROUTER_HUD_DIR": hudDir, "NO_COLOR": "1",
+		"AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "0"} {
+		t.Setenv(k, v)
+	}
+	bigPad := strings.Repeat("x", (1<<20)+4096)
+	var hkOut bytes.Buffer
+	HandleHookStdin(strings.NewReader(`{"conversationId":"big","modelName":"claude-opus-5-5-high","pad":"`+
+		bigPad+`"}`), &hkOut)
+	if _, err := os.Stat(filepath.Join(hudDir, "current_session.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected oversized hook stdin to skip writing session state")
+	}
+	inR, inW, _ := os.Pipe()
+	outR, outW, _ := os.Pipe()
+	oldIn, oldOut := os.Stdin, os.Stdout
+	os.Stdin, os.Stdout = inR, outW
+	defer func() { os.Stdin, os.Stdout = oldIn, oldOut }()
+	go func() {
+		defer inW.Close()
+		_, _ = inW.WriteString(`{"agent_state":"working","cycle_mode":"plan","pad":"` + bigPad + `"}`)
+	}()
+	RunStatusLine()
+	_ = outW.Close()
+	var capBuf bytes.Buffer
+	_, _ = capBuf.ReadFrom(outR)
+	if strings.TrimSpace(capBuf.String()) != "OODA" {
+		t.Fatalf("expected oversized statusLine stdin to fall back to OODA, got %q", capBuf.String())
 	}
 }
