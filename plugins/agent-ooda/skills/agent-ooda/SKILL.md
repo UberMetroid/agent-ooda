@@ -89,7 +89,7 @@ overridable via `AGENT_OODA_QUOTA_FILE`), and `--local` per-repo stage pins pers
 `~/.local/state/agent-ooda/workspaces/<id>.json` (surviving `agent-ooda --cleanup`). HUD markers and `flock`
 leases live in `/tmp/agent-ooda-hud` (`AGENT_OODA_HUD_DIR`).
 
-### Per-Stage OODA Routing Matrix & 3 Selector Surfaces (`v2.3.1`)
+### Per-Stage OODA Routing Matrix & 3 Selector Surfaces (`v2.4.0`)
 Each worker OODA stage (`observe`, `orient`, `act`, `verify`) defaults to `auto` (`Decide` stays with the user /
 top-level orchestrator) and resolves via: **`CLI flag > --local > --profile > global > auto`**.
 - **Soft Pin Failover:** When a stage's primary pinned lane hits a 429/cooldown or is omitted, execution fails over

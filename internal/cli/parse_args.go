@@ -20,8 +20,8 @@ type CLIOpts struct {
 	Jobs                                                        int
 	Hours, CostBudget                                           *float64
 	TokenBudget, MaxParallel                                    *int
-	LaneSet, NoStripe, NoPivot, NoReview, NoCache, Status       bool
-	Discover, Usage, Probe, AutoWake, ResetNow, Select, Local   bool
+	LaneSet, Stripe, NoStripe, NoPivot, NoReview, NoCache, Status bool
+	Discover, Usage, Probe, AutoWake, ResetNow, Select, Local     bool
 	ResetStages, UntilReset, Cleanup, Help, Version             bool
 }
 
@@ -45,7 +45,7 @@ func usageText(prog string) string {
 			"  --model / --effort     override worker model id or reasoning effort\n"+
 			"  --timeout DUR          per-task timeout (e.g. 120s, 8m)\n"+
 			"  -j, --jobs, --slots N  max parallel workers for manifest mode (default %d, max %d)\n"+
-			"  --no-stripe/--no-pivot/--no-review/--no-cache  striping, pivot, verify, read-only cache\n"+
+			"  --stripe/--no-stripe/--no-pivot/--no-review/--no-cache  stripe opt-in, pivot, verify, cache\n"+
 			"  --status/--discover/--usage/--probe  stage matrix, fleet, CLI cache, telemetry, canary\n"+
 			"  --set-stage S=L / --reset-stages  pin stage (or preset=NAME); modifiers: --local, --until-reset\n"+
 			"  --enable/--disable/--set-cycle P  quota/cycle admin (--auto-wake, --reason, --hours,\n"+
@@ -126,8 +126,8 @@ func applyStrFlag(opts *CLIOpts, name, val string) error {
 
 func applyBoolFlag(opts *CLIOpts, name string) bool {
 	m := map[string]*bool{
-		"--no-stripe": &opts.NoStripe, "--no-pivot": &opts.NoPivot, "--no-review": &opts.NoReview,
-		"--status": &opts.Status, "--discover": &opts.Discover, "--usage": &opts.Usage,
+		"--stripe": &opts.Stripe, "--no-stripe": &opts.NoStripe, "--no-pivot": &opts.NoPivot,
+		"--no-review": &opts.NoReview, "--status": &opts.Status, "--discover": &opts.Discover, "--usage": &opts.Usage,
 		"--probe": &opts.Probe, "--auto-wake": &opts.AutoWake, "--reset-now": &opts.ResetNow,
 		"--cleanup": &opts.Cleanup, "-s": &opts.Select, "--select": &opts.Select, "--no-cache": &opts.NoCache,
 		"--reset-stages": &opts.ResetStages, "--local": &opts.Local, "--until-reset": &opts.UntilReset,

@@ -53,130 +53,145 @@ func formatWorkerMetric(w dispatch.WorkerMarker, now float64, pal Palette, useCo
 	return ""
 }
 
-func aggregateRateMetric(workers []dispatch.WorkerMarker, now float64, pal Palette, useColor bool) string {
-	var sum float64
-	active := false
-	for _, w := range workers {
-		if w.Phase == "stream" && (now-w.UpdatedAt) <= 3.0 && w.TokS >= 1 {
-			sum += w.TokS
-			active = true
-		}
+func formatAgentLabel(lane, model string, compact bool) string {
+	sm := HudShortModel(model)
+	ln := strings.TrimSpace(SanitizePlain(lane))
+	if !compact && ln != "" && sm != "" && sm != "-" && !strings.EqualFold(ln, sm) {
+		return ln + " (" + sm + ")"
 	}
-	if active && sum >= 1 {
-		return Colorize(fmt.Sprintf("~%d tok/s", int(math.Round(sum))), pal.TokColor(sum), useColor)
+	if sm != "" && sm != "-" {
+		return sm
 	}
-	return ""
+	return ln
 }
 
-func buildLeftSegment(
-	workers []dispatch.WorkerMarker, last *dispatch.LastRunMarker,
-	thinking, useColor bool, pal Palette, dot string, now float64,
+func renderWorkersLines(
+	workers []dispatch.WorkerMarker, useColor bool, pal Palette, dot string, now float64, maxW int,
 ) string {
-	if len(workers) == 1 {
-		w := workers[0]
+	lim := min(8, len(workers))
+	lines := make([]string, 0, lim)
+	for _, w := range workers[:lim] {
 		spin := WorkerSpin(w.Phase, w.TokS, now)
 		step, stepCol, modCol := stepStyle(w.Mode, pal)
-		out := Colorize(spin+" "+step, stepCol, useColor) + dot +
-			Colorize(HudShortModel(w.Model), modCol, useColor)
-		if metric := formatWorkerMetric(w, now, pal, useColor); metric != "" {
-			out += dot + metric
-		}
-		return out
-	}
-	if len(workers) >= 2 {
-		allObs, aggTok, spinPhase := true, 0.0, workers[0].Phase
-		for _, w := range workers {
-			if w.Mode != "observe" && w.Mode != "recon" {
-				allObs = false
+		build := func(compact bool) string {
+			lbl := formatAgentLabel(w.Lane, w.Model, compact)
+			out := Colorize(spin+" "+step, stepCol, useColor)
+			if lbl != "" {
+				out += dot + Colorize(lbl, modCol, useColor)
 			}
-			aggTok += w.TokS
-			if w.Phase == "stream" {
-				spinPhase = "stream"
+			if metric := formatWorkerMetric(w, now, pal, useColor); metric != "" {
+				out += dot + metric
 			}
+			return out
 		}
-		spin := WorkerSpin(spinPhase, aggTok, now)
-		step, stepCol, modCol := fmt.Sprintf("act ×%d", len(workers)), pal.Act, pal.ActMod
-		if allObs {
-			step, stepCol, modCol = fmt.Sprintf("observe ×%d", len(workers)), pal.Observe, pal.ObserveMod
+		ln := build(false)
+		if VisibleLen(ln) > maxW && w.Lane != "" {
+			ln = build(true)
 		}
-		lim := min(3, len(workers))
-		mods := make([]string, lim)
-		for i := 0; i < lim; i++ {
-			mods[i] = HudShortModel(workers[i].Model)
-		}
-		modStr := strings.Join(mods, ", ")
-		if len(workers) > 3 {
-			modStr += ", …"
-		}
-		out := Colorize(spin+" "+step, stepCol, useColor) + dot + Colorize(modStr, modCol, useColor)
-		if agg := aggregateRateMetric(workers, now, pal, useColor); agg != "" {
-			out += dot + agg
-		}
-		return out
+		lines = append(lines, TruncateANSI(ln, maxW))
 	}
-	if thinking {
-		return Colorize(OrientSpin(now)+" orient/decide", pal.Orient, useColor)
-	}
-	if last != nil {
-		step, _, _ := stepStyle(last.Mode, pal)
-		if last.ExitCode == 0 {
-			return Colorize("✓ "+step, pal.FleetFull, useColor) + dot +
-				Colorize(HudShortModel(last.Model), pal.Muted, useColor) +
-				dot + Colorize(fmt.Sprintf("%.1fs", last.DurationS), pal.Muted, useColor)
-		}
-		return Colorize("✗ "+step, pal.FleetLow, useColor) + dot +
-			Colorize(HudShortModel(last.Model), pal.Muted, useColor) +
-			dot + Colorize(fmt.Sprintf("exit %d", last.ExitCode), pal.FleetLow, useColor)
-	}
-	return Colorize("○", pal.IdleIcon, useColor) + " " + Colorize("agent-ooda", pal.IdleText, useColor)
+	return strings.Join(lines, "\n")
 }
 
-func buildLine(
-	left string, skills []string, sum FleetSummary, useColor, includeWake bool, pal Palette,
+func renderSubagents(data map[string]any, useColor bool, pal Palette, dot string, now float64, maxW int) string {
+	raw, ok := data["subagents"].([]any)
+	if !ok {
+		return ""
+	}
+	var lines []string
+	for _, item := range raw {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		st, _ := m["status"].(string)
+		if !strings.EqualFold(strings.TrimSpace(st), "running") {
+			continue
+		}
+		name, _ := m["name"].(string)
+		role, _ := m["role"].(string)
+		name = strings.TrimSpace(SanitizePlain(name))
+		lbl := name
+		if lbl == "" {
+			lbl = strings.TrimSpace(SanitizePlain(role))
+		}
+		step, stepCol, modCol := "act", pal.Act, pal.ActMod
+		if strings.EqualFold(name, "research") {
+			step, stepCol, modCol = "observe", pal.Observe, pal.ObserveMod
+		}
+		out := Colorize(WorkerSpin("tool", 0, now)+" "+step, stepCol, useColor)
+		if lbl != "" {
+			out += dot + Colorize(lbl, modCol, useColor)
+		}
+		lines = append(lines, TruncateANSI(out, maxW))
+		if len(lines) >= 8 {
+			break
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func orchestratorLine(
+	hudBase string, data map[string]any, useColor bool, pal Palette, dot string, now float64, maxW int,
 ) string {
-	fCol := pal.FleetPart
-	if sum.Total > 0 && sum.Active == sum.Total {
-		fCol = pal.FleetFull
-	} else if sum.Active <= 1 {
-		fCol = pal.FleetLow
+	stateStr, cycleMode, orchMod := "", "", ""
+	if s, _ := data["cycle_mode"].(string); strings.TrimSpace(s) != "" {
+		cycleMode = strings.ToLower(strings.TrimSpace(s))
 	}
-	sep := Colorize(" │ ", pal.Muted, useColor)
-	skSeg := ""
-	if len(skills) == 1 {
-		skSeg = sep + Colorize("skill "+skills[0], pal.Muted, useColor)
-	} else if len(skills) > 1 {
-		skSeg = sep + Colorize("skills "+strings.Join(skills, ", "), pal.Muted, useColor)
-	}
-	pinSeg := ""
-	if sum.Pins != "" {
-		pinSeg = sep + Colorize("pin "+sum.Pins, pal.Muted, useColor)
-	}
-	fleetSeg := Colorize(fmt.Sprintf("fleet %d/%d", sum.Active, sum.Total), fCol, useColor)
-	if includeWake && sum.WakeCD != "" {
-		fleetSeg += Colorize(" (next "+sum.WakeCD+")", pal.Muted, useColor)
-	}
-	return left + skSeg + pinSeg + sep + fleetSeg
-}
-
-func agentThinking(data map[string]any) bool {
 	if ag, ok := data["agent"].(map[string]any); ok {
 		for _, k := range []string{"state", "status", "phase"} {
 			if s, _ := ag[k].(string); strings.TrimSpace(s) != "" {
-				return !idleStates[strings.ToLower(strings.TrimSpace(s))]
+				stateStr = strings.ToLower(strings.TrimSpace(s))
+				break
 			}
 		}
 	}
 	for _, k := range []string{"agent_state", "state"} {
-		if s, _ := data[k].(string); strings.TrimSpace(s) != "" {
-			return !idleStates[strings.ToLower(strings.TrimSpace(s))]
+		if s, _ := data[k].(string); stateStr == "" && strings.TrimSpace(s) != "" {
+			stateStr = strings.ToLower(strings.TrimSpace(s))
 		}
 	}
-	return false
+	confirmPending, _ := data["tool_confirmation_pending"].(bool)
+	if !confirmPending && (stateStr == "" || idleStates[stateStr]) {
+		return ""
+	}
+	switch mv := data["model"].(type) {
+	case string:
+		orchMod = mv
+	case map[string]any:
+		for _, k := range []string{"display_name", "id", "name"} {
+			if s, _ := mv[k].(string); strings.TrimSpace(s) != "" {
+				orchMod = s
+				break
+			}
+		}
+	}
+	sessMod, sessPhase, sessUpd := ReadSessionMeta(hudBase, data, now)
+	if orchMod == "" && sessMod != "" && sessUpd > 0 && (now-sessUpd) <= sessionTTLSecs {
+		orchMod = sessMod
+	}
+	recentSess := sessUpd > 0 && (now-sessUpd) >= -2
+	stage, spin, stepCol, modCol := "orient", OrientSpin(now), pal.Orient, pal.OrientMod
+	switch {
+	case confirmPending || stateStr == "reviewing" ||
+		(recentSess && sessPhase == "decide" && (stateStr == "tool_use" || (now-sessUpd) <= 30)):
+		stage = "decide"
+	case recentSess && sessPhase == "observe" && (stateStr == "tool_use" || (now-sessUpd) <= 15):
+		stage, spin, stepCol, modCol = "observe", WorkerSpin("tool", 0, now), pal.Observe, pal.ObserveMod
+	case cycleMode == "accept-edits" || cycleMode == "auto" ||
+		(recentSess && sessPhase == "act" && (stateStr == "tool_use" || (now-sessUpd) <= 15)):
+		stage, spin, stepCol, modCol = "act", WorkerSpin("tool", 0, now), pal.Act, pal.ActMod
+	}
+	out := Colorize(spin+" "+stage, stepCol, useColor)
+	if sm := HudShortModel(orchMod); sm != "" && sm != "-" {
+		out += dot + Colorize(sm, modCol, useColor)
+	}
+	return TruncateANSI(out, maxW)
 }
 
-// RenderStatusLine composes one width-bounded statusLine HUD line for rawInput JSON.
+// RenderStatusLine composes one width-bounded statusLine HUD output for rawInput JSON.
 func RenderStatusLine(
-	rawInput string, useColor bool, nowTS *float64, sumOverride *FleetSummary,
+	rawInput string, useColor bool, nowTS *float64, _ *FleetSummary,
 ) string {
 	if os.Getenv("NO_COLOR") != "" {
 		useColor = false
@@ -198,42 +213,35 @@ func RenderStatusLine(
 		now = *nowTS
 	}
 	hudBase := fleet.HudDirPath()
-	workers := LoadActiveWorkers(hudBase)
-	skills := CollectSkills(hudBase, data, workers, now)
 	pal := ResolvePalette(data, "")
-	var sum FleetSummary
-	if sumOverride != nil {
-		sum = *sumOverride
-	} else {
-		hudCwd := ResolveHudCwd(hudBase, data, workers, now)
-		sum = LoadFleetSummary(time.Now().UTC(), hudCwd)
+	dot := Colorize(" · ", pal.Muted, useColor)
+	if workers := LoadActiveWorkers(hudBase); len(workers) > 0 {
+		return renderWorkersLines(workers, useColor, pal, dot, now, maxWidth)
 	}
-	sum.Pins = strings.TrimSpace(SanitizePlain(sum.Pins))
-	sum.WakeCD = strings.TrimSpace(SanitizePlain(sum.WakeCD))
-	thinking := agentThinking(data)
-	var last *dispatch.LastRunMarker
-	if len(workers) == 0 && !thinking {
-		last = LoadRecentFinish(hudBase, now)
-	} else {
-		sum.Pins = ""
+	if sub := renderSubagents(data, useColor, pal, dot, now, maxWidth); sub != "" {
+		return sub
 	}
-	left := buildLeftSegment(workers, last, thinking, useColor, pal, Colorize(" · ", pal.Muted, useColor), now)
-	line := buildLine(left, skills, sum, useColor, true, pal)
-	if VisibleLen(line) > maxWidth && sum.Pins != "" {
-		sum.Pins = ""
-		line = buildLine(left, skills, sum, useColor, true, pal)
+	if orch := orchestratorLine(hudBase, data, useColor, pal, dot, now, maxWidth); orch != "" {
+		return orch
 	}
-	if VisibleLen(line) > maxWidth && sum.WakeCD != "" {
-		line = buildLine(left, skills, sum, useColor, false, pal)
+	last := LoadRecentFinish(hudBase, now)
+	if last == nil {
+		return ""
 	}
-	if VisibleLen(line) > maxWidth && len(skills) > 1 {
-		compact := []string{fmt.Sprintf("%s+%d", skills[0], len(skills)-1)}
-		line = buildLine(left, compact, sum, useColor, false, pal)
+	step, _, _ := stepStyle(last.Mode, pal)
+	lbl := formatAgentLabel(last.Lane, last.Model, false)
+	mark, stCol, tail := "✓ "+step, pal.FleetFull, Colorize(fmt.Sprintf("%.1fs", last.DurationS), pal.Muted, useColor)
+	if last.ExitCode != 0 {
+		mark, stCol, tail = "✗ "+step, pal.FleetLow, Colorize(fmt.Sprintf("exit %d", last.ExitCode), pal.FleetLow, useColor)
 	}
-	return TruncateANSI(line, maxWidth)
+	out := Colorize(mark, stCol, useColor)
+	if lbl != "" {
+		out += dot + Colorize(lbl, pal.Muted, useColor)
+	}
+	return TruncateANSI(out+dot+tail, maxWidth)
 }
 
-// RunStatusLine reads stdin JSON when piped and writes one HUD status line.
+// RunStatusLine reads stdin JSON when piped and writes HUD lines when active.
 func RunStatusLine() int {
 	raw := ""
 	if info, err := os.Stdin.Stat(); err == nil && (info.Mode()&os.ModeCharDevice) == 0 {
@@ -241,6 +249,8 @@ func RunStatusLine() int {
 			raw = string(b)
 		}
 	}
-	fmt.Println(RenderStatusLine(raw, true, nil, nil))
+	if out := RenderStatusLine(raw, true, nil, nil); out != "" {
+		fmt.Println(out)
+	}
 	return 0
 }

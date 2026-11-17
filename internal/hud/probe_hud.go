@@ -74,38 +74,17 @@ func LoadActiveWorkers(hudBase string) []dispatch.WorkerMarker {
 	return out
 }
 
-func extractStdinSkills(data map[string]any) []string {
-	raw, ok := data["skills"].([]any)
-	if !ok {
-		return nil
-	}
-	var out []string
-	for _, item := range raw {
-		switch x := item.(type) {
-		case string:
-			if s := strings.TrimSpace(x); s != "" {
-				out = append(out, s)
-			}
-		case map[string]any:
-			if s, _ := x["name"].(string); strings.TrimSpace(s) != "" {
-				out = append(out, strings.TrimSpace(s))
-			}
-		}
-	}
-	return out
-}
-
-func readSessionSkills(hudBase string, data map[string]any, now float64) []string {
+// ReadSessionMeta loads model_name, last_phase, and updated_at for the active conversation.
+func ReadSessionMeta(hudBase string, data map[string]any, now float64) (string, string, float64) {
 	convID := ""
-	for _, k := range []string{"conversation_id", "conversationId"} {
+	for _, k := range []string{"conversation_id", "conversationId", "session_id"} {
 		if s, _ := data[k].(string); strings.TrimSpace(s) != "" {
 			convID = strings.TrimSpace(s)
 			break
 		}
 	}
 	if convID == "" {
-		raw, err := os.ReadFile(filepath.Join(hudBase, "current_session.json"))
-		if err == nil {
+		if raw, err := os.ReadFile(filepath.Join(hudBase, "current_session.json")); err == nil {
 			var cur struct {
 				ConversationID string  `json:"conversation_id"`
 				UpdatedAt      float64 `json:"updated_at"`
@@ -116,44 +95,21 @@ func readSessionSkills(hudBase string, data map[string]any, now float64) []strin
 		}
 	}
 	if convID == "" {
-		return nil
+		return "", "", 0
 	}
 	raw, err := os.ReadFile(filepath.Join(hudBase, "sessions", fleet.SafeID(convID)+".json"))
 	if err != nil {
-		return nil
+		return "", "", 0
 	}
 	var sess struct {
-		Skills []string `json:"skills"`
+		ModelName string  `json:"model_name"`
+		LastPhase string  `json:"last_phase"`
+		UpdatedAt float64 `json:"updated_at"`
 	}
 	if json.Unmarshal(raw, &sess) != nil {
-		return nil
+		return "", "", 0
 	}
-	return sess.Skills
-}
-
-// CollectSkills merges stdin, session, and live-worker skills cleanly.
-func CollectSkills(
-	hudBase string, data map[string]any, workers []dispatch.WorkerMarker, now float64,
-) []string {
-	groups := [][]string{extractStdinSkills(data), readSessionSkills(hudBase, data, now)}
-	for _, w := range workers {
-		groups = append(groups, w.Skills)
-	}
-	seen := make(map[string]bool)
-	var merged []string
-	for _, g := range groups {
-		for _, s := range g {
-			name := strings.TrimSpace(SanitizePlain(s))
-			if name == "agent-router" {
-				name = "router"
-			}
-			if name != "" && !IgnoredSkills[name] && !seen[name] {
-				seen[name] = true
-				merged = append(merged, name)
-			}
-		}
-	}
-	return merged
+	return strings.TrimSpace(sess.ModelName), strings.TrimSpace(sess.LastPhase), sess.UpdatedAt
 }
 
 func readFleetProviders() (*fleet.QuotaState, bool) {

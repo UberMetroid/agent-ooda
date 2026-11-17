@@ -74,7 +74,7 @@ on any `gemini*`/`orchestrator*` worker model and block recursive execution (`ag
 `--task`, `--review`, `--probe`, `--cleanup`, `--enable`, `--disable`, `--set-cycle`) whenever
 `AGENT_OODA_DEPTH>=1` or `ROUTER_DEPTH>=1`.
 
-**Stage clocks & Per-Stage OODA Routing (`v2.3.1`):**
+**Stage clocks & Per-Stage OODA Routing (`v2.4.0`):**
 
 - **Per-Stage Matrix (`observe`, `orient`, `act`, `verify`):** Each worker stage defaults to `auto` (`Decide` remains with you and the top-level orchestrator) and resolves via **`CLI flag > --local > --profile > global > auto`**. CLI `--lane`/`--model`/`--effort` target the primary command stage (`--recon`, `--orient`, `--task`, or standalone `--review`); post-task `verify` follows `--local`/`--profile`/global pins so `--task` worker flags never leak onto the off-family reviewer.
 - **Soft-Pin Failover & Off-Family Verify:** Pinned stages soft-failover on 429s/cooldown down their lane CSV or quota-aware `auto`, scrubbing primary-lane `--model`/`--effort` overrides when failing over to another lane (and never falling back onto `devin-fusion` credits or PAYG `muse`); `verify` always enforces a non-authoring model family.
@@ -113,16 +113,16 @@ review or scope checks) are all audited fail-closed with a `240s` review budget:
 
 `bin/agent-ooda-hud` (`statusline.py`) reads live NDJSON stream telemetry and matches `agy`'s live theme (`colorScheme` in `~/.gemini/antigravity-cli/settings.json` — `dark`, `light`, `tokyo night`, `solarized dark`/`light`, `colorblind-friendly dark`/`light`, seasonal `halloween`, `COLORFGBG` terminal auto-detect, or `AGENT_OODA_THEME`), swapping colors immediately when `agy` swaps themes.
 
-It renders OODA phase (`○ agent-ooda`, `◐ orient/decide`, `⠋ observe`, `⠋ orient`, `⠋ act`, `⠋ verify`), velocity-coupled streaming spinners + tool-scan pulses, a 4-second `✓`/`✗` completion flash when a worker finishes, active stage pins on standby (`│ pin ...`), `tool Xs` waits, injected skills, `fleet X/8 (next …)` wake countdowns, and a **5-band ANSI 256-color thermal `tok/s` heat ramp** (blue `<25` → teal → amber → orange → red `>=180`).
+It stays silent when idle and renders live OODA phase (`observe`, `orient`, `decide`, `act`, `verify`), active agent + model, velocity-coupled streaming spinners, `tool Xs` waits, a **5-band ANSI 256-color thermal `tok/s` heat ramp** (blue `<25` → teal → amber → orange → red `>=180`), a 4-second `✓`/`✗` completion flash, and one dedicated line per parallel worker:
 
 ```text
-○ agent-ooda │ pin act:grok, verify:mcode │ fleet 8/8
-◐ orient/decide │ skill devin │ fleet 7/8 (next 2h59m)
-⠋ orient · claude-opus-5-5-high · ~18 tok/s │ fleet 7/8 (next 2h59m)
-⠋ observe · swe-2-flash-max · ~42 tok/s │ fleet 8/8
-⠋ act · grok-4.7 · ~78 tok/s │ skill devin │ fleet 7/8
-⠋ act ×2 · claude-opus-5-5-high, grok-4.7 · ~138 tok/s │ fleet 7/8
-⠋ verify · MiniMax-M3.1-Flash · ~195 tok/s │ fleet 7/8
+◐ orient · Gemini 4 Argon (Low)
+◐ decide · Gemini 4 Argon (Low)
+⠋ observe · swe-2-flash-max · ~42 tok/s
+⠋ act · muse (muse-ember-1.0) · ~96 tok/s
+⠋ act · devin-pro (swe-2-max) · ~118 tok/s
+⠋ act · devin-pro (swe-2-max) · ~112 tok/s
+⠋ verify · mcode (MiniMax-M3.1-Flash) · ~195 tok/s
 ```
 
 ## CLI Quick Reference

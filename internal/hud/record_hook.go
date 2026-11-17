@@ -23,6 +23,7 @@ type sessionRecord struct {
 	ConversationID string   `json:"conversation_id"`
 	Skills         []string `json:"skills"`
 	ModelName      string   `json:"model_name"`
+	LastPhase      string   `json:"last_phase,omitempty"`
 	Cwd            string   `json:"cwd"`
 	UpdatedAt      float64  `json:"updated_at"`
 }
@@ -34,7 +35,7 @@ func appendSkill(skills []string, raw string) []string {
 	if name == "agent-router" {
 		name = "router"
 	}
-	if name == "" || IgnoredSkills[name] {
+	if name == "" || strings.EqualFold(name, "none") || strings.EqualFold(name, "off") || IgnoredSkills[name] {
 		return skills
 	}
 	for _, s := range skills {
@@ -43,6 +44,36 @@ func appendSkill(skills []string, raw string) []string {
 		}
 	}
 	return append(skills, name)
+}
+
+func classifyToolPhase(payload map[string]any) string {
+	tool, _ := payload["toolCall"].(map[string]any)
+	tname, _ := tool["name"].(string)
+	switch tname {
+	case "ask_question", "enter_plan_mode", "exit_plan_mode":
+		return "decide"
+	case "read_file", "view_file", "grep_search", "find_by_name", "list_dir", "search_web", "read_url_content":
+		return "observe"
+	case "edit_file", "write_file", "invoke_subagent", "run_workflow", "swarm":
+		return "act"
+	case "run_command":
+		args, _ := tool["args"].(map[string]any)
+		cmdStr, _ := args["CommandLine"].(string)
+		if cmdStr == "" {
+			cmdStr, _ = args["command"].(string)
+		}
+		if strings.Contains(cmdStr, "--orient") {
+			return "orient"
+		}
+		for _, fl := range []string{"--recon", "--status", "--usage", "--discover", "--hygiene"} {
+			if strings.Contains(cmdStr, fl) {
+				return "observe"
+			}
+		}
+		return "act"
+	default:
+		return ""
+	}
 }
 
 // ApplyToolCall updates tracked skills from a PostToolUse hook payload.
@@ -107,8 +138,14 @@ func handleHookEvent(payload map[string]any) {
 	for _, s := range prev.Skills {
 		skills = appendSkill(skills, s)
 	}
-	if ev == "PostToolUse" {
+	lastPhase := prev.LastPhase
+	if ev == "SessionStart" {
+		lastPhase = ""
+	} else if ev == "PostToolUse" {
 		skills = ApplyToolCall(skills, payload)
+		if p := classifyToolPhase(payload); p != "" {
+			lastPhase = p
+		}
 	}
 	modelName, _ := payload["modelName"].(string)
 	if modelName == "" {
@@ -124,7 +161,7 @@ func handleHookEvent(payload map[string]any) {
 	}
 	rec := sessionRecord{
 		ConversationID: convID, Skills: skills, ModelName: modelName,
-		Cwd: cwd, UpdatedAt: nowTS,
+		LastPhase: lastPhase, Cwd: cwd, UpdatedAt: nowTS,
 	}
 	_ = fleet.AtomicWriteJSON(sessFile, rec, true, true)
 	ptr := map[string]any{"conversation_id": convID, "updated_at": nowTS}

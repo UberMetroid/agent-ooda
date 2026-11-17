@@ -18,6 +18,7 @@ func TestStagesPrecedenceAndCleanup(t *testing.T) {
 	t.Setenv("AGENT_QUOTA_FILE", qPath)
 	t.Setenv("HOME", filepath.Join(tmp, "home"))
 	t.Setenv("AGENT_OODA_PROFILE", "")
+	t.Setenv("OODA_NO_AUTO_PROBE", "1")
 
 	repo := filepath.Join(tmp, "repo")
 	_ = os.MkdirAll(repo, 0o755)
@@ -81,6 +82,7 @@ func TestLocalAutoMaskAndReset(t *testing.T) {
 	qPath := filepath.Join(tmp, "quota.json")
 	t.Setenv("AGENT_QUOTA_FILE", qPath)
 	t.Setenv("AGENT_OODA_PROFILE", "")
+	t.Setenv("OODA_NO_AUTO_PROBE", "1")
 	if _, err := ConfigureStage(StagePatch{Stage: "act", Lane: "mcode", Cwd: tmp}); err != nil {
 		t.Fatal(err)
 	}
@@ -107,6 +109,7 @@ func TestStagesExpiryPresetAndRefusal(t *testing.T) {
 	qPath := filepath.Join(tmp, "quota.json")
 	t.Setenv("AGENT_QUOTA_FILE", qPath)
 	t.Setenv("AGENT_OODA_PROFILE", "")
+	t.Setenv("OODA_NO_AUTO_PROBE", "1")
 
 	past := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339)
 	if err := SaveWorkspaceStages(tmp, map[string]fleet.StageRoute{
@@ -148,6 +151,7 @@ func TestStageRefusalsAndPAYG(t *testing.T) {
 	qPath := filepath.Join(tmp, "quota.json")
 	t.Setenv("AGENT_QUOTA_FILE", qPath)
 	t.Setenv("ROUTER_HUD_DIR", hudDir)
+	t.Setenv("OODA_NO_AUTO_PROBE", "1")
 	mainRepo, wtExt := filepath.Join(tmp, "main-repo"), filepath.Join(tmp, "wt-ext")
 	_ = os.MkdirAll(filepath.Join(mainRepo, ".git", "worktrees", "wt-ext"), 0o755)
 	_ = os.MkdirAll(wtExt, 0o755)
@@ -156,7 +160,7 @@ func TestStageRefusalsAndPAYG(t *testing.T) {
 		t.Fatalf("external .git-file worktree stage path mismatch: %q != %q", got, want)
 	}
 	_ = fleet.AtomicWriteJSON(filepath.Join(hudDir, "muse_usage.json"),
-		map[string]any{"pay_as_you_go": true, "checked_at": fleet.NowISO()}, true, true)
+		fleet.MuseProbe{Installed: true, PayAsYouGo: true, CheckedAt: float64(time.Now().Unix())}, true, true)
 	if _, err := ConfigureStage(StagePatch{Stage: "preset", Lane: "muse", Cwd: tmp}); err == nil {
 		t.Fatalf("expected preset=muse rejected when muse PAYG active")
 	}

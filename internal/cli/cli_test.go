@@ -80,6 +80,7 @@ func TestParseArgsPermutations(t *testing.T) {
 		{[]string{"--", "--weird"}, func(o CLIOpts) bool { return o.Manifest == "--weird" }},
 		{[]string{"--probe"}, func(o CLIOpts) bool { return o.Probe }},
 		{[]string{"--orient", "why"}, func(o CLIOpts) bool { return o.Orient != nil && *o.Orient == "why" }},
+		{[]string{"--stripe"}, func(o CLIOpts) bool { return o.Stripe }},
 	} {
 		if o, err := ParseArgs("ooda", tc.argv, nil); err != nil || !tc.check(o) {
 			t.Fatalf("%v parse failed: opts=%+v err=%v", tc.argv, o, err)

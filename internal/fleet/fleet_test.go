@@ -2,6 +2,7 @@ package fleet
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -174,11 +175,9 @@ func TestV8WindowsResetAndEscalate(t *testing.T) {
 	}
 	_ = AtomicWriteJSON(qPath, dq, false, true)
 	now := time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC)
-	rel := ParseRelativeReset("rate limit exceeded, resets in 2d 5h", now)
-	if rel == nil {
+	if rel := ParseRelativeReset("rate limit exceeded, resets in 2d 5h", now); rel == nil {
 		t.Fatal("expected ParseRelativeReset to match 2d 5h")
-	}
-	if dt, ok := ParseISOUTC(*rel); !ok || dt.Sub(now) != 53*time.Hour {
+	} else if dt, ok := ParseISOUTC(*rel); !ok || dt.Sub(now) != 53*time.Hour {
 		t.Fatalf("expected 53h delta, got %s (%v)", *rel, dt.Sub(now))
 	}
 	if bad := ParseRelativeReset("ordinary completion message", now); bad != nil {
@@ -211,22 +210,23 @@ func TestV8WindowsResetAndEscalate(t *testing.T) {
 }
 
 func TestParseMuseUsagePaygAndSub(t *testing.T) {
-	soon := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
-	payg := ParseMuseUsageJSON(`{"allowance":null,"hint":null,"reason":"api_key","schemaVersion":1}`, 0, false)
-	if !payg.PayAsYouGo || payg.Fresh || !payg.Installed {
-		t.Fatalf("expected PayAsYouGo=true on api_key payload, got %+v", payg)
+	soon := time.Now().UTC().Add(24 * time.Hour)
+	if p := ParseMuseUsageJSON(`{"allowance":null,"reason":"api_key"}`, 0, false); !p.PayAsYouGo || p.Fresh || !p.Installed {
+		t.Fatalf("expected PayAsYouGo=true on api_key payload, got %+v", p)
 	}
-	sub := ParseMuseUsageJSON(`{"allowance":{"resetsAt":"`+soon+`"},"hint":"Power","reason":"sub"}`, 0, false)
-	if sub.PayAsYouGo || !sub.Fresh || sub.ResetAt == nil {
-		t.Fatalf("expected subscription active probe, got %+v", sub)
+	sub := ParseMuseUsageJSON(fmt.Sprintf(`{"allowance":{"tier":"Muse Code Power Usage","weekly":{"usedPercent":10},`+
+		`"window":{"resetsAtMs":%d,"usedPercent":0}}}`, soon.UnixMilli()), 0, false)
+	if sub.PayAsYouGo || !sub.Fresh || sub.ResetAt == nil || !strings.Contains(sub.Summary, "5h: 0% used") ||
+		!strings.Contains(sub.Summary, "7d: 10% used") {
+		t.Fatalf("expected live Muse Power probe, got %+v", sub)
 	}
-	if stale := ParseMuseUsageJSON(`{"allowance":{"resetsAt":"`+soon+`"}}`, 1, false); stale.Fresh {
+	if stale := ParseMuseUsageJSON(`{"allowance":{"resetsAt":"`+soon.Format(time.RFC3339)+`"}}`, 1, false); stale.Fresh {
 		t.Fatalf("expected Fresh=false on non-zero muse exit, got %+v", stale)
 	}
-	if e, _ := NormalizeModel("muse", "ember"); e != "muse-ember-1.0" {
-		t.Fatalf("expected muse-ember-1.0, got %q", e)
-	} else if w, _ := NormalizeModel("muse", "wonder"); w != "muse-wonder-1.0" {
-		t.Fatalf("expected muse-wonder-1.0, got %q", w)
+	for _, tc := range [][2]string{{"ember", "muse-ember-1.0"}, {"wonder", "muse-wonder-1.0"}} {
+		if got, _ := NormalizeModel("muse", tc[0]); got != tc[1] {
+			t.Fatalf("expected %s, got %q", tc[1], got)
+		}
 	}
 	if _, err := NormalizeModel("muse", "gemini-4-carbon-low"); err == nil {
 		t.Fatal("expected Gemini guardrail refusal on NormalizeModel")
@@ -238,8 +238,8 @@ func TestResolveCLIAndBoundedRunCmd(t *testing.T) {
 	sub := filepath.Join(dir, "sub")
 	_ = os.MkdirAll(sub, 0o755)
 	_ = os.WriteFile(filepath.Join(dir, "evil"), []byte("#!/bin/sh\necho evil\n"), 0o755)
-	echoBin, err := exec.LookPath("echo")
-	if err != nil {
+	echoBin, _ := exec.LookPath("echo")
+	if echoBin == "" {
 		t.Skip("echo not found")
 	}
 	t.Setenv("PATH", sub)
@@ -248,8 +248,8 @@ func TestResolveCLIAndBoundedRunCmd(t *testing.T) {
 	}
 	defer func(p int64) { maxCmdOutBytes = p }(maxCmdOutBytes)
 	maxCmdOutBytes = 64
-	res, err := RunCmd(CmdSpec{Argv: []string{echoBin, strings.Repeat("x", 200)}, TimeoutSec: 5})
-	if err != nil || int64(len(res.Stdout)) > maxCmdOutBytes {
+	if res, err := RunCmd(CmdSpec{Argv: []string{echoBin, strings.Repeat("x", 200)}, TimeoutSec: 5}); err != nil ||
+		int64(len(res.Stdout)) > maxCmdOutBytes {
 		t.Fatalf("expected RunCmd stdout <= %d bytes, got len=%d err=%v", maxCmdOutBytes, len(res.Stdout), err)
 	}
 }

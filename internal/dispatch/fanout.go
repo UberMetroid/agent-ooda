@@ -40,7 +40,7 @@ type BatchOpts struct {
 	VerifyLane, VerifyModel, VerifyEffort   string
 	Skills, ExcludeLanes                    []string
 	Jobs                                    int
-	NoStripe, NoReview, NoPivot, SoftPin    bool
+	Stripe, NoStripe, NoReview, NoPivot, SoftPin bool
 	LogWriter                               io.Writer
 	TaskRunner                              func(ExecReq) ExecRes
 	ReviewRunner                            verify.ReviewRunner
@@ -111,7 +111,7 @@ func processBatchTask(slotPool chan int, job batchJob, opts BatchOpts) BatchReco
 		tCopy.Prompt, tCopy.Files, job.root)
 	excl := dedupMerge(job.task.ExcludeLanes, worktree.ParseCSVArg(opts.ExcludeLanes))
 	var stripe *int
-	if !opts.NoStripe {
+	if opts.Stripe && !opts.NoStripe {
 		stripe = &job.idx
 	}
 	res, runErr := RunTaskWithFallback(TaskReq{Task: tCopy, Worktree: job.wt, SlotDir: slotDir,

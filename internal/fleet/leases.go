@@ -40,58 +40,63 @@ func ParseMuseUsageJSON(raw string, exitCode int, timedOut bool) MuseProbe {
 	if timedOut {
 		return MuseProbe{Installed: true, Summary: "timeout querying muse usage"}
 	}
-	lower := strings.ToLower(trimmed)
+	var doc map[string]any
 	for _, ln := range strings.Split(trimmed, "\n") {
-		s := strings.TrimSpace(ln)
-		if !strings.HasPrefix(s, "{") {
-			continue
+		if s := strings.TrimSpace(ln); strings.HasPrefix(s, "{") && json.Unmarshal([]byte(s), &doc) == nil && doc != nil {
+			break
 		}
-		var doc map[string]any
-		if json.Unmarshal([]byte(s), &doc) != nil {
-			continue
+	}
+	reason, _ := doc["reason"].(string)
+	if strings.EqualFold(reason, "api_key") {
+		return MuseProbe{Installed: true, PayAsYouGo: true, Raw: trimmed,
+			Summary: "pay-as-you-go api_key (Power subscription inactive)"}
+	}
+	hint, _ := doc["hint"].(string)
+	if allow, ok := doc["allowance"].(map[string]any); exitCode == 0 && ok && len(allow) > 0 {
+		out := MuseProbe{Installed: true, Fresh: true, Raw: trimmed,
+			Summary: "subscription allowance active", ResetAt: ExtractResetTS(trimmed)}
+		var parts []string
+		for _, w := range [][2]string{{"window", "5h"}, {"weekly", "7d"}} {
+			m, _ := allow[w[0]].(map[string]any)
+			if pct, ok := m["usedPercent"].(float64); ok {
+				parts = append(parts, fmt.Sprintf("%s: %.0f%% used", w[1], pct))
+			}
 		}
-		reason, _ := doc["reason"].(string)
-		hint, _ := doc["hint"].(string)
-		out := MuseProbe{Installed: true, Raw: trimmed}
-		if strings.EqualFold(reason, "api_key") {
-			out.PayAsYouGo = true
-			out.Summary = "pay-as-you-go api_key (Power subscription inactive)"
-			return out
+		wm, _ := allow["window"].(map[string]any)
+		if ms, ok := wm["resetsAtMs"].(float64); ok && ms > 0 {
+			dt := time.UnixMilli(int64(ms)).UTC()
+			if now := time.Now().UTC(); dt.After(now) && dt.Sub(now) <= 45*24*time.Hour {
+				out.ResetAt = Ptr(FormatLocalISO(dt))
+			}
 		}
-		if allow, ok := doc["allowance"].(map[string]any); exitCode == 0 && ok && len(allow) > 0 {
-			out.Fresh = true
-			out.ResetAt = ExtractResetTS(s)
-			lbl := hint
+		tier, _ := allow["tier"].(string)
+		lbl := strings.TrimSpace(hint)
+		if strings.TrimSpace(tier) != "" {
+			lbl = strings.TrimSpace(tier)
+		}
+		if len(parts) > 0 {
 			if lbl == "" {
-				lbl = reason
+				lbl = "subscription"
 			}
-			out.Summary = "subscription allowance active"
-			if strings.TrimSpace(lbl) != "" {
-				out.Summary = fmt.Sprintf("subscription active (%s)", strings.TrimSpace(lbl))
-			}
-			return out
+			out.Summary = fmt.Sprintf("%s (%s)", lbl, strings.Join(parts, ", "))
+		} else if lbl != "" {
+			out.Summary = fmt.Sprintf("subscription active (%s)", lbl)
 		}
-		if hint != "" {
-			out.Summary = hint
-			return out
-		}
-		if reason != "" {
-			out.Summary = reason
-			return out
+		return out
+	}
+	msg := fmt.Sprintf("exit=%d", exitCode)
+	if low := strings.ToLower(trimmed); strings.Contains(low, "server_sent_no_usage") ||
+		strings.Contains(low, "no usage data") {
+		msg = "telemetry omitted by server (server_sent_no_usage); using quota.json reset timer"
+	} else if t := strings.TrimSpace(strings.SplitN(trimmed, "\n", 2)[0]); t != "" {
+		msg = t
+	}
+	for _, c := range []string{reason, hint} {
+		if t := strings.TrimSpace(c); t != "" {
+			msg = t
 		}
 	}
-	if strings.Contains(lower, "server_sent_no_usage") || strings.Contains(lower, "no usage data") {
-		return MuseProbe{
-			Installed: true, Raw: trimmed,
-			Summary: "telemetry omitted by server (server_sent_no_usage); using quota.json reset timer",
-		}
-	}
-	for _, ln := range strings.Split(trimmed, "\n") {
-		if t := strings.TrimSpace(ln); t != "" {
-			return MuseProbe{Installed: true, Summary: t, Raw: trimmed}
-		}
-	}
-	return MuseProbe{Installed: true, Summary: fmt.Sprintf("exit=%d", exitCode), Raw: trimmed}
+	return MuseProbe{Installed: true, Raw: trimmed, Summary: msg}
 }
 
 // ProbeMuseUsage queries `muse usage --json` headlessly with a short timeout.
@@ -154,18 +159,12 @@ func ParseRelativeReset(out string, now time.Time) *string {
 	mults := [4]time.Duration{24 * time.Hour, time.Hour, time.Minute, time.Second}
 	for _, m := range relResetRe.FindAllStringSubmatch(scoped, -1) {
 		var tot time.Duration
-		anyUnit := false
 		for i := 0; i < 4; i++ {
-			if m[i+1] == "" {
-				continue
-			}
-			n, err := strconv.Atoi(m[i+1])
-			if err == nil && n > 0 {
+			if n, err := strconv.Atoi(m[i+1]); m[i+1] != "" && err == nil && n > 0 {
 				tot += time.Duration(n) * mults[i]
-				anyUnit = true
 			}
 		}
-		if anyUnit && tot > 0 && tot <= 45*24*time.Hour {
+		if tot > 0 && tot <= 45*24*time.Hour {
 			return Ptr(FormatLocalISO(now.Add(tot)))
 		}
 	}
@@ -197,16 +196,14 @@ func CountActiveLeases(provider string, maxPar int) int {
 		if _, err := os.Stat(path); err != nil {
 			continue
 		}
-		fh, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
-		if err != nil {
-			continue
+		if fh, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600); err == nil {
+			if serr := syscall.Flock(int(fh.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); serr == nil {
+				_ = syscall.Flock(int(fh.Fd()), syscall.LOCK_UN)
+			} else {
+				busy++
+			}
+			_ = fh.Close()
 		}
-		if serr := syscall.Flock(int(fh.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); serr == nil {
-			_ = syscall.Flock(int(fh.Fd()), syscall.LOCK_UN)
-		} else {
-			busy++
-		}
-		_ = fh.Close()
 	}
 	return busy
 }

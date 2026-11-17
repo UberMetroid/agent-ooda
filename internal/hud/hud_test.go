@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/UberMetroid/agent-ooda/internal/dispatch"
 	"github.com/UberMetroid/agent-ooda/internal/fleet"
@@ -34,35 +35,40 @@ func TestStatusLineModes(t *testing.T) {
 	hudDir := filepath.Join(tmp, "hud")
 	t.Setenv("ROUTER_HUD_DIR", hudDir)
 	t.Setenv("NO_COLOR", "1")
-	sum, now := FleetSummary{Active: 5, Total: 8, WakeCD: "1h05m"}, 1000.0
-	fleetTail := " │ fleet 5/8 (next 1h05m)"
-
-	if got := RenderStatusLine("{}", true, &now, &sum); got != "○ agent-ooda"+fleetTail {
-		t.Fatalf("idle mismatch: %q", got)
+	now := float64(((time.Now().Unix() / 10) + 1) * 10)
+	if got := RenderStatusLine("{}", true, &now, nil); got != "" {
+		t.Fatalf("expected silent empty idle bar, got %q", got)
 	}
-	thinking := RenderStatusLine(`{"agent":{"state":"thinking"}}`, true, &now, &sum)
-	if thinking != "◐ orient/decide"+fleetTail {
-		t.Fatalf("orient mismatch: %q", thinking)
-	}
-
-	cases := []struct {
-		workers []dispatch.WorkerMarker
-		want    string
-	}{
-		{[]dispatch.WorkerMarker{{Mode: "observe", Model: "swe-2-flash-max"}}, "⠋ observe · swe-2-flash-max"},
-		{[]dispatch.WorkerMarker{{Mode: "orient", Model: "grok-4.7"}}, "⠋ orient · grok-4.7"},
-		{[]dispatch.WorkerMarker{{Mode: "act", Model: "claude-opus-5-5-high"}}, "⠋ act · claude-opus-5-5-high"},
-		{[]dispatch.WorkerMarker{{Mode: "act:verify", Model: "minimax/MiniMax-M3.1-Flash"}}, "⠋ verify · MiniMax-M3.1-Flash"},
-		{[]dispatch.WorkerMarker{{Mode: "act", Model: "grok-4.7"},
-			{Mode: "act", Model: "fusion-claude-opus-5-5-high-sidekick-swe-2-medium"}}, "⠋ act ×2 · grok-4.7, devin-fusion"},
-		{[]dispatch.WorkerMarker{{Mode: "act", Model: "grok-4.7", Skills: []string{"agent-ooda", "ooda", "router",
-			"custom-skill"}}}, "⠋ act · grok-4.7 │ skill custom-skill"},
-	}
-	for _, tc := range cases {
-		setTestWorkers(t, hudDir, tc.workers)
-		if got := RenderStatusLine("{}", true, &now, &sum); got != tc.want+fleetTail {
-			t.Fatalf("got %q, want %q", got, tc.want+fleetTail)
+	for _, tc := range [][2]string{
+		{`{"agent":{"state":"thinking"}}`, "◐ orient"},
+		{`{"agent_state":"reviewing","model":{"display_name":"Gemini 4 Carbon"}}`, "◐ decide · Gemini 4 Carbon"},
+		{`{"agent_state":"idle","tool_confirmation_pending":true}`, "◐ decide"},
+		{`{"agent_state":"working","cycle_mode":"auto","model":"gemini-4-argon"}`, "⠋ act · gemini-4-argon"},
+		{`{"subagents":[{"name":"research","status":"running"},{"name":"self","role":"Builder","status":"running"}]}`,
+			"⠋ observe · research\n⠋ act · self"},
+	} {
+		if got := RenderStatusLine(tc[0], true, &now, nil); got != tc[1] {
+			t.Fatalf("input %s: got %q, want %q", tc[0], got, tc[1])
 		}
+	}
+	var out bytes.Buffer
+	HandleHookStdin(strings.NewReader(`{"conversationId":"hc1","hookEventName":"PostToolUse",`+
+		`"toolCall":{"name":"read_file","args":{"Path":"a.go"}}}`), &out)
+	if got := RenderStatusLine(`{"conversation_id":"hc1","agent_state":"tool_use"}`, true, &now, nil); got != "⠋ observe" {
+		t.Fatalf("expected observe from read_file hook, got %q", got)
+	}
+	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{{Mode: "observe", Model: "swe-2-flash-max"}})
+	if got := RenderStatusLine("{}", true, &now, nil); got != "⠋ observe · swe-2-flash-max" {
+		t.Fatalf("single worker mismatch: %q", got)
+	}
+	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{
+		{Mode: "act", Lane: "muse", Model: "muse-ember-1.0", Phase: "stream", TokS: 102, UpdatedAt: now - 1},
+		{Mode: "act", Lane: "muse", Model: "muse-ember-1.0", Phase: "tool", StartedAt: now - 4},
+	})
+	multi := strings.Split(RenderStatusLine("{}", true, &now, nil), "\n")
+	if len(multi) != 2 || multi[0] != "⠋ act · muse (muse-ember-1.0) · ~102 tok/s" ||
+		multi[1] != "⠋ act · muse (muse-ember-1.0) · tool 4s" {
+		t.Fatalf("unexpected multi-line workers: %#v", multi)
 	}
 }
 
@@ -71,19 +77,17 @@ func TestStatusLineTelemetryANSI(t *testing.T) {
 	hudDir := filepath.Join(tmp, "hud")
 	t.Setenv("ROUTER_HUD_DIR", hudDir)
 	t.Setenv("NO_COLOR", "1")
-	sum, now := FleetSummary{Active: 5, Total: 8, WakeCD: "1h05m"}, 1000.0
-	fleetTail := " │ fleet 5/8 (next 1h05m)"
-
+	now := 1000.0
 	cases := []struct {
 		workers []dispatch.WorkerMarker
 		want    string
 	}{
 		{
 			[]dispatch.WorkerMarker{{
-				Mode: "act", Model: "minimax/MiniMax-M3.1-Flash",
+				Mode: "act", Lane: "mcode", Model: "minimax/MiniMax-M3.1-Flash",
 				Phase: "stream", TokS: 118, UpdatedAt: 999.0, StartedAt: 995.0,
 			}},
-			"⠋ act · MiniMax-M3.1-Flash · ~118 tok/s",
+			"⠋ act · mcode (MiniMax-M3.1-Flash) · ~118 tok/s",
 		},
 		{
 			[]dispatch.WorkerMarker{{
@@ -109,24 +113,18 @@ func TestStatusLineTelemetryANSI(t *testing.T) {
 	}
 	for _, tc := range cases {
 		setTestWorkers(t, hudDir, tc.workers)
-		if got := RenderStatusLine("{}", true, &now, &sum); got != tc.want+fleetTail {
-			t.Fatalf("got %q, want %q", got, tc.want+fleetTail)
+		if got := RenderStatusLine("{}", true, &now, nil); got != tc.want {
+			t.Fatalf("got %q, want %q", got, tc.want)
 		}
 	}
-	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{
-		{Mode: "act", Model: "grok-4.7", Skills: []string{"custom-skill"}},
-	})
-	narrow := RenderStatusLine(`{"terminal_width":48}`, true, &now, &sum)
-	if narrow != "⠋ act · grok-4.7 │ skill custom-skill │ fleet…" || VisibleLen(narrow) != 46 {
-		t.Fatalf("narrow truncation mismatch: %q (len=%d)", narrow, VisibleLen(narrow))
+	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{{Mode: "act", Lane: "grok", Model: "grok-4.7"}})
+	if narrow := RenderStatusLine(`{"terminal_width":40}`, true, &now, nil); narrow != "⠋ act · grok (grok-4.7)" {
+		t.Fatalf("width check mismatch: %q (len=%d)", narrow, VisibleLen(narrow))
 	}
-
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("AGENT_OODA_THEME", "dark")
-	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{
-		{Mode: "act:verify", Model: "minimax/MiniMax-M3.1-Flash"},
-	})
-	ansi := RenderStatusLine("{}", true, &now, &sum)
+	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{{Mode: "act:verify", Model: "minimax/MiniMax-M3.1-Flash"}})
+	ansi := RenderStatusLine("{}", true, &now, nil)
 	if !strings.Contains(ansi, CVerify+"⠋ verify"+Reset) ||
 		!strings.Contains(ansi, CVerifyModel+"MiniMax-M3.1-Flash"+Reset) {
 		t.Fatalf("unexpected ANSI output: %q", ansi)
@@ -139,56 +137,44 @@ func TestThermalTokSAndIdlePins(t *testing.T) {
 	t.Setenv("ROUTER_HUD_DIR", hudDir)
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("AGENT_OODA_THEME", "dark")
-	sum, now := FleetSummary{Active: 5, Total: 8, WakeCD: "1h05m"}, 1000.0
-	thermalCases := []struct {
+	now := 1000.0
+	for _, tc := range []struct {
 		tokS float64
 		col  string
 	}{
 		{18, CTokCold}, {42, CTokCruise}, {85, CTokWarm}, {140, CTokHot}, {210, CTokRedHot},
-	}
-	for _, tc := range thermalCases {
+	} {
 		setTestWorkers(t, hudDir, []dispatch.WorkerMarker{{
 			Mode: "act", Model: "grok-4.7", Phase: "stream", TokS: tc.tokS, UpdatedAt: 999.0, StartedAt: 995.0,
 		}})
-		got := RenderStatusLine("{}", true, &now, &sum)
-		if !strings.Contains(got, tc.col+"~") {
+		if got := RenderStatusLine("{}", true, &now, nil); !strings.Contains(got, tc.col+"~") {
 			t.Fatalf("expected thermal color %q for %.0f tok/s, got %q", tc.col, tc.tokS, got)
 		}
 	}
 	setTestWorkers(t, hudDir, nil)
-	t.Setenv("NO_COLOR", "1")
-	sum.Pins = "act:devin-pro"
-	if got := RenderStatusLine("{}", true, &now, &sum); got != "○ agent-ooda │ pin act:devin-pro │ fleet 5/8 (next 1h05m)" {
-		t.Fatalf("expected idle pin summary, got %q", got)
-	}
-	// Verify dynamic agy settings theme swap, velocity spin, and 4s completion flash.
 	home := t.TempDir()
 	cfgDir := filepath.Join(home, ".gemini", "antigravity-cli")
 	_ = os.MkdirAll(cfgDir, 0o755)
 	_ = os.WriteFile(filepath.Join(cfgDir, "settings.json"), []byte(`{"colorScheme":"tokyo night"}`), 0o600)
 	t.Setenv("HOME", home)
 	t.Setenv("AGENT_OODA_THEME", "")
-	t.Setenv("NO_COLOR", "")
 	_ = fleet.AtomicWriteJSON(filepath.Join(hudDir, "last.json"), dispatch.LastRunMarker{
-		Mode: "act", Model: "grok-4.7", ExitCode: 0, DurationS: 2.5, FinishedAt: 998.0,
+		Mode: "act", Lane: "mcode", Model: "minimax/MiniMax-M3.1-Flash", ExitCode: 0, DurationS: 2.5, FinishedAt: 998.0,
 	}, true, true)
-	flash := RenderStatusLine("{}", true, &now, &sum)
-	if !strings.Contains(flash, PaletteFor("tokyo night").FleetFull+"✓ act") {
+	flash := RenderStatusLine("{}", true, &now, nil)
+	if !strings.Contains(flash, PaletteFor("tokyo night").FleetFull+"✓ act") ||
+		!strings.Contains(flash, "mcode (MiniMax-M3.1-Flash)") {
 		t.Fatalf("expected tokyo night completion flash, got %q", flash)
 	}
 	_ = os.WriteFile(filepath.Join(cfgDir, "settings.json"), []byte(`{"colorScheme":"light"}`), 0o600)
 	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{{Mode: "act", Model: "grok-4.7"}})
-	light := RenderStatusLine("{}", true, &now, &sum)
-	if !strings.Contains(light, PaletteFor("light").Act+"⠋ act") {
+	if light := RenderStatusLine("{}", true, &now, nil); !strings.Contains(light, PaletteFor("light").Act+"⠋ act") {
 		t.Fatalf("expected live light theme swap, got %q", light)
 	}
-	if WorkerSpin("wait", 0, 1000.35) == WorkerSpin("stream", 190, 1000.35) {
-		t.Fatalf("expected phase/velocity spinner frames to differ")
-	}
-	if PaletteFor("colorblind-friendly-dark").Name != "colorblind-friendly dark" ||
-		PaletteFor("halloween-2026").Name != "halloween" ||
-		VisibleLen("\033[1;38;5;75mh\033[Ké") != 2 {
-		t.Fatalf("theme slug or VisibleLen mismatch")
+	if WorkerSpin("wait", 0, 1000.35) == WorkerSpin("stream", 190, 1000.35) ||
+		PaletteFor("colorblind-friendly-dark").Name != "colorblind-friendly dark" ||
+		PaletteFor("halloween-2026").Name != "halloween" || VisibleLen("\033[1;38;5;75mh\033[Ké") != 2 {
+		t.Fatalf("spinner, theme slug, or VisibleLen mismatch")
 	}
 }
 func TestHookAndDeadWorkerGC(t *testing.T) {
@@ -215,8 +201,8 @@ func TestHookAndDeadWorkerGC(t *testing.T) {
 	pfx := `{"conversationId":"c1","hookEventName":"PostToolUse","toolCall":{"name":`
 	for _, p := range []string{
 		pfx + `"read_file","args":{"Path":"~/.agents/skills/readskill/SKILL.md"}}}`,
-		pfx + `"run_command","args":{"CommandLine":"agent-ooda --status"}}}`,
-		pfx + `"run_command","args":{"CommandLine":"agent-ooda --task fix --skill newskill"}}}`,
+		pfx + `"run_command","args":{"CommandLine":"agent-ooda --task fix --skill none,off,newskill"}}}`,
+		pfx + `"run_command","args":{"CommandLine":"agent-ooda --orient why"}}}`,
 	} {
 		if out := callHook(p, "0"); out != "{}\n" {
 			t.Fatalf("hook output: %q", out)
@@ -225,8 +211,8 @@ func TestHookAndDeadWorkerGC(t *testing.T) {
 	raw, _ := os.ReadFile(filepath.Join(hudDir, "sessions", "c1.json"))
 	var rec sessionRecord
 	if json.Unmarshal(raw, &rec) != nil || len(rec.Skills) != 2 ||
-		rec.Skills[0] != "readskill" || rec.Skills[1] != "newskill" {
-		t.Fatalf("skills not preserved/appended across router calls: %s", string(raw))
+		rec.Skills[0] != "readskill" || rec.Skills[1] != "newskill" || rec.LastPhase != "orient" {
+		t.Fatalf("unexpected hook session record: %s", string(raw))
 	}
 	_ = callHook(`{"conversationId":"c2","hookEventName":"SessionStart"}`, "1")
 	if _, err := os.Stat(filepath.Join(hudDir, "sessions", "c2.json")); !os.IsNotExist(err) {
@@ -242,10 +228,10 @@ func TestSanitizeTerminalEscapes(t *testing.T) {
 		t.Fatalf("expected stripped HudShortModel == 'claude', got %q", got)
 	}
 	setTestWorkers(t, hudDir, []dispatch.WorkerMarker{{
-		Mode: "act", Model: "grok\x1b]52;c;ZXY=\x07-4", Skills: []string{"dev\x1b]0;pwn\x07in"},
+		Mode: "act", Lane: "la\x1b]0;pwn\x07ne", Model: "grok\x1b]52;c;ZXY=\x07-4",
 	}})
-	sum, now := FleetSummary{Active: 5, Total: 8, Pins: "act:m\x1b[2J"}, 1000.0
-	line := RenderStatusLine("{}", true, &now, &sum)
+	now := 1000.0
+	line := RenderStatusLine("{}", true, &now, nil)
 	for _, bad := range []string{"\x1b]52", "\x1b]0", "\x1b[2J", "\x07"} {
 		if strings.Contains(line, bad) {
 			t.Fatalf("HUD output leaked terminal escape %q: %q", bad, line)

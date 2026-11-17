@@ -155,9 +155,9 @@ func dispatchManifest(opts CLIOpts, outW, errW io.Writer) int {
 	if len(pool) == 0 {
 		pool = fleet.StripePool
 	}
-	stripeStr := "on (" + strings.Join(pool, " -> ") + ")"
-	if opts.NoStripe {
-		stripeStr = "off (--no-stripe)"
+	stripeStr := "off (homogeneous)"
+	if opts.Stripe && !opts.NoStripe {
+		stripeStr = "on (" + strings.Join(pool, " -> ") + ")"
 	}
 	fmt.Fprintf(outW, "default lane: %s -> %s | jobs: %d | tasks: %d | stripe: %s\n",
 		actSt.Lane, sel.Lane, jobs, len(tasks), stripeStr)
@@ -166,8 +166,8 @@ func dispatchManifest(opts CLIOpts, outW, errW io.Writer) int {
 	}
 	return dispatch.RunManifestBatch(root, tasks, dispatch.BatchOpts{
 		Lane: actSt.Lane, Model: actSt.Model, Effort: actSt.Effort, Timeout: opts.Timeout,
-		VerifyLane: verSt.Lane, VerifyModel: verSt.Model, VerifyEffort: verSt.Effort,
-		Skills: opts.Skills, ExcludeLanes: opts.ExcludeLanes, Jobs: jobs, LogWriter: outW,
+		VerifyLane: verSt.Lane, VerifyModel: verSt.Model, VerifyEffort: verSt.Effort, Skills: opts.Skills,
+		ExcludeLanes: opts.ExcludeLanes, Jobs: jobs, LogWriter: outW, Stripe: opts.Stripe,
 		NoStripe: opts.NoStripe, NoReview: opts.NoReview, NoPivot: opts.NoPivot, SoftPin: actSt.Source != "cli",
 	})
 }
