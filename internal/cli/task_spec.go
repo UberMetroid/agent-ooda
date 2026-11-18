@@ -41,8 +41,15 @@ func cliResolveStage(stage string, opts CLIOpts, cwd string, q *fleet.QuotaState
 		if parsed, perr := fleet.ParseLanes(opts.Lane, true); perr == nil && len(parsed) > 0 {
 			cliLane = strings.Join(parsed, ",")
 		}
+	} else if m := strings.TrimSpace(opts.Model); m != "" {
+		lm := strings.ToLower(m)
+		if lm != "auto" && lm != "default" && lm != "cli-default" && fleet.CheckModelGuard(m) == nil {
+			if inferred, err := fleet.NormalizeLane(m, false); err == nil {
+				cliLane = inferred
+			}
+		}
 	}
-	if q == nil && !opts.LaneSet {
+	if q == nil && !opts.LaneSet && cliLane == "" {
 		var qerr error
 		if q, qerr = fleet.LoadQuota(""); qerr != nil {
 			fmt.Fprintf(os.Stderr, "warning: %v\n", qerr)
@@ -51,15 +58,15 @@ func cliResolveStage(stage string, opts CLIOpts, cwd string, q *fleet.QuotaState
 	return worktree.ResolveStage(stage, cliLane, opts.Model, opts.Effort, opts.Profile, cwd, q)
 }
 
-func printStageMatrix(w io.Writer, cwd string, opts CLIOpts, q *fleet.QuotaState) {
-	fmt.Fprintln(w, "\nOODA Stage Routing Matrix (precedence: CLI > --local > --profile > global > auto):")
-	fmt.Fprintf(w, "%-9s %-14s %-34s %s\n", "STAGE", "MODE", "ROUTE", "ROLE")
-	fmt.Fprintln(w, strings.Repeat("-", 96))
+func printStageMatrix(
+	w io.Writer, cwd string, opts CLIOpts, q *fleet.QuotaState, caps map[string]envelope.LaneCap,
+) {
+	fmt.Fprintln(w, "\nOODA + Verify Stage Matrix (precedence: CLI > --local > --profile > global > auto):")
+	fmt.Fprintf(w, "%-9s %-14s %-44s %s\n", "STAGE", "MODE", "EFFECTIVE MODEL / CHAIN", "ROLE")
+	fmt.Fprintln(w, strings.Repeat("-", 108))
 	roles := map[string]string{
-		"observe": "Read-only recon (--recon)",
-		"orient":  "Root-cause & architecture (--orient)",
-		"act":     "Coding & worktree execution (--task / manifest)",
-		"verify":  "Cross-model diff review (--review / post-task)",
+		"observe": "Read-only codebase recon (--recon)", "orient": "Root-cause & blast radius (--orient)",
+		"act": "Scoped code & worktree edits (--task / manifest)", "verify": "Cross-model diff review (--review)",
 	}
 	for _, st := range fleet.StageNames {
 		stOpts := opts
@@ -67,16 +74,25 @@ func printStageMatrix(w io.Writer, cwd string, opts CLIOpts, q *fleet.QuotaState
 			stOpts.Lane, stOpts.LaneSet, stOpts.Model, stOpts.Effort = "", false, "", ""
 		}
 		sp := cliResolveStage(st, stOpts, cwd, q)
-		mode := sp.Source
-		route := "auto (quota-aware)"
+		route := envelope.StageChainSummary(st, q, caps)
 		if sp.Lane != "auto" {
-			mod, eff := nonEmptyOr(sp.Model, "default"), nonEmptyOr(sp.Effort, "default")
-			route = fmt.Sprintf("%s (%s/%s)", sp.Lane, dispatch.ShortModel(mod), eff)
+			parts := make([]string, 0, 2)
+			for _, p := range strings.Split(sp.Lane, ",") {
+				parts = append(parts, envelope.FormatSpec(p, nonEmptyOr(sp.Model, caps[p].EffectiveModel)))
+			}
+			route = strings.Join(parts, " -> ")
+			if sp.Effort != "" {
+				route += " (" + sp.Effort + ")"
+			}
 			if sp.ExpiresAt != nil && *sp.ExpiresAt != "" {
 				route += " [until reset]"
 			}
 		}
-		fmt.Fprintf(w, "%-9s %-14s %-34s %s\n", st, mode, route, roles[st])
+		fmt.Fprintf(w, "%-9s %-14s %-44s %s\n", st, sp.Source, route, roles[st])
+		if st == "orient" {
+			fmt.Fprintf(w, "%-9s %-14s %-44s %s\n", "decide", "orchestrator",
+				"Orchestrator (Plan Mode + Human)", "Architecture, user alignment & task slicing")
+		}
 	}
 }
 
@@ -119,8 +135,12 @@ func handleStageFlags(opts CLIOpts, outW, errW io.Writer) (int, bool) {
 		} else if r.Lane == "" {
 			r.Lane = "auto"
 		}
+		spec := r.Lane
+		if r.Model != nil && *r.Model != "" && !strings.Contains(r.Lane, ",") {
+			spec = envelope.FormatSpec(r.Lane, *r.Model)
+		}
 		fmt.Fprintf(outW, "  %-8s -> %s (model=%s, effort=%s)\n",
-			st, r.Lane, derefOr(r.Model, "cli-default"), derefOr(r.Effort, "cli-default"))
+			st, spec, derefOr(r.Model, "cli-default"), derefOr(r.Effort, "cli-default"))
 	}
 	return 0, true
 }
@@ -232,18 +252,4 @@ func printDiscoveryFooter(
 		}
 		fmt.Fprintf(w, "  %-10s : %s%s\n", s.Name, nonEmptyOr(s.Desc, "(no description)"), tag)
 	}
-}
-
-func tuiLaneModels(lane string, lc envelope.LaneCap) []string {
-	out, seen := []string{"cli-default (auto/configured)"}, map[string]bool{}
-	for _, m := range lc.Models {
-		if m != "" && !fleet.GeminiModelRe.MatchString(m) && !seen[m] {
-			seen[m] = true
-			out = append(out, m)
-		}
-	}
-	if len(out) == 1 && lane != "auto" && lc.EffectiveModel != "" && !fleet.GeminiModelRe.MatchString(lc.EffectiveModel) {
-		out = append(out, lc.EffectiveModel)
-	}
-	return out
 }

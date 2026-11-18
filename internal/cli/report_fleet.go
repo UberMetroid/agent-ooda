@@ -43,50 +43,49 @@ func formatCommas(n int) string {
 	return s + out
 }
 
-func statusRow(
-	name string, info *fleet.ProviderConfig, nowUTC time.Time, lc envelope.LaneCap, musePayg bool,
+func modelStatusRow(
+	row envelope.ModelRow, info *fleet.ProviderConfig, nowUTC time.Time, lc envelope.LaneCap, musePayg bool,
 ) string {
-	binNote := nonEmptyOr(fleet.ResolveCLI(info.CLI), "MISSING")
-	eff, mod := lc.EffectiveEffort, lc.EffectiveModel
-	if info.Effort != nil && *info.Effort != "" {
-		eff = *info.Effort
-	}
-	if info.Model != nil && *info.Model != "" {
-		mod = *info.Model
-	}
-	eff, mod = nonEmptyOr(eff, "default"), nonEmptyOr(mod, "default")
-	resetTS := info.NextResetAt
-	if info.CooldownUntil != nil && *info.CooldownUntil != "" {
-		resetTS = info.CooldownUntil
-	}
-	resetCD, detail := fleet.FormatCountdown(resetTS, nowUTC), binNote
-	if info.Status != "active" {
-		why := derefOr(info.Reason, "cooldown")
-		if info.CooldownUntil != nil && resetCD != "" {
-			detail = fmt.Sprintf("%s | resets in %s | %s", binNote, resetCD, why)
-		} else if info.ManualDisable {
-			detail = fmt.Sprintf("%s | [manual] %s", binNote, why)
-		} else {
-			detail = fmt.Sprintf("%s | %s", binNote, why)
+	status, detail := "missing", "MISSING"
+	if info != nil {
+		status = info.Status
+		detail = nonEmptyOr(fleet.ResolveCLI(info.CLI), "MISSING")
+		resetTS := info.NextResetAt
+		if info.CooldownUntil != nil && *info.CooldownUntil != "" {
+			resetTS = info.CooldownUntil
 		}
-	} else if resetCD != "" {
-		detail = fmt.Sprintf("%s | cycle resets in %s", binNote, resetCD)
-	}
-	if name == "muse" && musePayg {
-		detail += " | [PAYG api_key — skipped in auto]"
-	}
-	if _, badge := envelope.LaneTariff(name, info, mod, nowUTC); badge != "" {
-		detail += " | [" + badge + "]"
+		if resetCD := fleet.FormatCountdown(resetTS, nowUTC); info.Status != "active" {
+			why := derefOr(info.Reason, "cooldown")
+			if info.CooldownUntil != nil && resetCD != "" {
+				detail += " | resets in " + resetCD + " | " + why
+			} else if info.ManualDisable {
+				detail += " | [manual] " + why
+			} else {
+				detail += " | " + why
+			}
+		} else if resetCD != "" {
+			detail += " | resets in " + resetCD
+		}
+		if row.Pool == "muse" && musePayg {
+			detail += " | [PAYG api_key — skipped in auto]"
+		}
+		if _, badge := envelope.LaneTariff(row.Pool, info, row.Model, nowUTC); badge != "" {
+			detail += " | [" + badge + "]"
+		}
+		if info.MaxParallel != nil && *info.MaxParallel > 0 {
+			mp := *info.MaxParallel
+			detail += fmt.Sprintf(" | [max %d parallel, %d/%d busy]", mp, fleet.CountActiveLeases(row.Pool, mp), mp)
+		}
 	}
 	if lc.AgyUnsafe {
 		detail += " | [GEMINI GUARD: run --discover]"
 	}
-	if info.MaxParallel != nil && *info.MaxParallel > 0 {
-		mp := *info.MaxParallel
-		detail += fmt.Sprintf(" | [max %d parallel, %d/%d busy]", mp, fleet.CountActiveLeases(name, mp), mp)
+	poolWin := row.Pool
+	if row.Window != "" {
+		poolWin += " (" + row.Window + ")"
 	}
-	return fmt.Sprintf("%-13s %-9s %-10s %-9s %-9s %-28s %s",
-		name, info.Status, info.Tier, clipStr(eff, 9), info.CLI, clipStr(dispatch.ShortModel(mod), 28), detail)
+	return fmt.Sprintf("%-30s %-21s %-21s %-9s %s",
+		row.Spec, clipStr(poolWin, 21), clipStr(row.Routing, 21), status, detail)
 }
 
 // ReportStatus prints fleet readiness or refreshes CLI capability discovery caches.
@@ -118,22 +117,27 @@ func ReportStatus(w io.Writer, refresh bool, cliOpts ...CLIOpts) int {
 		fmt.Fprintf(w, "Parallel stripe    : %s\nFallback chain     : %s\n\n",
 			strings.Join(pool, " -> "), strings.Join(chain, " -> "))
 	}
-	fmt.Fprintf(w, "%-13s %-9s %-10s %-9s %-9s %-28s %s\n",
-		"LANE", "STATUS", "TIER", "EFFORT", "CLI", "MODEL", "RESET / BINARY")
+	fmt.Fprintf(w, "%-30s %-21s %-21s %-9s %s\n", "MODEL", "POOL (WIN)", "ROUTING", "STATUS", "RESET / SLOTS")
 	fmt.Fprintln(w, strings.Repeat("-", 119))
 	musePayg := fleet.CachedMuseProbe(900).PayAsYouGo
-	for _, name := range fleet.ProviderOrder {
-		if info := q.Providers[name]; info != nil {
-			fmt.Fprintln(w, statusRow(name, info, nowUTC, caps[name], musePayg))
-		}
+	for _, row := range envelope.CatalogModels(q, caps) {
+		fmt.Fprintln(w, modelStatusRow(row, q.Providers[row.Pool], nowUTC, caps[row.Pool], musePayg))
 	}
 	if !refresh {
-		defP, _ := envelope.SelectProvider(envelope.SelectReq{RequestedLane: "auto", Quota: q})
-		fastP, _ := envelope.SelectProvider(envelope.SelectReq{RequestedLane: "auto", Complexity: "fast", Quota: q})
-		deepP, _ := envelope.SelectProvider(envelope.SelectReq{RequestedLane: "auto", Complexity: "deep", Quota: q})
-		fmt.Fprintf(w, "\nEffective default/heavy lane : %s\nEffective fast/recon lane    : %s\n",
-			nonEmptyOr(defP.Lane, "NONE"), nonEmptyOr(fastP.Lane, "NONE"))
-		fmt.Fprintf(w, "Effective deep/arch lane     : %s\n", nonEmptyOr(deepP.Lane, "NONE"))
+		effSpec := func(comp string) string {
+			sel, _ := envelope.SelectProvider(envelope.SelectReq{RequestedLane: "auto", Complexity: comp, Quota: q})
+			mod := ""
+			if sel.Info != nil && sel.Info.Model != nil {
+				mod = *sel.Info.Model
+			}
+			if mod == "" {
+				mod, _ = envelope.ResolveRegimeSpec(sel.Lane, comp, caps[sel.Lane])
+			}
+			return envelope.FormatSpec(nonEmptyOr(sel.Lane, "NONE"), nonEmptyOr(mod, caps[sel.Lane].EffectiveModel))
+		}
+		fmt.Fprintf(w, "\nEffective default/heavy model : %s\nEffective fast/recon model    : %s\n",
+			effSpec(""), effSpec("fast"))
+		fmt.Fprintf(w, "Effective deep/arch model     : %s\n", effSpec("deep"))
 		revLbl := fleet.ReviewModelEnv()
 		if revLbl == "cli-default" {
 			revLbl = "cli default unless overridden"
@@ -144,7 +148,7 @@ func ReportStatus(w io.Writer, refresh bool, cliOpts ...CLIOpts) int {
 		if len(cliOpts) > 0 {
 			co = cliOpts[0]
 		}
-		printStageMatrix(w, cwd, co, q)
+		printStageMatrix(w, cwd, co, q, caps)
 	}
 	printDiscoveryFooter(w, caps, skills, refresh)
 	return 0
@@ -221,7 +225,7 @@ func DoUsage(w io.Writer) int {
 	em := envelope.ComputeEMEnvelope(q, nowUTC)
 	fmt.Fprintf(w, "Cycle Usage Telemetry (%s, v%d)\n\n", fleet.QuotaFilePath(""), q.Version)
 	fmt.Fprintf(w, "%-13s %-9s %-9s %-7s %-5s %-14s %-9s %-12s %s\n",
-		"LANE", "STATUS", "STATE", "WINDOW", "RUNS", "TOKENS", "COST", "RESETS IN", "NOTE")
+		"QUOTA POOL", "STATUS", "STATE", "WINDOW", "RUNS", "TOKENS", "COST", "RESETS IN", "NOTE")
 	fmt.Fprintln(w, strings.Repeat("-", 116))
 	for _, name := range fleet.ProviderOrder {
 		if info := q.Providers[name]; info != nil {

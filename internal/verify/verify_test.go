@@ -215,7 +215,7 @@ func TestVerifyPinOffFamilyScrub(t *testing.T) {
 		Model: "minimax/MiniMax-M3.1-Flash", Effort: "high", QuotaPath: qPath,
 		DiffCtx: diff, ResolveCLI: fakeCLIResolver(installed), Runner: run,
 	})
-	if !res.Ran || res.Lane != "devin-fast" || len(calls) != 1 ||
+	if !res.Ran || res.Lane != "devin-pro" || len(calls) != 1 ||
 		calls[0].Model == "minimax/MiniMax-M3.1-Flash" || calls[0].Effort != "" {
 		t.Fatalf("expected off-family fallback + scrub, got res=%+v calls=%+v", res, calls)
 	}
@@ -233,7 +233,7 @@ func TestVerifyPinOffFamilyScrub(t *testing.T) {
 		AuthorLanes: []string{"grok", "mcode"}, QuotaPath: qPath, DiffCtx: diff,
 		ResolveCLI: fakeCLIResolver(ins3), Runner: run,
 	})
-	if !res3.Ran || res3.Lane != "devin-fast" {
+	if !res3.Ran || res3.Lane != "devin-pro" {
 		t.Fatalf("expected earlier attempt family grok excluded from verify, got res=%+v", res3)
 	}
 	// Scope violations short-circuit with 0 LLM calls; rogue writes during review REJECT.

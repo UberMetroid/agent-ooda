@@ -222,7 +222,7 @@ func TestParseMuseUsagePaygAndSub(t *testing.T) {
 	if stale := ParseMuseUsageJSON(`{"allowance":{"resetsAt":"`+soon.Format(time.RFC3339)+`"}}`, 1, false); stale.Fresh {
 		t.Fatalf("expected Fresh=false on non-zero muse exit, got %+v", stale)
 	}
-	for _, tc := range [][2]string{{"ember", "muse-ember-1.0"}, {"wonder", "muse-wonder-1.0"}} {
+	for _, tc := range [][2]string{{"ember", "muse-ember-1.0"}, {"wonder", "muse-wonder-full-1.0"}} {
 		if got, _ := NormalizeModel("muse", tc[0]); got != tc[1] {
 			t.Fatalf("expected %s, got %q", tc[1], got)
 		}

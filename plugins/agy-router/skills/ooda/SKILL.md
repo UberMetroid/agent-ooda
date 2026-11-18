@@ -25,10 +25,10 @@ agy-router --orient "Diagnose root cause and safest minimal change for <issue> a
 ```
 Identify which files belong in scope (`files`) and what concrete checks prove the fix works.
 
-## Phase 3: Decide (Plan & Fleet Routing)
+## Phase 3: Decide (Orchestrator Plan & Model Selection)
 Break work into minimal independent tasks before editing:
-- Use `/lane` or check `agy-router --status` and `agy-router --usage` before selecting lanes, matching each CLI's live model, effort control, UTC tariff windows, and quota health.
-- Keep `Decide` in the orchestrator / native Plan Mode; never delegate product decisions to workers.
+- Use `/lane` or check `agy-router --status` and `agy-router --usage` to inspect all `<cli>:<model>` options (including opt-in models like `agy:claude-opus-5-5-high`) and quota pool clocks.
+- `Decide` stays in the orchestrator (Plan Mode + Human); pass `--model <cli>:<model>` if an explicit model override is warranted.
 
 ## Phase 4: Act + Verify (Scoped Change, Cross-Model Diff Gate & Cleanup)
 ### Single-Task Path (1-2 coupled tasks)
@@ -48,4 +48,4 @@ Break work into minimal independent tasks before editing:
 4. Merge clean accepted branches (`git merge --no-ff ooda/<id>`), remove temporary worktrees/branches (`agy-router --cleanup`), and re-run full repo tests on the merged tree.
 
 ### Loop 2 Mismatch Pivot Rule
-If two attempts on the same files/scope fail (`verify` REJECT or failing tests), do **not** retry blindly on the same model family: pass `--exclude-lane <failed-lane>` or switch model family via `agy-router --select` and re-Orient before acting.
+If two attempts on the same files/scope fail (`verify` REJECT or failing tests), do **not** retry blindly on the same model family: pass `--exclude-model <cli>:<model>` or switch model via `agy-router --select` and re-Orient before acting.

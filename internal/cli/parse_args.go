@@ -42,8 +42,8 @@ func usageText(prog string) string {
 			"  --hygiene [PATH]       0-token secret, key & hardening footgun scan (default CWD)\n"+
 			"  --files / --skill CSV  scoped paths / skills to inject (repeatable)\n"+
 			"  --complexity HINT      heavy, deep, architecture, fast, tests, recon, review\n"+
-			"  --lane / --exclude-lane / --profile  auto, lane CSV, or preset profile\n"+
-			"  --model / --effort     override worker model id or reasoning effort\n"+
+			"  --model [<cli>:]MODEL  override model/pool (e.g. agy:claude-opus-5-5-high) & --effort\n"+
+			"  --exclude-model / --lane / --profile  exclude model/pool, legacy lane CSV, or preset\n"+
 			"  --timeout DUR          per-task timeout (e.g. 120s, 8m)\n"+
 			"  -j, --jobs, --slots N  max parallel workers for manifest mode (default %d, max %d)\n"+
 			"  --stripe/--no-stripe/--no-pivot/--no-review/--no-cache  stripe opt-in, pivot, verify, cache\n"+
@@ -109,7 +109,7 @@ func applyStrFlag(opts *CLIOpts, name, val string) error {
 		return nil
 	}
 	switch name {
-	case "--exclude-lane":
+	case "--exclude-lane", "--exclude-model":
 		opts.ExcludeLanes = append(opts.ExcludeLanes, val)
 	case "--recon":
 		opts.Recon = fleet.Ptr(val)
@@ -172,7 +172,7 @@ func consumeFlag(opts *CLIOpts, argv []string, i *int) error {
 		"--recon": true, "--orient": true, "--task": true, "--files": true, "--skill": true, "--skills": true,
 		"--complexity": true, "--jobs": true, "-j": true, "--slots": true, "--enable": true, "--disable": true,
 		"--reason": true, "--hours": true, "--set-cycle": true, "--set-stage": true, "--profile": true,
-		"--token-budget": true, "--cost-budget": true, "--max-parallel": true,
+		"--token-budget": true, "--cost-budget": true, "--max-parallel": true, "--exclude-model": true,
 	}
 	if !knownVal[name] {
 		return fleet.UsageErr("error: unrecognized arguments: %s", arg)

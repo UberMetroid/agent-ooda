@@ -26,8 +26,20 @@ type cornerItem struct {
 	name string
 }
 
-// ModelFamily maps a provider lane to its underlying model family name.
-func ModelFamily(provider string) string {
+// ModelFamily maps a provider pool (and optional model name) to its underlying model family.
+func ModelFamily(provider string, model ...string) string {
+	if len(model) > 0 {
+		m := strings.ToLower(strings.TrimSpace(model[0]))
+		for _, kv := range [][2]string{
+			{"claude", "claude"}, {"fusion", "claude"}, {"swe-2", "swe-2"}, {"minimax", "minimax"},
+			{"muse", "muse"}, {"ember", "muse"}, {"wonder", "muse"}, {"spark", "muse"},
+			{"grok", "grok"}, {"glm", "glm"}, {"mistral", "mistral"}, {"ml4", "mistral"},
+		} {
+			if strings.Contains(m, kv[0]) {
+				return kv[1]
+			}
+		}
+	}
 	if fam, ok := fleet.ModelFamilies[provider]; ok {
 		return fam
 	}

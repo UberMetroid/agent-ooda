@@ -102,20 +102,19 @@ func TestParseArgsPermutations(t *testing.T) {
 func TestStatusUsageAndQuotaAdmin(t *testing.T) {
 	_, _, _, run := setupCLIEnv(t)
 	for _, tc := range [][]string{
-		{"agy-router v" + fleet.Version, "--version"}, {"LANE", "--status"},
-		{"(refreshed)", "--discover"}, {"Cycle Usage Telemetry", "--usage"}, {"hygiene: clean", "--hygiene"},
+		{"agy-router v" + fleet.Version, "--version"}, {"MODEL", "--status"}, {"decide", "--status"},
+		{"claude-opus-5-5-high", "--status"}, {"(refreshed)", "--discover"}, {"Cycle Usage Telemetry", "--usage"},
 		{"", "--disable", "grok", "--reason", "maint", "--hours", "1"}, {"", "--enable", "grok"},
 		{"configured mcode:", "--set-cycle", "mcode", "--effort", "high", "--token-budget", "5000"},
-		{"devin-pro", "--set-stage", "preset=conserve"},
+		{"devin-pro", "--set-stage", "preset=conserve"}, {"hygiene: clean", "--hygiene"},
 	} {
 		if rc, out, errS := run(tc[1:]...); rc != 0 || !strings.Contains(out, tc[0]) {
 			t.Fatalf("%v failed rc=%d out=%q err=%q", tc[1:], rc, out, errS)
 		}
 	}
-	for _, bad := range [][]string{
-		{"--set-cycle", "agy-claude", "--model", "gemini-4-carbon-low"},
+	for _, bad := range [][]string{{"--set-cycle", "agy-claude", "--model", "gemini-4-carbon-low"},
 		{"--recon", "hi", "--model", "gemini-4-carbon-high"},
-	} {
+		{"--recon", "hi", "--model", "boguscli:foo"}, {"--recon", "hi", "--exclude-model", "bogus:x"}} {
 		if rc, _, errS := run(bad...); rc != 2 || strings.Contains(errS, "pivoting") {
 			t.Fatalf("%v want rc=2 err=%q", bad, errS)
 		}
@@ -226,6 +225,8 @@ func TestOrientCommand(t *testing.T) {
 	for _, tc := range [][]string{
 		{"profile:conserve", "--status", "--profile", "conserve"}, {"verify    auto", "--status", "--lane", "grok"},
 		{"orient   -> grok", "--set-stage", "orient=grok", "--local"}, {"orient    local          grok", "--status"},
+		{"claude-opus-5-5-high", "--set-stage", "orient=agy:claude-opus-5-5-high", "--local"},
+		{"architecture root cause", "--orient", "why", "--model", "grok:grok-4.7"},
 	} {
 		if rc, out, errS := run(tc[1:]...); rc != 0 || !strings.Contains(out, tc[0]) {
 			t.Fatalf("%v rc=%d out=%q err=%q", tc[1:], rc, out, errS)
@@ -238,9 +239,8 @@ func TestOrientCommand(t *testing.T) {
 	writeExecFile(t, binDir, "grok", "exit 1\n")
 	writeExecFile(t, binDir, "mcode", "printf 'softpin pivoted %s\\n' \"$*\"\n")
 	for _, tc := range [][]string{
-		{"softpin pivoted", "--orient", "why", "--files", "a.go"},
-		{"b.go", "--orient", "why", "--files", "b.go"}, {"(inherit)", "--reset-stages", "--local"},
-		{"hygiene: clean", "--hygiene", ".", "--files", "a.go"},
+		{"softpin pivoted", "--orient", "why", "--files", "a.go"}, {"b.go", "--orient", "why", "--files", "b.go"},
+		{"(inherit)", "--reset-stages", "--local"}, {"hygiene: clean", "--hygiene", ".", "--files", "a.go"},
 	} {
 		if rc, out, errS := run(tc[1:]...); rc != 0 || !strings.Contains(out, tc[0]) {
 			t.Fatalf("%v rc=%d out=%q err=%q", tc[1:], rc, out, errS)

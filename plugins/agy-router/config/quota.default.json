@@ -11,22 +11,22 @@
   "parallel_stripe_pool": [
     "agy-claude",
     "devin-fusion",
+    "muse",
     "grok",
     "mistral",
-    "muse",
-    "devin-fast",
+    "mcode",
     "devin-pro",
-    "mcode"
+    "devin-fast"
   ],
   "default_fallback_chain": [
     "agy-claude",
     "devin-fusion",
+    "muse",
     "grok",
     "mistral",
-    "muse",
-    "devin-fast",
+    "mcode",
     "devin-pro",
-    "mcode"
+    "devin-fast"
   ],
   "providers": {
     "agy-claude": {

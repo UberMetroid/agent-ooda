@@ -120,8 +120,8 @@ func invokeReviewer(req ReviewReq, sel envelope.SelectRes, lease *os.File, promp
 	}
 	taskID := "review-" + filepath.Base(req.SlotDir)
 	if req.LogWriter != nil {
-		fmt.Fprintf(req.LogWriter, "▸ [ROUTER:ACT verify] agent=%s (%s:%s) | effort=%s\n",
-			sel.Lane, sel.Info.CLI, filepath.Base(spec.DisplayModel), spec.DisplayEffort)
+		fmt.Fprintf(req.LogWriter, "▸ [ROUTER:ACT verify] model=%s:%s (pool=%s) | effort=%s\n",
+			sel.Info.CLI, filepath.Base(spec.DisplayModel), sel.Lane, spec.DisplayEffort)
 	}
 	marker, dm, de, revExit, start := "", spec.DisplayModel, spec.DisplayEffort, -1, time.Now()
 	defer func() {

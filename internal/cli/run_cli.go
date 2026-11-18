@@ -23,9 +23,19 @@ func validateRunArgs(opts CLIOpts, defTimeout int, withFiles bool) ([]string, in
 	if err := fleet.CheckModelGuard(opts.Model); err != nil {
 		return nil, 0, nil, err
 	}
+	if !opts.LaneSet && strings.Contains(opts.Model, ":") {
+		if _, err := fleet.NormalizeLane(opts.Model, false); err != nil {
+			return nil, 0, nil, err
+		}
+	}
 	lanes, err := fleet.ParseLanes(opts.Lane, true)
 	if err != nil {
 		return nil, 0, nil, err
+	}
+	for _, x := range worktree.ParseCSVArg(opts.ExcludeLanes) {
+		if _, xerr := fleet.NormalizeLane(x, false); xerr != nil {
+			return nil, 0, nil, xerr
+		}
 	}
 	timeout := defTimeout
 	if opts.Timeout != "" {
@@ -108,30 +118,14 @@ func handleQuotaFlags(opts CLIOpts, outW, errW io.Writer) (int, bool) {
 }
 
 func dispatchManifest(opts CLIOpts, outW, errW io.Writer) int {
-	if err := fleet.CheckModelGuard(opts.Model); err != nil {
-		fmt.Fprintln(errW, err)
-		return 2
-	}
 	root, err := fleet.RepoRoot("")
 	if err != nil {
 		fmt.Fprintln(errW, err)
 		return 2
 	}
-	if _, err := fleet.ParseLanes(opts.Lane, true); err != nil {
+	if _, _, _, err := validateRunArgs(opts, fleet.DefaultTimeout, false); err != nil {
 		fmt.Fprintln(errW, err)
 		return 2
-	}
-	if opts.Timeout != "" {
-		if _, err := fleet.ParseTimeout(opts.Timeout); err != nil {
-			fmt.Fprintln(errW, err)
-			return 2
-		}
-	}
-	for _, lane := range worktree.ParseCSVArg(opts.ExcludeLanes) {
-		if _, err := fleet.NormalizeLane(lane, false); err != nil {
-			fmt.Fprintln(errW, err)
-			return 2
-		}
 	}
 	jobs := min(max(1, opts.Jobs), fleet.MaxJobs)
 	tasks, err := worktree.LoadManifest(opts.Manifest)

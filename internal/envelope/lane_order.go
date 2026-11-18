@@ -128,8 +128,15 @@ func normalOrder(
 	em EMEnvelope, capped []string, stripeIdx *int,
 ) []string {
 	if comp == "review" {
+		var ticking []string
+		for _, c := range capped {
+			if p := q.Providers[c]; p != nil && p.NextResetAt != nil && *p.NextResetAt != "" {
+				ticking = append(ticking, c)
+			}
+		}
+		seed := append(append([]string{"mcode"}, ticking...), fleet.ReviewOrder...)
 		var out []string
-		for _, n := range append(append([]string(nil), fleet.ReviewOrder...), chain...) {
+		for _, n := range append(seed, chain...) {
 			if info := q.Providers[n]; info == nil || info.Tier != "credits" {
 				out = append(out, n)
 			}

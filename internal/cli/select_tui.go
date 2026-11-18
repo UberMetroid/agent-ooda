@@ -79,7 +79,9 @@ func tuiStageRows(cwd string, local bool, q *fleet.QuotaState) []string {
 			}
 		}
 		lbl := nonEmptyOr(r.Lane, "auto")
-		if r.Model != nil && *r.Model != "" {
+		if r.Model != nil && *r.Model != "" && !strings.Contains(lbl, ",") {
+			lbl = envelope.FormatSpec(lbl, *r.Model)
+		} else if r.Model != nil && *r.Model != "" {
 			lbl += " · " + *r.Model
 		}
 		if r.Effort != nil && *r.Effort != "" {
@@ -117,34 +119,30 @@ func tuiEditStage(
 ) (string, error) {
 	caps := envelope.DiscoverFleetCaps(envelope.DiscoverOpts{Quota: q})
 	musePayg, nowUTC := fleet.CachedMuseProbe(900).PayAsYouGo, time.Now().UTC()
-	lanes, items := []string{"auto"}, []string{"auto (quota-aware routing)"}
-	for _, name := range fleet.ProviderOrder {
-		info := q.Providers[name]
-		if info == nil || info.Tier == "credits" || (name == "muse" && musePayg) {
+	choices := []envelope.ModelRow{{Spec: "auto", Pool: "auto"}}
+	items := []string{"auto (quota-aware OODA routing)"}
+	for _, row := range envelope.CatalogModels(q, caps) {
+		info := q.Providers[row.Pool]
+		if info == nil || info.Tier == "credits" || (row.Pool == "muse" && musePayg) {
 			continue
 		}
-		note := info.Status
-		if cd := fleet.FormatCountdown(info.CooldownUntil, nowUTC); info.Status == "cooldown" && cd != "" {
-			note = "cooldown " + cd
+		st := info.Status
+		if cd := fleet.FormatCountdown(info.CooldownUntil, nowUTC); st == "cooldown" && cd != "" {
+			st = "cooldown " + cd
 		}
-		lanes = append(lanes, name)
-		items = append(items, fmt.Sprintf("%-13s %-9s (%s)", name, info.Tier, note))
+		choices = append(choices, row)
+		items = append(items, fmt.Sprintf("%-30s %-19s (%s)", row.Spec, row.Routing, st))
 	}
-	li, act := tuiPick(in, out, "Select Lane for "+stage, "", items)
+	li, act := tuiPick(in, out, "Select Model for "+stage, "", items)
 	if act != "select" || li < 0 {
 		return "", nil
 	}
-	chosenLane, mod, eff, untilReset := lanes[li], "", "", defUntil
-	if chosenLane != "auto" {
-		mods := tuiLaneModels(chosenLane, caps[chosenLane])
-		if mi, mact := tuiPick(in, out, chosenLane+" Model", "", mods); mact == "select" && mi > 0 {
-			mod = mods[mi]
-		} else if mact != "select" {
-			return "", nil
-		}
-		if !strings.Contains(caps[chosenLane].EffortMode, "via-model") {
+	pick, eff, untilReset := choices[li], "", defUntil
+	if pick.Pool != "auto" {
+		if !strings.Contains(caps[pick.Pool].EffortMode, "via-model") &&
+			!strings.EqualFold(pick.Model, "minimax/MiniMax-M3") {
 			effs := []string{"cli-default", "low", "medium", "high", "xhigh", "max"}
-			if ei, eact := tuiPick(in, out, chosenLane+" Effort", "", effs); eact == "select" && ei > 0 {
+			if ei, eact := tuiPick(in, out, pick.Spec+" Effort", "", effs); eact == "select" && ei > 0 {
 				eff = effs[ei]
 			} else if eact != "select" {
 				return "", nil
@@ -159,11 +157,11 @@ func tuiEditStage(
 		}
 	}
 	if _, err := worktree.ConfigureStage(worktree.StagePatch{
-		Stage: stage, Lane: chosenLane, Model: mod, Effort: eff, UntilReset: untilReset, Local: local, Cwd: cwd,
+		Stage: stage, Lane: pick.Pool, Model: pick.Model, Effort: eff, UntilReset: untilReset, Local: local, Cwd: cwd,
 	}); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("✓ Saved %s -> %s", stage, chosenLane), nil
+	return fmt.Sprintf("✓ Saved %s -> %s", stage, pick.Spec), nil
 }
 
 func openTUIInput() (*os.File, func(), error) {

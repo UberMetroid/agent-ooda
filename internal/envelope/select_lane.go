@@ -162,6 +162,60 @@ func pickFastVibeAlias(aliases map[string]string) string {
 	return ""
 }
 
+func resolveRegimeModel(provider, comp string, cap LaneCap) string {
+	fast := fleet.FastComplexities[comp]
+	deep := (fleet.DeepComplexities[comp] && comp != "ember") || comp == "heavy"
+	switch provider {
+	case "muse":
+		if fast {
+			return pickCleanModel(cap.Models, "muse-spark-1.3", "muse-ember-1.0")
+		}
+		if deep {
+			return pickCleanModel(cap.Models, "muse-wonder-full-1.0", "muse-wonder-1.0", "muse-ember-1.0")
+		}
+		if comp != "" && comp != "review" {
+			return pickCleanModel(cap.Models, "muse-ember-1.0")
+		}
+	case "agy-claude":
+		if fast {
+			return pickCleanModel(cap.Models, "claude-sonnet-5-5-medium", "claude-sonnet-5-5-high")
+		}
+		if fleet.DeepComplexities[comp] || comp == "heavy" {
+			return pickCleanModel(cap.Models, "claude-opus-5-5-high")
+		}
+		if comp != "" && comp != "review" {
+			return pickCleanModel(cap.Models, "claude-sonnet-5-5-high", "claude-opus-5-5-high")
+		}
+	case "mcode":
+		if fast {
+			return pickCleanModel(cap.Models, "minimax/MiniMax-M3.1-Flash", "minimax/MiniMax-M3")
+		}
+		if comp != "" {
+			return pickCleanModel(cap.Models, "minimax/MiniMax-M3", "minimax/MiniMax-M3.1-Flash")
+		}
+	case "grok":
+		if fast {
+			return pickCleanModel(cap.Models, "grok-4.7-build-fast", "grok-4.7")
+		}
+		if comp != "" && comp != "review" {
+			return pickCleanModel(cap.Models, "grok-4.7")
+		}
+	case "devin-fast":
+		if fast {
+			return pickCleanModel(cap.Models, "swe-2-flash-high")
+		}
+	case "devin-pro":
+		if fast {
+			return pickCleanModel(cap.Models, "swe-2-high")
+		}
+	case "mistral":
+		if fast {
+			return pickFastVibeAlias(cap.AliasEfforts)
+		}
+	}
+	return ""
+}
+
 // ResolveRegimeSpec selects model and effort matching the task complexity regime.
 func ResolveRegimeSpec(provider, complexity string, cap LaneCap) (string, string) {
 	comp := strings.ToLower(strings.TrimSpace(complexity))
@@ -177,34 +231,9 @@ func ResolveRegimeSpec(provider, complexity string, cap LaneCap) (string, string
 			eff = "max"
 		}
 	}
-	var mod string
-	switch provider {
-	case "muse":
-		if (fleet.DeepComplexities[comp] && comp != "ember") || comp == "heavy" {
-			mod = pickCleanModel(cap.Models, "muse-wonder-1.0", "muse-ember-1.0")
-		} else if comp != "" && comp != "review" {
-			mod = pickCleanModel(cap.Models, "muse-ember-1.0")
-		}
-	case "agy-claude":
-		if fleet.FastComplexities[comp] {
-			mod = pickCleanModel(cap.Models, "claude-sonnet-5-5-medium", "claude-sonnet-5-5-high")
-		} else if fleet.DeepComplexities[comp] || comp == "heavy" {
-			mod = pickCleanModel(cap.Models, "claude-opus-5-5-high")
-		} else if comp != "" && comp != "review" {
-			mod = pickCleanModel(cap.Models, "claude-sonnet-5-5-high", "claude-opus-5-5-high")
-		}
-	case "devin-fast":
-		if fleet.FastComplexities[comp] {
-			mod = pickCleanModel(cap.Models, "swe-2-flash-high")
-		}
-	case "devin-pro":
-		if fleet.FastComplexities[comp] {
-			mod = pickCleanModel(cap.Models, "swe-2-high")
-		}
-	case "mistral":
-		if fleet.FastComplexities[comp] {
-			mod = pickFastVibeAlias(cap.AliasEfforts)
-		}
+	mod := resolveRegimeModel(provider, comp, cap)
+	if provider == "mcode" && strings.EqualFold(mod, "minimax/MiniMax-M3") {
+		eff = ""
 	}
 	return mod, eff
 }

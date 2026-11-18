@@ -28,8 +28,8 @@ type StagePatch struct {
 // PresetStages maps named presets (e.g. conserve, deep, devin) to 4-stage maps.
 func PresetStages(name string) (map[string]fleet.StageRoute, bool) {
 	mk := func(obs, ori, act, ver string, oriEff *string) map[string]fleet.StageRoute {
-		return map[string]fleet.StageRoute{"observe": {Lane: obs}, "orient": {Lane: ori, Effort: oriEff},
-			"act": {Lane: act}, "verify": {Lane: ver}}
+		return map[string]fleet.StageRoute{"observe": {Lane: obs},
+			"orient": {Lane: ori, Effort: oriEff}, "act": {Lane: act}, "verify": {Lane: ver}}
 	}
 	res, ok := map[string]map[string]fleet.StageRoute{
 		"auto": mk("auto", "auto", "auto", "auto", nil), "devin": mk("devin-fast", "devin-pro", "devin-pro", "mcode", nil),
@@ -124,13 +124,14 @@ func validateStagePatch(p StagePatch, q *fleet.QuotaState) (fleet.StageRoute, er
 	for _, l := range lanes {
 		if (q != nil && q.Providers[l] != nil && q.Providers[l].Tier == "credits") ||
 			(l == "muse" && fleet.CachedMuseProbe(900).PayAsYouGo) {
-			return fleet.StageRoute{}, fleet.UsageErr("error: paid/PAYG lane %q cannot be pinned; pass --lane %s", l, l)
+			return fleet.StageRoute{}, fleet.UsageErr("error: paid/PAYG lane %q invalid; pass --lane %s", l, l)
 		}
 	}
-	if m := strings.TrimSpace(p.Model); m != "" {
-		if err := fleet.CheckModelGuard(m); err != nil {
-			return fleet.StageRoute{}, err
-		}
+	m, raw := strings.TrimSpace(p.Model), strings.TrimSpace(p.Lane)
+	if m == "" && !strings.Contains(raw, ",") && !fleet.BarePoolAliases[strings.ToLower(raw)] {
+		m = raw
+	}
+	if m != "" {
 		norm, merr := fleet.NormalizeModel(lanes[0], m)
 		if merr != nil {
 			return fleet.StageRoute{}, merr

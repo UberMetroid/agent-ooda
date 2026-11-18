@@ -9,11 +9,12 @@ description: >-
 # `/lane` — Interactive Router Stage & Model Selector
 
 Use this skill when the user invokes `/lane` or asks to switch, pin, or reset the
-models/lanes used across router stages (`observe`, `orient`, `act`, `verify`).
+`<cli>:<model>` bindings used across OODA + Verify stages (`observe`, `orient`, `act`, `verify`;
+`decide` always runs natively in Plan Mode + Human).
 
 ## Procedure (Arrow-Key TUI via `ask_question`)
 
-1. Inspect live fleet capabilities and current stage bindings:
+1. Inspect live model catalog, quota pools, and current stage bindings:
    ```bash
    agy-router --status
    ```
@@ -26,10 +27,10 @@ models/lanes used across router stages (`observe`, `orient`, `act`, `verify`).
    agy-router --set-stage preset=<name> [--local]
    ```
 4. If configuring a single stage:
-   - Step A: Pick stage (`observe`, `orient`, `act`, `verify`) and target lane (`auto`, or any subscription lane from `--status` — persistent pins exclude PAYG `muse` and any `tier: "credits"` pool; pass `--lane` per run instead).
-   - Step B (when lane != `auto`): Pick one of that lane's discovered models from `agy-router --status`, effort (for `agy-claude`, `muse`, `mcode`, `grok`; skip `--effort` for `via-model` `devin-*` and `mistral`), and persistence (`Sticky` vs `--until-reset`).
+   - Step A: Pick stage (`observe`, `orient`, `act`, `verify`) and target `<cli>:<model>` directly from `agy-router --status` (e.g. `agy:claude-opus-5-5-high`, `agy:claude-sonnet-5-5-high`, `mcode:MiniMax-M3`, `mcode:MiniMax-M3.1-Flash`, `devin:swe-2-high`, `devin:swe-2-flash-high`, `muse:muse-wonder-full-1.0`, `grok:grok-4.7`, `vibe:glm-5-3`, or `auto`). Persistent pins exclude PAYG `muse` and `tier: "credits"` pools (`--model <cli>:<model>` per run still works).
+   - Step B: Pick effort (for `agy:*`, `muse:*`, `mcode:MiniMax-M3.1-Flash`, `grok:*`; skip `--effort` for `devin:*`, `vibe:*`, and `mcode:MiniMax-M3`), and persistence (`Sticky` vs `--until-reset`).
    - Run:
      ```bash
-     agy-router --set-stage <stage>=<lane> [--model <model>] [--effort <effort>] [--until-reset] [--local]
+     agy-router --set-stage <stage>=<cli>:<model> [--effort <effort>] [--until-reset] [--local]
      ```
 5. If resetting, run `agy-router --reset-stages [--local]` and print the updated stage matrix concisely.

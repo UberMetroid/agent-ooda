@@ -32,13 +32,12 @@ func runTaskAttempt(st *taskState, sel envelope.SelectRes, lease *os.File) (Exec
 		return ExecRes{ExitCode: 2, Output: err.Error()}, rawMod, rawEff
 	}
 	extra := VisibleExtraSkills(req.Task.Skills)
-	parRun := req.IsParallel || req.StripeIdx != nil
 	modeTag, stage := "act", "ROUTER:ACT"
 	if req.Task.ID == "orient" || req.Task.Complexity == "orient" {
 		modeTag, stage = "orient", "ROUTER:ORIENT"
 	} else if req.Task.ReadOnly {
 		modeTag, stage = "observe", "ROUTER:OBSERVE"
-	} else if parRun {
+	} else if req.IsParallel || req.StripeIdx != nil {
 		modeTag, stage = "act:parallel", "ROUTER:ACT parallel:"+req.Task.ID
 	}
 	if req.LogWriter != nil {
@@ -50,14 +49,13 @@ func runTaskAttempt(st *taskState, sel envelope.SelectRes, lease *os.File) (Exec
 		if len(extra) > 0 {
 			skSuf = " | skill=" + strings.Join(extra, ",")
 		}
-		fmt.Fprintf(req.LogWriter, "▸ [%s] agent=%s (%s:%s) | effort=%s%s\n",
-			stage, sel.Lane, sel.Info.CLI, ShortModel(spec.DisplayModel), spec.DisplayEffort, skSuf)
+		fmt.Fprintf(req.LogWriter, "▸ [%s] model=%s:%s (pool=%s) | effort=%s%s\n",
+			stage, sel.Info.CLI, ShortModel(spec.DisplayModel), sel.Lane, spec.DisplayEffort, skSuf)
 	}
-	marker := WorkerMarker{PID: os.Getpid(), TaskID: req.Task.ID, Mode: modeTag, Lane: sel.Lane,
+	marker := WorkerMarker{PID: os.Getpid(), TaskID: req.Task.ID, Mode: modeTag, Lane: sel.Info.CLI,
 		CLI: sel.Info.CLI, Model: spec.DisplayModel, Effort: spec.DisplayEffort, Skills: extra,
 		Cwd: req.Worktree, StartedAt: nowFloatSec()}
-	mPath := HudWorkerStart(marker)
-	runner := req.Runner
+	mPath, runner := HudWorkerStart(marker), req.Runner
 	if runner == nil {
 		runner = ExecuteOnce
 	}
@@ -66,7 +64,7 @@ func runTaskAttempt(st *taskState, sel envelope.SelectRes, lease *os.File) (Exec
 		SlotDir: req.SlotDir, TaskID: req.Task.ID, TimeoutSec: st.timeout, ReadOnly: req.Task.ReadOnly,
 		MarkerPath: mPath, Marker: marker})
 	fleet.ReleaseParallelLease(lease)
-	HudWorkerFinish(mPath, LastRunMarker{Mode: modeTag, Lane: sel.Lane, Model: spec.DisplayModel,
+	HudWorkerFinish(mPath, LastRunMarker{Mode: modeTag, Lane: sel.Info.CLI, Model: spec.DisplayModel,
 		Effort: spec.DisplayEffort, Skills: extra, ExitCode: res.ExitCode, DurationS: res.DurationS})
 	_, _ = fleet.RecordUsage(sel.Lane, st.prompt, res.Output, res.ExportInfo, req.QuotaPath)
 	st.attempts = append(st.attempts, TaskAttempt{Lane: sel.Lane, Model: spec.DisplayModel,
@@ -172,19 +170,22 @@ func RunTaskWithFallback(req TaskReq) (TaskRes, error) {
 func ExecReview(req verify.ReviewReq) verify.ReviewResult {
 	if req.OnStart == nil {
 		req.OnStart = func(mode, tid, lane, cli, mod, eff string, sk []string, cwd string) string {
-			return HudWorkerStart(WorkerMarker{PID: os.Getpid(), TaskID: tid, Mode: mode, Lane: lane,
+			return HudWorkerStart(WorkerMarker{PID: os.Getpid(), TaskID: tid, Mode: mode, Lane: cli,
 				CLI: cli, Model: mod, Effort: eff, Skills: sk, Cwd: cwd, StartedAt: nowFloatSec()})
 		}
 	}
 	if req.OnFinish == nil {
 		req.OnFinish = func(mark, mode, lane, mod, eff string, sk []string, rc int, dur float64) {
+			if cli := fleet.ProviderSpecs()[lane].CLI; cli != "" {
+				lane = cli
+			}
 			HudWorkerFinish(mark, LastRunMarker{Mode: mode, Lane: lane, Model: mod,
 				Effort: eff, Skills: sk, ExitCode: rc, DurationS: dur})
 		}
 	}
 	if req.Runner == nil {
 		req.Runner = func(r verify.ReviewExecReq) verify.ReviewExecRes {
-			m := WorkerMarker{PID: os.Getpid(), TaskID: r.TaskID, Mode: "act:verify", Lane: r.Provider,
+			m := WorkerMarker{PID: os.Getpid(), TaskID: r.TaskID, Mode: "act:verify", Lane: r.Info.CLI,
 				CLI: r.Info.CLI, Model: r.Model, Effort: r.Effort, Cwd: r.TargetDir, StartedAt: nowFloatSec()}
 			if raw, rerr := os.ReadFile(r.MarkerPath); rerr == nil {
 				_ = json.Unmarshal(raw, &m)
@@ -249,8 +250,7 @@ func IsLiveQuotaLine(raw string) bool {
 	if !fleet.HasErrorPattern(s, 1, []string{"error", "fatal", "429", "402", "exceeded", "exhausted", "insufficient_quota"}) {
 		return false
 	}
-	pats := []string{"insufficient_quota", "quota exceeded", "quota_exceeded", "quota exhausted", "rate_limit_exceeded",
-		"rate limit exceeded", "rate limit reached", "credits exhausted", "out of credits", "budget_exhausted",
-		"http 429", "status 429", "error 429", "429 too many requests"}
-	return fleet.HasErrorPattern(s, 1, pats)
+	return fleet.HasErrorPattern(s, 1, []string{"insufficient_quota", "quota exceeded", "quota_exceeded",
+		"quota exhausted", "rate_limit_exceeded", "rate limit exceeded", "rate limit reached", "credits exhausted",
+		"out of credits", "budget_exhausted", "http 429", "status 429", "error 429", "429 too many requests"})
 }

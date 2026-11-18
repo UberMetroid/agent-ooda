@@ -1,8 +1,8 @@
 ---
 name: router-devin
 description: >-
-  Router orchestrator driving Cognition Devin Pro (swe-2-flash-max observe,
-  swe-2-max act, off-family mcode verify; use --lane devin-fusion for Fusion runs).
+  Router orchestrator driving Cognition Devin Pro (swe-2-flash-high observe,
+  swe-2-high orient/act, off-family mcode verify; use --lane devin-fusion for Fusion runs).
 model: flash
 mainAgent: true
 subagent: true

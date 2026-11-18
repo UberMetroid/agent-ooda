@@ -197,3 +197,11 @@ type CyclePatch struct {
 	ResetNow                 bool
 	Effort, Model            *string
 }
+
+// BarePoolAliases lists generic CLI/pool names that pin a stage without forcing a specific model.
+var BarePoolAliases = map[string]bool{
+	"auto": true, "default": true, "agy": true, "claude": true, "agy-claude": true, "agy-opus": true,
+	"agy-sonnet": true, "apy-opus": true, "devin": true, "devin-pro": true, "devin-fast": true,
+	"devin-fusion": true, "mcode": true, "mcode-review": true, "mcode-code": true, "minimax": true,
+	"muse": true, "grok": true, "mistral": true, "vibe": true,
+}

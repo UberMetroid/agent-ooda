@@ -114,7 +114,7 @@ func buildMcodeCmd(req CmdReq, model string) (BuiltCmd, error) {
 	if model != "" && model != "default" {
 		argv = append(argv, "--model", model)
 	}
-	if req.Effort != "" {
+	if req.Effort != "" && !strings.EqualFold(model, "minimax/MiniMax-M3") {
 		if eff := fleet.McodeEffortMap[strings.ToLower(req.Effort)]; eff != "" && eff != "default" {
 			argv = append(argv, "--effort", eff)
 		} else if fleet.McodeEffortMap[strings.ToLower(req.Effort)] == "" {
@@ -144,7 +144,7 @@ func buildMcodeCmd(req CmdReq, model string) (BuiltCmd, error) {
 	argv = append(argv, "--permission", perm, "--prompt-mode", "coding",
 		"--output-format", "stream-json")
 	if req.ReadOnly && req.ReviewMode == "" {
-		argv = append(argv, "--max-steps", "20")
+		argv = append(argv, "--max-steps", map[bool]string{true: "35", false: "20"}[req.TaskID == "orient"])
 	}
 	for _, f := range worktree.SafeWorktreeFiles(req.Files, req.Worktree) {
 		argv = append(argv, "--file", f)

@@ -467,7 +467,7 @@
   <main id="top">
     <section class="hero">
       <div class="wrap">
-        <span class="eyebrow">agy-router v3.1.0 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Zero-Trust Per-Stage Router (v11)</span>
+        <span class="eyebrow">agy-router v3.2.0 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Direct &lt;cli&gt;:&lt;model&gt; Router (v11)</span>
         <h1>Turn one session into a<br><span>token-routed agent fleet.</span></h1>
         <p class="lead">
           <strong>UberMetroid/agy-router</strong> ships one zero-dependency static Go routing engine
@@ -484,7 +484,7 @@
         </div>
         <div class="hero-actions">
           <a class="btn btn-primary" href="#quickstart">Install &amp; Quickstart</a>
-          <a class="btn" href="https://github.com/UberMetroid/agy-router/releases/latest">Release Binaries (v3.1.0)</a>
+          <a class="btn" href="https://github.com/UberMetroid/agy-router/releases/latest">Release Binaries (v3.2.0)</a>
           <a class="btn" href="#architecture">Go Architecture</a>
         </div>
         <div class="telemetry-strip">
@@ -887,12 +887,12 @@ git clone https://github.com/UberMetroid/agy-router.git
 cd agy-router &amp;&amp; ./install.sh
 
 # restart agy so the plugin, 8 /agents profiles, /lane, /ooda, /harden &amp; statusLine load
-agy plugin list       # confirm "agy-router" is enabled (3.1.0)
+agy plugin list       # confirm "agy-router" is enabled (3.2.0)
 agy-router --version  # print binary version
-agy-router --status   # router stage matrix, fleet tiers, resets &amp; skills
+agy-router --status   # OODA + Verify matrix, 15 models, resets &amp; skills
 agy-router --hygiene  # 0-token P0 secret, key &amp; P1 hardening scan
-agy-router --select   # arrow-key TUI configurator (-s; add --local for repo)
-agy-router --set-stage act=grok --effort xhigh
+agy-router --select   # 1-step arrow-key model selector (-s; add --local)
+agy-router --set-stage orient=agy:claude-opus-5-5-high
 agy-router --set-stage preset=deep   # or --reset-stages
 agy-router --discover # refresh live CLI model probes
 agy-router --probe    # minimal 1-token prompt canaries &amp; muse PAYG check

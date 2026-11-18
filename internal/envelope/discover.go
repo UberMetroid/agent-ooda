@@ -184,7 +184,11 @@ func EffectiveLaneSpec(
 	}
 	explicitEff := fleet.ResolveEffort(info, expEffort)
 	needAgy := provider == "agy-claude" && normModel == ""
-	cap := DiscoverFleetCaps(DiscoverOpts{Home: home, ProbeAgy: needAgy})[provider]
+	var discQ *fleet.QuotaState
+	if info != nil {
+		discQ = &fleet.QuotaState{Providers: map[string]*fleet.ProviderConfig{provider: info}}
+	}
+	cap := DiscoverFleetCaps(DiscoverOpts{Quota: discQ, Home: home, ProbeAgy: needAgy})[provider]
 	regMod, regEff := ResolveRegimeSpec(provider, complexity, cap)
 	argvModel := orStr(normModel, orStr(regMod, cap.DispatchModel))
 	effChoice := orStr(explicitEff, regEff)

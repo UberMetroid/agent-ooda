@@ -25,7 +25,7 @@ func UsageErr(format string, args ...any) error {
 }
 
 const (
-	Version             = "3.1.0"
+	Version             = "3.2.0"
 	QuotaSchemaVersion  = 11
 	CornerWindowSecs    = 5400
 	SoonWakeSecs        = 2700
@@ -70,17 +70,17 @@ var (
 	}
 	StageNames  = []string{"observe", "orient", "act", "verify"}
 	DefaultPool = []string{
-		"agy-claude", "devin-fusion", "grok", "mistral", "muse", "devin-fast", "devin-pro", "mcode",
+		"agy-claude", "devin-fusion", "muse", "grok", "mistral", "mcode", "devin-pro", "devin-fast",
 	}
 	StripePool = []string{
-		"agy-claude", "devin-fusion", "grok", "mistral", "muse", "devin-fast", "devin-pro", "mcode",
+		"agy-claude", "devin-fusion", "muse", "grok", "mistral", "mcode", "devin-pro", "devin-fast",
 	}
-	FastOrder = []string{"devin-fast", "mcode", "devin-pro", "muse"}
+	FastOrder = []string{"mcode", "devin-fast", "muse", "devin-pro"}
 	DeepOrder = []string{
-		"agy-claude", "devin-fusion", "grok", "mistral", "muse", "devin-pro", "devin-fast", "mcode",
+		"devin-fusion", "agy-claude", "muse", "grok", "mistral", "mcode", "devin-pro", "devin-fast",
 	}
 	ReviewOrder = []string{
-		"mcode", "devin-fast", "devin-pro", "grok", "mistral", "muse", "devin-fusion", "agy-claude",
+		"mcode", "devin-pro", "grok", "mistral", "muse", "devin-fusion", "agy-claude", "devin-fast",
 	}
 	ProviderOrder = []string{
 		"agy-claude", "devin-fusion", "devin-pro", "devin-fast",
