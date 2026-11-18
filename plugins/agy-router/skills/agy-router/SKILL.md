@@ -10,11 +10,11 @@ description: >-
 
 Use `agy-router` to offload codebase recon, architecture orientation, single-shot edits, parallel `.worktrees/tasks.json` sweeps, and independent cross-model diff verification across your installed agent CLIs. For the full 4-phase engineering discipline, invoke `/ooda`; for security auditing, invoke `/harden`; to configure stage pins interactively, invoke `/lane`.
 
-## Per-Stage Routing Matrix (`v3.0.0`)
+## Per-Stage Routing Matrix (`v3.1.0`)
 Each routed stage (`observe`, `orient`, `act`, `verify`) defaults to `auto` and resolves via:
 **`CLI flag > --local > --profile > global (--set-stage / --select) > auto`**.
 
-- **Runtime State:** Global pins & cooldowns live in `~/.local/state/agy-router/quota.json` (`v9`, `$XDG_STATE_HOME/agy-router`; overridable via `AGY_ROUTER_QUOTA_FILE`). Per-repo `--local` pins live out-of-git in `~/.local/state/agy-router/workspaces/<id>.json` (surviving `agy-router --cleanup`). HUD markers & `flock` leases live in `/tmp/agy-router-hud` (`AGY_ROUTER_HUD_DIR`).
+- **Runtime State:** Global pins & cooldowns live in `~/.local/state/agy-router/quota.json` (`v11`, `$XDG_STATE_HOME/agy-router`; overridable via `AGY_ROUTER_QUOTA_FILE`). Per-repo `--local` pins live out-of-git in `~/.local/state/agy-router/workspaces/<id>.json` (surviving `agy-router --cleanup`). HUD markers & `flock` leases live in `/tmp/agy-router-hud` (`AGY_ROUTER_HUD_DIR`).
 - **4 Selector Surfaces:**
   1. `agy-router --select` (`-s`): Terminal arrow-key TUI (`↑`/`↓`, `Enter`, `b`, `q`, `Tab` scope toggle, `--until-reset`).
   2. `/lane`: Conversational `ask_question` wizard inside Antigravity.
@@ -22,7 +22,7 @@ Each routed stage (`observe`, `orient`, `act`, `verify`) defaults to `auto` and 
   4. `8` agent profiles under `plugins/agy-router/agents/`: `router-{auto,conserve,deep,devin,grok,mcode,mistral,muse}`.
 - **Guardrails:**
   - **Recursion Guard (`exit 2`):** Workers run with `AGY_ROUTER_DEPTH>=1`, `AGENT_OODA_DEPTH>=1`, and `ROUTER_DEPTH>=1`, blocking nested dispatch/admin calls.
-  - **Gemini & PAYG Guardrails:** Rejects Gemini orchestrator/flash models as headless workers; skips `[PAYG api_key]` Muse unless `--lane muse`; never spends paid `devin-fusion` credits unless `--lane devin-fusion` (never on `--review`).
+  - **Gemini & PAYG Guardrails:** Rejects Gemini orchestrator/flash models as headless workers; skips `[PAYG api_key]` Muse unless `--lane muse`; treats `devin-fusion` (`24h + 7d`) as a capped subscription pool drained automatically before reset (excluding explicit-only `tier: "credits"` pools from unattended `auto`/`--review`).
   - **Fail-Closed Read-Only & Merkle Cache:** `--recon`, `--orient`, and `--review` snapshot the repo, fail closed (`REJECT`/`exit 1`) on unexpected writes, and cache identical Merkle-matched trees (`--no-cache` or `AGY_ROUTER_NO_CACHE=1` to bypass).
   - **Auto Complexity & Skills:** Omitted `--complexity` and up to 2 non-core skills are inferred from prompt & files (`--skill none` or `AGY_ROUTER_NO_AUTO_SKILL=1` opts out). HUD & TUI colors follow `agy` themes (`AGY_ROUTER_THEME`).
 
@@ -43,7 +43,7 @@ Each routed stage (`observe`, `orient`, `act`, `verify`) defaults to `auto` and 
 | Read-only root-cause & plan (`orient` stage) | `agy-router --orient "<question>"` |
 | Single-shot scoped coding task (`act` stage) | `agy-router --task "<prompt>" --files a.go,b.go` |
 | Apply temporary preset / skill / complexity | `agy-router --task "<prompt>" --profile conserve --skill <name> --complexity deep` |
-| Explicit lane / model / effort / exclusion | `agy-router --task "<prompt>" --lane agy-opus --model sonnet --exclude-lane grok` |
+| Explicit lane / model / effort / exclusion | `agy-router --task "<prompt>" --lane agy-claude --model opus --exclude-lane grok` |
 | Auto-expire stage pin when lane quota resets | `agy-router --set-stage act=muse --until-reset` |
 | Cross-model diff verification + P0 hygiene | `agy-router --review [repo_dir]` |
 | 0-token P0 secret & P1 hardening hygiene scan | `agy-router --hygiene [repo_dir]` |

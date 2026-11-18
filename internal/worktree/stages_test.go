@@ -172,24 +172,20 @@ func TestStageRefusalsAndPAYG(t *testing.T) {
 		t.Fatalf("expected preset=muse rejected when muse PAYG active")
 	}
 	_ = os.Remove(filepath.Join(hudDir, "muse_usage.json"))
-
+	if _, err := ConfigureStage(StagePatch{Stage: "act", Lane: "devin-fusion", Local: true, Cwd: tmp}); err != nil {
+		t.Fatalf("expected devin-fusion subscription pin allowed: %v", err)
+	}
 	bads := []StagePatch{
 		{Stage: "bogus", Lane: "mcode", Cwd: tmp},
 		{Stage: "act", Lane: "bogus-lane", Cwd: tmp},
-		{Stage: "act", Lane: "agy-opus", Model: "gemini-4-carbon-high", Cwd: tmp},
+		{Stage: "act", Lane: "agy-claude", Model: "gemini-4-carbon-high", Cwd: tmp},
 		{Stage: "act", Lane: "auto", Model: "grok-4.7", Cwd: tmp},
 		{Stage: "preset", Lane: "deep", Effort: "high", Cwd: tmp},
-		{Stage: "verify", Lane: "devin-fusion", Cwd: tmp},
-		{Stage: "act", Lane: "devin-fusion", Cwd: tmp},
 	}
 	for _, bad := range bads {
-		if _, err := ConfigureStage(bad); err == nil {
-			t.Fatalf("expected refusal for invalid StagePatch %+v", bad)
-		} else {
-			var ee *fleet.ExitError
-			if !errors.As(err, &ee) || ee.Code != 2 {
-				t.Fatalf("expected ExitError(2) for %+v, got %v", bad, err)
-			}
+		var ee *fleet.ExitError
+		if _, err := ConfigureStage(bad); err == nil || !errors.As(err, &ee) || ee.Code != 2 {
+			t.Fatalf("expected ExitError(2) for %+v, got %v", bad, err)
 		}
 	}
 }

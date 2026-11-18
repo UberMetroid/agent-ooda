@@ -26,8 +26,8 @@ models/lanes used across router stages (`observe`, `orient`, `act`, `verify`).
    agy-router --set-stage preset=<name> [--local]
    ```
 4. If configuring a single stage:
-   - Step A: Pick stage (`observe`, `orient`, `act`, `verify`) and target lane (`auto`, or any non-paid lane from `--status` — persistent pins exclude paid-credits `devin-fusion` and PAYG `muse`; pass `--lane` per run instead).
-   - Step B (when lane != `auto`): Pick one of that lane's discovered models from `agy-router --status`, effort (for `agy-opus`, `muse`, `mcode`, `grok`; skip `--effort` for `via-model` `devin-*` and `mistral`), and persistence (`Sticky` vs `--until-reset`).
+   - Step A: Pick stage (`observe`, `orient`, `act`, `verify`) and target lane (`auto`, or any subscription lane from `--status` — persistent pins exclude PAYG `muse` and any `tier: "credits"` pool; pass `--lane` per run instead).
+   - Step B (when lane != `auto`): Pick one of that lane's discovered models from `agy-router --status`, effort (for `agy-claude`, `muse`, `mcode`, `grok`; skip `--effort` for `via-model` `devin-*` and `mistral`), and persistence (`Sticky` vs `--until-reset`).
    - Run:
      ```bash
      agy-router --set-stage <stage>=<lane> [--model <model>] [--effort <effort>] [--until-reset] [--local]

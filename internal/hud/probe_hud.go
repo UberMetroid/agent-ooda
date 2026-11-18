@@ -128,7 +128,7 @@ func readFleetProviders() (*fleet.QuotaState, bool) {
 // LoadFleetSummary reads quota.json read-only to compute active lane counts and wake timer.
 func LoadFleetSummary(nowUTC time.Time, cwd ...string) FleetSummary {
 	def := FleetSummary{
-		CodeLane: "agy-opus", CodeEff: "high", FastLane: "devin-fast", FastEff: "max",
+		CodeLane: "agy-claude", CodeEff: "high", FastLane: "devin-fast", FastEff: "max",
 	}
 	q, ok := readFleetProviders()
 	if !ok {

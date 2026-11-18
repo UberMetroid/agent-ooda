@@ -35,8 +35,8 @@ func checkCandidate(
 	if req.Exclude != nil && req.Exclude[name] {
 		return SelectRes{}, name + ": already attempted", false
 	}
-	if name == "agy-opus" && depth >= 1 {
-		return SelectRes{}, "agy-opus: blocked inside nested AGY_ROUTER_DEPTH>=1 / ROUTER_DEPTH>=1", false
+	if name == "agy-claude" && depth >= 1 {
+		return SelectRes{}, "agy-claude: blocked inside nested AGY_ROUTER_DEPTH>=1 / ROUTER_DEPTH>=1", false
 	}
 	if req.StrictAvoid && req.AvoidFamilies != nil && req.AvoidFamilies[ModelFamily(name)] {
 		return SelectRes{}, name + ": excluded family (" + ModelFamily(name) + ")", false
@@ -185,11 +185,13 @@ func ResolveRegimeSpec(provider, complexity string, cap LaneCap) (string, string
 		} else if comp != "" && comp != "review" {
 			mod = pickCleanModel(cap.Models, "muse-ember-1.0")
 		}
-	case "agy-opus":
+	case "agy-claude":
 		if fleet.FastComplexities[comp] {
 			mod = pickCleanModel(cap.Models, "claude-sonnet-5-5-medium", "claude-sonnet-5-5-high")
 		} else if fleet.DeepComplexities[comp] || comp == "heavy" {
 			mod = pickCleanModel(cap.Models, "claude-opus-5-5-high")
+		} else if comp != "" && comp != "review" {
+			mod = pickCleanModel(cap.Models, "claude-sonnet-5-5-high", "claude-opus-5-5-high")
 		}
 	case "devin-fast":
 		if fleet.FastComplexities[comp] {

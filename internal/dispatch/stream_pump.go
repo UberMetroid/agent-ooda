@@ -246,7 +246,7 @@ func ExecuteOnce(req ExecReq) ExecRes {
 	}
 	defer os.RemoveAll(built.PromptFile)
 	defer os.RemoveAll(built.VibeExportDir)
-	if req.Provider == "agy-opus" && !slices.Contains(built.Argv, "--model") {
+	if req.Provider == "agy-claude" && !slices.Contains(built.Argv, "--model") {
 		if agyCfg := envelope.ProbeAgySettings(""); agyCfg.GeminiBlocked {
 			return ExecRes{ExitCode: 2, Output: fmt.Sprintf("error: Gemini guardrail blocked %q", agyCfg.SettingsModel)}
 		}

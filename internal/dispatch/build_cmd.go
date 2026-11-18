@@ -61,7 +61,7 @@ func childEnv(depth int, prov string, readOnly bool) []string {
 			}
 		} else if strings.HasPrefix(kv, "AGY_ROUTER_DEPTH=") || strings.HasPrefix(kv, "ROUTER_DEPTH=") ||
 			strings.HasPrefix(kv, "AGENT_OODA_DEPTH=") || strings.HasPrefix(kv, "GIT_TERMINAL_PROMPT=") ||
-			(prov == "agy-opus" && strings.HasPrefix(kv, "ANTIGRAVITY_")) {
+			(prov == "agy-claude" && strings.HasPrefix(kv, "ANTIGRAVITY_")) {
 			continue
 		}
 		out = append(out, kv)
@@ -86,7 +86,7 @@ func buildAgyCmd(req CmdReq, model string) (BuiltCmd, error) {
 	}
 	argv = append(argv, "--disable-slash-commands", "--output-format", "stream-json",
 		"--add-dir", req.Worktree)
-	return BuiltCmd{Argv: argv, Env: childEnv(fleet.RouterDepth()+1, "agy-opus", ro), StreamFmt: "ndjson"}, nil
+	return BuiltCmd{Argv: argv, Env: childEnv(fleet.RouterDepth()+1, "agy-claude", ro), StreamFmt: "ndjson"}, nil
 }
 
 func buildDevinCmd(req CmdReq, model, promptFile string) (BuiltCmd, error) {
@@ -237,7 +237,7 @@ func BuildWorkerCommand(req CmdReq) (BuiltCmd, error) {
 		}
 	}
 	switch req.Provider {
-	case "agy-opus":
+	case "agy-claude":
 		return buildAgyCmd(req, model)
 	case "devin-fusion", "devin-pro", "devin-fast":
 		return buildDevinCmd(req, model, promptFile)

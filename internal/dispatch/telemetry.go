@@ -16,9 +16,9 @@ import (
 
 var (
 	fusionModelRe = regexp.MustCompile(
-		`^fusion-claude-([a-z]+)-(\d+)-(\d+)-(high|medium|low)(?:-sidekick-([a-z]+)-(\d+))?`,
+		`^fusion-claude-([a-z]+)-(\d+)-(\d+)-(high|medium|low|xhigh|max)(?:-sidekick-([a-z]+)-(\d+))?`,
 	)
-	effortAbbr = map[string]string{"high": "hi", "medium": "med", "low": "lo"}
+	effortAbbr = map[string]string{"high": "hi", "medium": "med", "low": "lo", "xhigh": "xhi", "max": "max"}
 )
 
 // WorkerMarker is written to <hud_dir>/active/<pid>-<task>.json for the live HUD.

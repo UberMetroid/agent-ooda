@@ -1,5 +1,5 @@
 {
-  "version": 9,
+  "version": 11,
   "updated_at": null,
   "drain_capped_first": true,
   "stages": {
@@ -9,30 +9,32 @@
     "verify": { "lane": "auto" }
   },
   "parallel_stripe_pool": [
-    "agy-opus",
-    "muse",
+    "agy-claude",
+    "devin-fusion",
     "grok",
     "mistral",
+    "muse",
     "devin-fast",
     "devin-pro",
     "mcode"
   ],
   "default_fallback_chain": [
-    "agy-opus",
-    "muse",
+    "agy-claude",
+    "devin-fusion",
     "grok",
     "mistral",
+    "muse",
     "devin-fast",
     "devin-pro",
     "mcode"
   ],
   "providers": {
-    "agy-opus": {
+    "agy-claude": {
       "cli": "agy",
       "model": null,
       "effort": null,
       "tier": "capped",
-      "role": "Antigravity Claude pool (5h rolling + 7d fixed weekly)",
+      "role": "Antigravity Claude pool (Sonnet act / Opus deep; 5h + 7d)",
       "status": "active",
       "windows": ["5h", "7d"],
       "cooldown_until": null,
@@ -54,14 +56,16 @@
       "cli": "devin",
       "model": null,
       "effort": null,
-      "tier": "credits",
-      "role": "Devin Fusion pool (paid credits; opt-in --lane only)",
+      "tier": "capped",
+      "role": "Devin Fusion subscription pool (24h + 7d use-it-or-lose-it)",
       "status": "active",
+      "windows": ["24h", "7d"],
       "cooldown_until": null,
       "reason": null,
       "manual_disable": false,
-      "max_parallel": null,
-      "cycle_hours": null,
+      "max_parallel": 4,
+      "cycle_hours": 24.0,
+      "outer_hours": 168.0,
       "cycle_started_at": null,
       "next_reset_at": null,
       "cycle_runs": 0,

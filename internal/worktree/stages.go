@@ -34,7 +34,7 @@ func PresetStages(name string) (map[string]fleet.StageRoute, bool) {
 	res, ok := map[string]map[string]fleet.StageRoute{
 		"auto": mk("auto", "auto", "auto", "auto", nil), "devin": mk("devin-fast", "devin-pro", "devin-pro", "mcode", nil),
 		"conserve": mk("devin-fast", "devin-pro", "devin-pro,devin-fast", "mcode", nil),
-		"deep": mk("devin-fast", "agy-opus,grok", "agy-opus,devin-pro", "mcode", fleet.Ptr("xhigh")),
+		"deep": mk("devin-fast", "agy-claude,grok", "agy-claude,devin-pro", "mcode", fleet.Ptr("xhigh")),
 		"mcode": mk("mcode", "mcode", "mcode", "devin-fast", nil), "grok": mk("devin-fast", "grok", "grok", "mcode", nil),
 		"muse": mk("devin-fast", "muse", "muse", "mcode", nil), "mistral": mk("devin-fast", "mistral", "mistral", "mcode", nil),
 	}[strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(strings.TrimSpace(name)), "router-"), "ooda-")]
@@ -123,7 +123,7 @@ func validateStagePatch(p StagePatch, q *fleet.QuotaState) (fleet.StageRoute, er
 	}
 	for _, l := range lanes {
 		if (q != nil && q.Providers[l] != nil && q.Providers[l].Tier == "credits") ||
-			l == "devin-fusion" || (l == "muse" && fleet.CachedMuseProbe(900).PayAsYouGo) {
+			(l == "muse" && fleet.CachedMuseProbe(900).PayAsYouGo) {
 			return fleet.StageRoute{}, fleet.UsageErr("error: paid/PAYG lane %q cannot be pinned; pass --lane %s", l, l)
 		}
 	}
@@ -169,8 +169,7 @@ func ConfigureStage(p StagePatch) (saved map[string]fleet.StageRoute, err error)
 			return nil, fleet.UsageErr("error: unknown stage preset %q", p.Lane)
 		}
 		for _, sr := range updates {
-			if (strings.Contains(sr.Lane, "muse") && fleet.CachedMuseProbe(900).PayAsYouGo) ||
-				strings.Contains(sr.Lane, "devin-fusion") {
+			if strings.Contains(sr.Lane, "muse") && fleet.CachedMuseProbe(900).PayAsYouGo {
 				return nil, fleet.UsageErr("error: paid/PAYG lane in preset %q; pass --lane explicitly", p.Lane)
 			}
 		}

@@ -59,9 +59,10 @@ func pickAgyWorkerModel(agy AgySettings, models []string, effort string) (string
 		tier = "high"
 	}
 	matches := []func(string) bool{
+		func(m string) bool { return strings.HasPrefix(m, "claude-sonnet-") && strings.HasSuffix(m, "-"+tier) },
+		func(m string) bool { return strings.HasPrefix(m, "claude-sonnet-") && strings.HasSuffix(m, "-high") },
 		func(m string) bool { return strings.HasPrefix(m, "claude-opus-") && strings.HasSuffix(m, "-"+tier) },
 		func(m string) bool { return strings.HasPrefix(m, "claude-opus-") && strings.HasSuffix(m, "-high") },
-		func(m string) bool { return strings.HasPrefix(m, "claude-opus-") },
 		func(m string) bool { return strings.HasPrefix(m, "claude-") },
 		func(string) bool { return true },
 	}
@@ -88,7 +89,7 @@ func buildLaneCap(
 	if info != nil {
 		pinM, pinE = ptrVal(info.Model), ptrVal(info.Effort)
 	}
-	if lane == "agy-opus" {
+	if lane == "agy-claude" {
 		dm, em, ee, unsafe := pickAgyWorkerModel(agy, cliMods["agy"], pinE)
 		guard := ""
 		if agy.GeminiBlocked {
@@ -182,14 +183,15 @@ func EffectiveLaneSpec(
 		return LaneSpec{}, err
 	}
 	explicitEff := fleet.ResolveEffort(info, expEffort)
-	needAgy := provider == "agy-opus" && normModel == ""
+	needAgy := provider == "agy-claude" && normModel == ""
 	cap := DiscoverFleetCaps(DiscoverOpts{Home: home, ProbeAgy: needAgy})[provider]
 	regMod, regEff := ResolveRegimeSpec(provider, complexity, cap)
 	argvModel := orStr(normModel, orStr(regMod, cap.DispatchModel))
 	effChoice := orStr(explicitEff, regEff)
 	if needAgy && effChoice != "" && normModel == "" && regMod == "" {
 		for _, m := range cap.Models {
-			if strings.HasPrefix(m, "claude-opus-") && strings.HasSuffix(m, "-"+effChoice) {
+			isClaude := strings.HasPrefix(m, "claude-sonnet-") || strings.HasPrefix(m, "claude-opus-")
+			if isClaude && strings.HasSuffix(m, "-"+effChoice) {
 				argvModel = m
 				break
 			}
@@ -197,7 +199,7 @@ func EffectiveLaneSpec(
 	}
 	dispModel := orStr(argvModel, orStr(cap.EffectiveModel, "default"))
 	inferred := ""
-	if provider == "agy-opus" || strings.HasPrefix(provider, "devin-") {
+	if provider == "agy-claude" || strings.HasPrefix(provider, "devin-") {
 		if em := tierSuffixRe.FindStringSubmatch(strings.ToLower(dispModel)); len(em) == 2 {
 			inferred = em[1]
 		}

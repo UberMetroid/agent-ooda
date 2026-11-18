@@ -103,7 +103,7 @@ func fastOrder(q *fleet.QuotaState, chain []string, em EMEnvelope) []string {
 		if info != nil && info.Tier == "credits" {
 			continue
 		}
-		if (info != nil && info.Tier == "capped") || name == "agy-opus" {
+		if (info != nil && info.Tier == "capped") || name == "agy-claude" {
 			deferred = append(deferred, name)
 		} else {
 			ordered = append(ordered, name)

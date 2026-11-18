@@ -467,12 +467,12 @@
   <main id="top">
     <section class="hero">
       <div class="wrap">
-        <span class="eyebrow">agy-router v3.0.1 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Zero-Trust Per-Stage Router (v9)</span>
+        <span class="eyebrow">agy-router v3.1.0 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Zero-Trust Per-Stage Router (v11)</span>
         <h1>Turn one session into a<br><span>token-routed agent fleet.</span></h1>
         <p class="lead">
           <strong>UberMetroid/agy-router</strong> ships one zero-dependency static Go routing engine
           (<code>agy-router</code>, <code>agy-router-hud</code>, <code>agy-router-hook</code>) paired with
-          host plugin adapters (<code>plugins/agy-router</code> for Antigravity <code>agy</code> today): v9 per-stage
+          host plugin adapters (<code>plugins/agy-router</code> for Antigravity <code>agy</code> today): v11 per-stage
           routing (<code>--select</code> TUI, <code>/lane</code>, 8 <code>/agents</code> profiles), opt-in
           <code>/ooda</code> &amp; <code>/harden</code> skills (0 tokens unless invoked),
           <code>--hygiene</code> 0-token secret/footgun scanning, <code>--orient</code> synthesis, cross-model verification,
@@ -484,7 +484,7 @@
         </div>
         <div class="hero-actions">
           <a class="btn btn-primary" href="#quickstart">Install &amp; Quickstart</a>
-          <a class="btn" href="https://github.com/UberMetroid/agy-router/releases/latest">Release Binaries (v3.0.1)</a>
+          <a class="btn" href="https://github.com/UberMetroid/agy-router/releases/latest">Release Binaries (v3.1.0)</a>
           <a class="btn" href="#architecture">Go Architecture</a>
         </div>
         <div class="telemetry-strip">
@@ -682,7 +682,7 @@
           <div class="card">
             <span class="badge b-cyan">READY</span>
             <h3>Healthy Pools</h3>
-            <p>Rotates evenly across healthy bounded pools (<code>agy-opus</code>, <code>muse</code>, <code>grok</code>, <code>mistral</code>).</p>
+            <p>Rotates evenly across healthy bounded pools (<code>agy-claude</code>, <code>devin-fusion</code>, <code>grok</code>, <code>mistral</code>, <code>muse</code>).</p>
           </div>
           <div class="card">
             <span class="badge b-amber">SPARING</span>
@@ -692,7 +692,7 @@
           <div class="card">
             <span class="badge b-violet">CREDITS</span>
             <h3>Opt-In Only</h3>
-            <p>Blocks paid <code>devin-fusion</code> credits from <code>auto</code>, saved pins, and <code>--review</code> unless explicitly passed via <code>--lane</code>.</p>
+            <p>Blocks <code>tier: "credits"</code> pools from <code>auto</code>, saved pins, and <code>--review</code> unless explicitly passed via <code>--lane</code>; subscription <code>devin-fusion</code> (<code>24h + 7d</code>) runs as <code>capped</code>.</p>
           </div>
           <div class="card">
             <span class="badge b-red">COOLING</span>
@@ -732,11 +732,11 @@
             </thead>
             <tbody>
               <tr>
-                <td><code>agy-opus</code></td>
+                <td><code>agy-claude</code></td>
                 <td><a href="https://antigravity.google/" target="_blank" rel="noopener">Google Antigravity</a> (<code>agy</code>)</td>
-                <td><code>--effort</code> + non-Gemini Claude model</td>
+                <td><code>--effort</code> + Claude Sonnet/Opus model</td>
                 <td>capped &bull; 5h + 7d</td>
-                <td>Default capped coding lane &bull; Gemini-blocked safeguard</td>
+                <td>Claude coding lane (Sonnet <code>act</code> / Opus <code>deep</code>) &bull; Gemini-blocked safeguard</td>
               </tr>
               <tr>
                 <td><code>muse</code></td>
@@ -784,8 +784,8 @@
                 <td><code>devin-fusion</code></td>
                 <td><a href="https://docs.devin.ai/" target="_blank" rel="noopener">Cognition Devin</a> (<code>devin</code>)</td>
                 <td><code>fusion</code> pool (<code>via-model</code>)</td>
-                <td>paid credits (opt-in <code>--lane</code>)</td>
-                <td>Opt-in only (blocked from <code>auto</code>, pins &amp; <code>--probe</code>)</td>
+                <td>capped &bull; 24h + 7d (subscription)</td>
+                <td>Subscription Fusion lane &bull; <strong>max 4 parallel</strong> &bull; auto-drains before reset</td>
               </tr>
             </tbody>
           </table>
@@ -797,8 +797,8 @@
             <p>
               <strong>Observe (recon):</strong> <code>devin-fast &rarr; mcode &rarr; devin-pro</code><br>
               <strong>Act (default):</strong> Expiring clocks &rarr; <code>0.5x</code> off-peak &rarr; short windows &rarr; free lanes<br>
-              <strong>Parallel stripe:</strong> <code>agy-opus &rarr; muse &rarr; grok &rarr; mistral &rarr; devin-fast &rarr; devin-pro &rarr; mcode</code><br>
-              <strong>Fallback chain:</strong> <code>agy-opus &rarr; muse &rarr; grok &rarr; mistral &rarr; devin-fast &rarr; devin-pro &rarr; mcode</code>
+              <strong>Parallel stripe:</strong> <code>agy-claude &rarr; devin-fusion &rarr; grok &rarr; mistral &rarr; muse &rarr; devin-fast &rarr; devin-pro &rarr; mcode</code><br>
+              <strong>Fallback chain:</strong> <code>agy-claude &rarr; devin-fusion &rarr; grok &rarr; mistral &rarr; muse &rarr; devin-fast &rarr; devin-pro &rarr; mcode</code>
             </p>
           </div>
           <div class="card">
@@ -817,7 +817,7 @@
           <h3>Other Agent CLIs (Not Wired &mdash; No Active Paid Subscription)</h3>
           <p>
             <code>agy-router</code> does not currently wire
-            <a href="https://code.claude.com/docs/en/overview" target="_blank" rel="noopener">Anthropic Claude Code</a> (<code>claude</code>; Claude Opus/Sonnet workers already run via <code>agy-opus</code>),
+            <a href="https://code.claude.com/docs/en/overview" target="_blank" rel="noopener">Anthropic Claude Code</a> (<code>claude</code>; Claude Sonnet/Opus workers already run via <code>agy-claude</code>),
             <a href="https://github.com/openai/codex" target="_blank" rel="noopener">OpenAI Codex CLI</a> (<code>codex</code>),
             <a href="https://cursor.com/cli" target="_blank" rel="noopener">Cursor CLI</a> (<code>cursor-agent</code>),
             <a href="https://github.com/features/copilot" target="_blank" rel="noopener">GitHub Copilot CLI</a> (<code>copilot</code>),
@@ -864,7 +864,7 @@
             <h3>Off-Family Fallback</h3>
             <p>
               On cooldown, timeout (<code>240s</code> default), or <code>UNKNOWN</code> verdict, verification rotates
-              across <code>mcode &rarr; devin-fast &rarr; devin-pro &rarr; grok &rarr; mistral &rarr; muse &rarr; agy-opus</code>.
+              across <code>mcode &rarr; devin-fast &rarr; devin-pro &rarr; grok &rarr; mistral &rarr; muse &rarr; devin-fusion &rarr; agy-claude</code>.
             </p>
           </div>
         </div>
@@ -887,7 +887,7 @@ git clone https://github.com/UberMetroid/agy-router.git
 cd agy-router &amp;&amp; ./install.sh
 
 # restart agy so the plugin, 8 /agents profiles, /lane, /ooda, /harden &amp; statusLine load
-agy plugin list       # confirm "agy-router" is enabled (3.0.1)
+agy plugin list       # confirm "agy-router" is enabled (3.1.0)
 agy-router --version  # print binary version
 agy-router --status   # router stage matrix, fleet tiers, resets &amp; skills
 agy-router --hygiene  # 0-token P0 secret, key &amp; P1 hardening scan
@@ -933,7 +933,7 @@ curl -fsSL https://ubermetroid.github.io/agy-router/install.sh | bash -s -- --un
           <div class="card">
             <h3>State Paths &amp; House-Law Gates</h3>
             <p>
-              Quota state (<code>v9</code>) and global stage pins persist under
+              Quota state (<code>v11</code>) and global stage pins persist under
               <code>${XDG_STATE_HOME:-~/.local/state}/agy-router/quota.json</code> (override via
               <code>AGY_ROUTER_QUOTA_FILE</code>); <code>--local</code> per-repo pins live out-of-git in
               <code>workspaces/&lt;id&gt;.json</code>. Live HUD markers and <code>flock</code> leases live in

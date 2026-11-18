@@ -55,7 +55,7 @@ func probeOneLane(lane string, info *fleet.ProviderConfig, cwd string) (string, 
 	if err != nil {
 		return err.Error(), false
 	}
-	if lane == "agy-opus" && info.Model == nil && envelope.ProbeAgySettings("").GeminiBlocked && spec.ArgvModel == "" {
+	if lane == "agy-claude" && info.Model == nil && envelope.ProbeAgySettings("").GeminiBlocked && spec.ArgvModel == "" {
 		return "blocked by Gemini guardrail (run --discover)", false
 	}
 	slot, serr := worktree.EnsureSlot("probe-" + lane)
@@ -116,7 +116,7 @@ func DoProbe(outW, errW io.Writer) int {
 		cwd = "."
 	}
 	nowUTC, anyFail := time.Now().UTC(), false
-	targets := []string{"agy-opus", "mcode", "grok", "mistral", "devin-fast", "muse"}
+	targets := []string{"agy-claude", "devin-fusion", "mcode", "grok", "mistral", "devin-fast", "muse"}
 	for _, lane := range targets {
 		info := q.Providers[lane]
 		if why := shouldSkipProbe(lane, info, nowUTC, mp.PayAsYouGo); why != "" {

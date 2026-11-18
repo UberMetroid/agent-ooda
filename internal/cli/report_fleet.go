@@ -240,6 +240,6 @@ func DoUsage(w io.Writer) int {
 		posture, fleet.CountActiveLeases("devin-fast", fastCap), fastCap)
 	fmt.Fprintf(w, "Live probe [muse usage] : %s\n", museProbe.Summary)
 	fmt.Fprintln(w, "Headless probes         : grok/devin/mcode omit remaining balance; "+
-		"agy-opus & vibe report exact per-run tokens")
+		"agy-claude & vibe report exact per-run tokens")
 	return 0
 }

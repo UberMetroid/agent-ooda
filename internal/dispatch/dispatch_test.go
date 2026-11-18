@@ -29,7 +29,7 @@ func TestBuildWorkerCommandAllCLIs(t *testing.T) {
 		"ANTIGRAVITY_TOKEN": "sec", "GITHUB_TOKEN": "sec", "AWS_SECRET_ACCESS_KEY": "sec", "OPENAI_API_KEY": "sec",
 		"ANTHROPIC_API_KEY": "sec", "NPM_TOKEN": "sec", "SSH_AUTH_SOCK": "/tmp/s", "ACME_API_TOKEN": "sec",
 		"STRIPE_SECRET_KEY": "sec"})
-	for _, lane := range []string{"agy-opus", "devin-pro", "mcode", "grok", "muse", "mistral"} {
+	for _, lane := range []string{"agy-claude", "devin-pro", "mcode", "grok", "muse", "mistral"} {
 		built, err := BuildWorkerCommand(CmdReq{Provider: lane, CLIPath: "/bin/" + lane,
 			Prompt: "fix bug", Worktree: wt, SlotDir: slot, TaskID: "t1"})
 		if err != nil || slices.Contains(built.Argv, "--model") || slices.Contains(built.Argv, "--effort") ||
@@ -43,7 +43,7 @@ func TestBuildWorkerCommandAllCLIs(t *testing.T) {
 			}
 		}
 		hasAgy := slices.ContainsFunc(built.Env, func(s string) bool { return strings.HasPrefix(s, "ANTIGRAVITY_") })
-		if (lane == "agy-opus") == hasAgy {
+		if (lane == "agy-claude") == hasAgy {
 			t.Fatalf("%s write ANTIGRAVITY env=%v", lane, hasAgy)
 		}
 		ro, err := BuildWorkerCommand(CmdReq{Provider: lane, CLIPath: "/bin/" + lane, Model: "m-ovr",
@@ -133,7 +133,7 @@ func TestExecStreamAndGeminiGuard(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(fakeHome, ".gemini", "antigravity-cli", "settings.json"),
 		[]byte(`{"model":{"name":"Orchestrator (Carbon)"}}`), 0o644)
 	setEnvs(t, map[string]string{"HOME": fakeHome, "ROUTER_HUD_DIR": tmp, "AGENT_OODA_DEPTH": "0", "ROUTER_DEPTH": "0"})
-	if b := ExecuteOnce(ExecReq{Provider: "agy-opus", CLIPath: "/bin/true", Prompt: "hi", Worktree: tmp, SlotDir: tmp,
+	if b := ExecuteOnce(ExecReq{Provider: "agy-claude", CLIPath: "/bin/true", Prompt: "hi", Worktree: tmp, SlotDir: tmp,
 		TaskID: "g1", TimeoutSec: 5}); b.ExitCode != 2 || !strings.Contains(b.Output, "Gemini guardrail") {
 		t.Fatalf("expected Gemini settings block exit 2, got %+v", b)
 	}

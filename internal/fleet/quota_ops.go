@@ -20,7 +20,7 @@ func mutateProviderLocked(qPath, rawName string, create bool,
 	}
 	var updated ProviderConfig
 	err = WithQuotaLock(qPath, func(path string) error {
-		q, rerr := readAndPrepLocked(path)
+		q, _, rerr := readAndPrepLocked(path)
 		if rerr != nil {
 			return rerr
 		}

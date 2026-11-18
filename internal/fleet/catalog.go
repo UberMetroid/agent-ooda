@@ -25,8 +25,8 @@ func UsageErr(format string, args ...any) error {
 }
 
 const (
-	Version             = "3.0.1"
-	QuotaSchemaVersion  = 9
+	Version             = "3.1.0"
+	QuotaSchemaVersion  = 11
 	CornerWindowSecs    = 5400
 	SoonWakeSecs        = 2700
 	DevinFastMaxPar     = 4
@@ -70,27 +70,24 @@ var (
 	}
 	StageNames  = []string{"observe", "orient", "act", "verify"}
 	DefaultPool = []string{
-		"agy-opus", "muse", "grok", "mistral",
-		"devin-fast", "devin-pro", "mcode",
+		"agy-claude", "devin-fusion", "grok", "mistral", "muse", "devin-fast", "devin-pro", "mcode",
 	}
 	StripePool = []string{
-		"agy-opus", "muse", "grok", "mistral",
-		"devin-fast", "devin-pro", "mcode",
+		"agy-claude", "devin-fusion", "grok", "mistral", "muse", "devin-fast", "devin-pro", "mcode",
 	}
 	FastOrder = []string{"devin-fast", "mcode", "devin-pro", "muse"}
 	DeepOrder = []string{
-		"agy-opus", "muse", "grok", "mistral",
-		"devin-pro", "devin-fast", "mcode",
+		"agy-claude", "devin-fusion", "grok", "mistral", "muse", "devin-pro", "devin-fast", "mcode",
 	}
 	ReviewOrder = []string{
-		"mcode", "devin-fast", "devin-pro", "grok", "mistral", "muse", "agy-opus",
+		"mcode", "devin-fast", "devin-pro", "grok", "mistral", "muse", "devin-fusion", "agy-claude",
 	}
 	ProviderOrder = []string{
-		"agy-opus", "devin-fusion", "devin-pro", "devin-fast",
+		"agy-claude", "devin-fusion", "devin-pro", "devin-fast",
 		"muse", "mcode", "grok", "mistral",
 	}
 	ModelFamilies = map[string]string{
-		"agy-opus": "claude-opus", "devin-fusion": "claude-opus",
+		"agy-claude": "claude", "devin-fusion": "claude",
 		"devin-pro": "swe-2", "devin-fast": "swe-2",
 		"muse": "muse", "mcode": "minimax",
 		"grok": "grok", "mistral": "glm",
@@ -205,9 +202,11 @@ func Ptr[T any](v T) *T {
 func ProviderSpecs() map[string]ProviderSpec {
 	w57, w247 := []string{"5h", "7d"}, []string{"24h", "7d"}
 	return map[string]ProviderSpec{
-		"agy-opus": {CLI: "agy", Tier: "capped", CycleHours: Ptr(5.0), OuterHours: Ptr(168.0),
-			Windows: w57, Role: "Antigravity Claude pool (5h rolling + 7d fixed weekly)"},
-		"devin-fusion": {CLI: "devin", Tier: "credits", Role: "Devin Fusion pool (paid credits; opt-in --lane only)"},
+		"agy-claude": {CLI: "agy", Tier: "capped", CycleHours: Ptr(5.0), OuterHours: Ptr(168.0),
+			Windows: w57, Role: "Antigravity Claude pool (Sonnet act / Opus deep; 5h + 7d)"},
+		"devin-fusion": {CLI: "devin", Tier: "capped", CycleHours: Ptr(24.0), OuterHours: Ptr(168.0),
+			Windows: w247, MaxParallel: Ptr(DevinFastMaxPar),
+			Role: "Devin Fusion subscription pool (24h + 7d use-it-or-lose-it)"},
 		"devin-pro": {CLI: "devin", Tier: "unlimited", CycleHours: Ptr(24.0), OuterHours: Ptr(168.0),
 			Windows: w247, Role: "Heavy implementation & refactors (Devin Pro 24h daily + 7d weekly)"},
 		"devin-fast": {CLI: "devin", Tier: "unlimited", CycleHours: Ptr(24.0), OuterHours: Ptr(168.0),
@@ -240,7 +239,7 @@ func DefaultProviders() map[string]*ProviderConfig {
 	return out
 }
 
-// DefaultQuotaData returns baseline schema-v9 quota state.
+// DefaultQuotaData returns baseline schema-v11 quota state.
 func DefaultQuotaData() *QuotaState {
 	now := time.Now().Format(time.RFC3339)
 	stages := make(map[string]StageRoute, len(StageNames))

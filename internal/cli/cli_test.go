@@ -113,7 +113,7 @@ func TestStatusUsageAndQuotaAdmin(t *testing.T) {
 		}
 	}
 	for _, bad := range [][]string{
-		{"--set-cycle", "agy-opus", "--model", "gemini-4-carbon-low"},
+		{"--set-cycle", "agy-claude", "--model", "gemini-4-carbon-low"},
 		{"--recon", "hi", "--model", "gemini-4-carbon-high"},
 	} {
 		if rc, _, errS := run(bad...); rc != 2 || strings.Contains(errS, "pivoting") {

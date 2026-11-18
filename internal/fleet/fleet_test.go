@@ -24,28 +24,25 @@ func setupFleetEnv(t *testing.T) (string, string) {
 }
 
 func TestLanesAndGeminiGuard(t *testing.T) {
-	lanes, err := ParseLanes("mcode, flash, vibe, mcode", true)
+	lanes, err := ParseLanes("mcode, flash, vibe, agy-opus, agy-sonnet, mcode", true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := []string{"mcode", "devin-fast", "mistral"}
-	if len(lanes) != len(want) || lanes[0] != want[0] || lanes[1] != want[1] || lanes[2] != want[2] {
+	want := []string{"mcode", "devin-fast", "mistral", "agy-claude"}
+	if len(lanes) != len(want) || lanes[0] != want[0] || lanes[1] != want[1] ||
+		lanes[2] != want[2] || lanes[3] != want[3] {
 		t.Fatalf("got lanes %v, want %v", lanes, want)
 	}
 	if _, err := ParseLanes("auto,mcode", true); err == nil {
 		t.Fatal("expected error when mixing auto with explicit lanes")
 	}
 	for _, bad := range []string{"gemini-4-carbon-high", "Orchestrator (Carbon)", "gemini-3.8-flash-low"} {
-		if err := CheckModelGuard(bad); err == nil {
-			t.Fatalf("expected Gemini guardrail error for %q", bad)
-		} else {
-			var ee *ExitError
-			if !errors.As(err, &ee) || ee.Code != 2 {
-				t.Fatalf("expected ExitError(2) for %q, got %v", bad, err)
-			}
+		var ee *ExitError
+		if err := CheckModelGuard(bad); err == nil || !errors.As(err, &ee) || ee.Code != 2 {
+			t.Fatalf("expected ExitError(2) for %q, got %v", bad, err)
 		}
 	}
-	if m, err := NormalizeModel("agy-opus", "sonnet"); err != nil || m != "claude-sonnet-5-5-high" {
+	if m, err := NormalizeModel("agy-claude", "sonnet"); err != nil || m != "claude-sonnet-5-5-high" {
 		t.Fatalf("got %q (%v)", m, err)
 	}
 }
@@ -69,14 +66,17 @@ func TestResetTSAndMigrate(t *testing.T) {
 	q := &QuotaState{
 		Version:              5,
 		DefaultFallbackChain: []string{"cursor", "agy-opus", "muse"},
+		Stages:               map[string]StageRoute{"act": {Lane: "agy-opus"}},
 		Providers: map[string]*ProviderConfig{
-			"cursor": {CLI: "cursor"},
-			"mcode":  {CLI: "mcode", Tier: "unlimited", MaxParallel: Ptr(99999)},
-			"muse":   {CLI: "muse", Tier: "capped", Status: "cooldown", CooldownUntil: &wake, CycleHours: Ptr(5.0)},
+			"cursor":   {CLI: "cursor"},
+			"agy-opus": {CLI: "agy", Tier: "capped", Model: Ptr("claude-sonnet-5-5-high")},
+			"mcode":    {CLI: "mcode", Tier: "unlimited", MaxParallel: Ptr(99999)},
+			"muse":     {CLI: "muse", Tier: "capped", Status: "cooldown", CooldownUntil: &wake, CycleHours: Ptr(5.0)},
 		},
 	}
-	if !MigrateQuota(q) || q.Version != QuotaSchemaVersion || q.Providers["cursor"] != nil {
-		t.Fatalf("unexpected migration result: version=%d", q.Version)
+	if !MigrateQuota(q) || q.Version != QuotaSchemaVersion || q.Providers["cursor"] != nil ||
+		q.Providers["agy-opus"] != nil || q.Providers["agy-claude"].Model != nil || q.Stages["act"].Lane != "agy-claude" {
+		t.Fatalf("unexpected migration result: version=%d stages=%v", q.Version, q.Stages)
 	}
 	if mp := q.Providers["mcode"].MaxParallel; q.Providers["mcode"].Tier != "high-cap" || mp == nil || *mp > 32 {
 		t.Fatalf("mcode upgrade/clamp failed: %+v", q.Providers["mcode"])
@@ -92,7 +92,7 @@ func TestUsageBudgetsAndLock(t *testing.T) {
 		t.Fatalf("ConfigureCycle failed: %v", err)
 	}
 	if _, _, err := ConfigureCycle(CyclePatch{
-		Provider: "agy-opus", Model: Ptr("gemini-4-argon-low"), QuotaPath: qPath,
+		Provider: "agy-claude", Model: Ptr("gemini-4-argon-low"), QuotaPath: qPath,
 	}); err == nil {
 		t.Fatal("expected ConfigureCycle to block gemini model")
 	}

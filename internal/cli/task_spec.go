@@ -199,7 +199,7 @@ func printDiscoveryFooter(
 ) {
 	fmt.Fprintln(w, "\nDiscovered CLI Capabilities (effort control & available models):")
 	groups := [][2]string{
-		{"agy", "agy-opus"}, {"devin", "devin-pro"}, {"muse", "muse"},
+		{"agy", "agy-claude"}, {"devin", "devin-pro"}, {"muse", "muse"},
 		{"mcode", "mcode"}, {"grok", "grok"}, {"vibe", "mistral"},
 	}
 	limit, moreLbl := 6, "more; run --discover"

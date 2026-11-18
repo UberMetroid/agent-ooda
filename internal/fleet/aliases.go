@@ -23,9 +23,9 @@ var (
 		"invalid api key", "please log in", "auth login",
 	}
 	LaneAliases = map[string]string{
-		"auto": "auto", "default": "auto",
-		"agy-opus": "agy-opus", "apy-opus": "agy-opus", "agy": "agy-opus",
-		"agy-claude": "agy-opus", "claude": "agy-opus", "opus": "agy-opus",
+		"auto": "auto", "default": "auto", "agy": "agy-claude", "claude": "agy-claude",
+		"agy-claude": "agy-claude", "agy-opus": "agy-claude", "agy-sonnet": "agy-claude",
+		"apy-opus": "agy-claude", "opus": "agy-claude", "sonnet": "agy-claude",
 		"devin-fusion": "devin-fusion", "fusion": "devin-fusion",
 		"devin": "devin-pro", "devin-pro": "devin-pro", "swe-2-pro": "devin-pro",
 		"swe-2-max": "devin-pro", "pro": "devin-pro",
@@ -54,6 +54,7 @@ var (
 	DevinModelAliases = map[string]string{
 		"fusion": DefaultFusionModel, "fusion-opus": DefaultFusionModel,
 		"fusion-sonnet": "fusion-claude-sonnet-5-5-high-sidekick-swe-2-medium",
+		"fusion-max":    "fusion-claude-opus-5-5-max-sidekick-swe-2-flash-max",
 	}
 	MuseModelAliases = map[string]string{
 		"ember": "muse-ember-1.0", "muse-ember": "muse-ember-1.0",
@@ -163,7 +164,7 @@ func NormalizeModel(provider, model string) (string, error) {
 	}
 	var table map[string]string
 	switch provider {
-	case "agy-opus":
+	case "agy-claude", "agy-opus":
 		table = AgyModelAliases
 	case "mcode":
 		table = McodeModelAliases

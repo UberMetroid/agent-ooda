@@ -99,7 +99,9 @@ func ProbeDevinConfig(home string) DevinConfig {
 	pro := orStr(mapStr(prefs, "swe-2"), mapStr(agent, "model"))
 	fast := orStr(mapStr(prefs, "swe-2-flash"), orStr(mapStr(agent, "subagent_model"), mapStr(cfg, "model")))
 	laneMods := map[string]string{
-		"devin-fusion": mapStr(prefs, "fusion"), "devin-pro": pro, "devin-fast": fast,
+		"devin-fusion": orStr(mapStr(prefs, "fusion"), fleet.DefaultFusionModel),
+		"devin-pro":    pro,
+		"devin-fast":   fast,
 	}
 	laneEff := make(map[string]string)
 	var models []string

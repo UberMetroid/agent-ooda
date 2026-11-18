@@ -21,14 +21,14 @@ func TestRegimesAndOrder(t *testing.T) {
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	ts60 := now.Add(60 * time.Minute).Format(time.RFC3339)
 	qCorner := &fleet.QuotaState{Providers: map[string]*fleet.ProviderConfig{
-		"agy-opus": testLane("capped", "active", &ts60, nil),
-		"muse":     testLane("capped", "active", nil, nil),
+		"agy-claude": testLane("capped", "active", &ts60, nil),
+		"muse":       testLane("capped", "active", nil, nil),
 	}}
 	em := ComputeEMEnvelope(qCorner, now)
-	if len(em.CornerLanes) != 1 || em.CornerLanes[0] != "agy-opus" {
-		t.Fatalf("expected agy-opus corner, got %v", em.CornerLanes)
+	if len(em.CornerLanes) != 1 || em.CornerLanes[0] != "agy-claude" {
+		t.Fatalf("expected agy-claude corner, got %v", em.CornerLanes)
 	}
-	if em.Regimes["agy-opus"] != "EXPIRING" || em.Regimes["muse"] != "READY" {
+	if em.Regimes["agy-claude"] != "EXPIRING" || em.Regimes["muse"] != "READY" {
 		t.Fatalf("unexpected regimes: %v", em.Regimes)
 	}
 	qConserve := &fleet.QuotaState{Providers: map[string]*fleet.ProviderConfig{
@@ -39,12 +39,9 @@ func TestRegimesAndOrder(t *testing.T) {
 		t.Fatal("expected ConserveCapped=true")
 	}
 	dq := fleet.DefaultQuotaData()
-	rev, err := BuildCandidateOrder("auto", "review", dq, nil, map[string]bool{"swe-2": true})
-	if err != nil {
-		t.Fatalf("BuildCandidateOrder failed: %v", err)
-	}
-	if len(rev) == 0 || rev[0] != "mcode" {
-		t.Fatalf("expected mcode first in review order, got %v", rev)
+	if rev, err := BuildCandidateOrder("auto", "review", dq, nil, map[string]bool{"swe-2": true}); err != nil ||
+		len(rev) == 0 || rev[0] != "mcode" {
+		t.Fatalf("expected mcode first in review order, got %v err=%v", rev, err)
 	}
 	t.Setenv("AGENT_OODA_DEPTH", "0")
 	t.Setenv("ROUTER_DEPTH", "0")
@@ -58,9 +55,10 @@ func TestRegimesAndOrder(t *testing.T) {
 		t.Fatalf("expected grok selection, got %+v (%v)", sel, err)
 	}
 	pinFast, err := BuildCandidateOrder("devin-fast", "fast", dq, nil, nil)
-	if err != nil || len(pinFast) < 3 || pinFast[0] != "devin-fast" ||
-		slices.Contains(pinFast, "devin-fusion") || slices.Index(pinFast, "mcode") > slices.Index(pinFast, "agy-opus") {
-		t.Fatalf("expected pinned fast quota-aware fallback without credits, got %v err=%v", pinFast, err)
+	if err != nil || len(pinFast) < 4 || pinFast[0] != "devin-fast" ||
+		slices.Index(pinFast, "mcode") > slices.Index(pinFast, "devin-fusion") ||
+		slices.Index(pinFast, "mcode") > slices.Index(pinFast, "agy-claude") {
+		t.Fatalf("expected pinned fast quota-aware fallback deferring capped lanes, got %v err=%v", pinFast, err)
 	}
 	pinPivot, _ := BuildCandidateOrder("grok", "act", dq, nil, map[string]bool{ModelFamily("grok"): true})
 	if len(pinPivot) < 2 || pinPivot[0] == "grok" {
@@ -71,8 +69,8 @@ func TestRegimesAndOrder(t *testing.T) {
 	}
 	autoAct, _ := BuildCandidateOrder("auto", "act", dq, nil, nil)
 	autoDeep, _ := BuildCandidateOrder("auto", "deep", dq, nil, nil)
-	if slices.Contains(autoAct, "devin-fusion") || slices.Contains(autoDeep, "devin-fusion") {
-		t.Fatalf("auto order must exclude credits lane: act=%v deep=%v", autoAct, autoDeep)
+	if !slices.Contains(autoAct, "devin-fusion") || !slices.Contains(autoDeep, "devin-fusion") {
+		t.Fatalf("auto order must include subscription devin-fusion: act=%v deep=%v", autoAct, autoDeep)
 	}
 }
 
@@ -133,11 +131,11 @@ func TestDiscoveryCacheAndSpec(t *testing.T) {
 	}, false, false)
 
 	dq := fleet.DefaultQuotaData()
-	spec, err := EffectiveLaneSpec("agy-opus", dq.Providers["agy-opus"], "", "", "", home)
+	spec, err := EffectiveLaneSpec("agy-claude", dq.Providers["agy-claude"], "", "", "", home)
 	if err != nil || spec.ArgvModel != "claude-opus-5-5-high" {
 		t.Fatalf("expected non-Gemini claude-opus-5-5-high, got %+v (%v)", spec, err)
 	}
-	if _, err := EffectiveLaneSpec("agy-opus", dq.Providers["agy-opus"], "gemini-4-carbon-high", "", "", home); err == nil {
+	if _, err := EffectiveLaneSpec("agy-claude", dq.Providers["agy-claude"], "gemini-4-carbon-high", "", "", home); err == nil {
 		t.Fatal("expected Gemini guardrail refusal on explicit model")
 	}
 	RecordMismatch(home, []string{"a.go"}, "mcode", "failed")
@@ -171,40 +169,39 @@ func TestTariffsAndMusePaygSkip(t *testing.T) {
 	if mult, _ := LaneTariff("mistral", nil, "", monOff); mult != 0.5 {
 		t.Fatalf("expected mistral DEEPSEEK_BASE_URL 0.5x off-peak, got %.2f", mult)
 	}
-	if mult, _ := LaneTariff("agy-opus", nil, "", monOff); mult != 1.0 {
-		t.Fatalf("expected DEEPSEEK_BASE_URL not to leak onto agy-opus, got %.2f", mult)
+	if mult, _ := LaneTariff("agy-claude", nil, "", monOff); mult != 1.0 {
+		t.Fatalf("expected DEEPSEEK_BASE_URL not to leak onto agy-claude, got %.2f", mult)
 	}
 	hudDir := t.TempDir()
-	t.Setenv("ROUTER_HUD_DIR", hudDir)
-	t.Setenv("OODA_NO_AUTO_PROBE", "1")
-	t.Setenv("AGENT_OODA_DEPTH", "0")
-	t.Setenv("ROUTER_DEPTH", "0")
+	for _, kv := range [][2]string{{"ROUTER_HUD_DIR", hudDir}, {"OODA_NO_AUTO_PROBE", "1"},
+		{"AGENT_OODA_DEPTH", "0"}, {"ROUTER_DEPTH", "0"}, {"ZAI_API_KEY", ""}, {"DEEPSEEK_BASE_URL", ""}} {
+		t.Setenv(kv[0], kv[1])
+	}
 	_ = fleet.AtomicWriteJSON(filepath.Join(hudDir, "muse_usage.json"), fleet.MuseProbe{
 		Installed: true, PayAsYouGo: true, CheckedAt: float64(time.Now().Unix()),
 	}, false, false)
 	dq := fleet.DefaultQuotaData()
 	fakeCLI := func(string) string { return "/opt/fake/cli" }
-	excl := map[string]bool{"agy-opus": true, "mcode": true, "grok": true, "mistral": true}
+	excl := map[string]bool{"agy-claude": true, "devin-fusion": true, "mcode": true, "grok": true, "mistral": true}
 	selAct := func(l string) (SelectRes, error) {
 		return SelectProvider(SelectReq{RequestedLane: l, Complexity: "act", Quota: dq, Exclude: excl, ResolveCLI: fakeCLI})
 	}
 	if s, err := selAct("auto"); err != nil || s.Lane == "muse" || !strings.Contains(s.SkippedNote, "muse") {
 		t.Fatalf("expected auto to skip PAYG muse, got %+v (%v)", s, err)
-	}
-	if s, err := selAct("grok"); err != nil || s.Lane == "muse" || s.Lane == "devin-fusion" ||
-		!strings.Contains(s.SkippedNote, "muse") {
-		t.Fatalf("expected fallback off explicit grok to skip PAYG muse & credits, got %+v (%v)", s, err)
+	} else if s2, err := selAct("grok"); err != nil || s2.Lane == "muse" || !strings.Contains(s2.SkippedNote, "muse") {
+		t.Fatalf("expected fallback off explicit grok to skip PAYG muse, got %+v (%v)", s2, err)
 	}
 	expSel, err := SelectProvider(SelectReq{RequestedLane: "muse", Complexity: "act", Quota: dq, ResolveCLI: fakeCLI})
 	if err != nil || expSel.Lane != "muse" {
 		t.Fatalf("expected explicit --lane muse to work despite PAYG, got %+v (%v)", expSel, err)
 	}
-	if s, _ := SelectProvider(SelectReq{RequestedLane: "devin-fusion", Complexity: "act",
-		Quota: dq, ResolveCLI: fakeCLI}); s.Lane != "devin-fusion" {
-		t.Fatalf("expected explicit --lane devin-fusion on act, got %+v", s)
+	if s, _ := SelectProvider(SelectReq{RequestedLane: "auto", Complexity: "act", Quota: dq,
+		Exclude: map[string]bool{"agy-claude": true}, ResolveCLI: fakeCLI}); s.Lane != "devin-fusion" {
+		t.Fatalf("expected auto to select subscription devin-fusion after agy-claude, got %+v", s)
 	}
-	if s, _ := SelectProvider(SelectReq{RequestedLane: "devin-fusion", Complexity: "review",
-		Quota: dq, ResolveCLI: fakeCLI}); s.Lane == "devin-fusion" {
+	dq.Providers["mistral"].Tier = "credits"
+	if s, _ := SelectProvider(SelectReq{RequestedLane: "mistral", Complexity: "review", Quota: dq,
+		ResolveCLI: fakeCLI}); s.Lane == "mistral" {
 		t.Fatalf("credits lane must stay blocked on review, got %+v", s)
 	}
 }
@@ -220,16 +217,19 @@ func TestRegimeModelAndEffort(t *testing.T) {
 	if _, eff := ResolveRegimeSpec("mcode", "review", LaneCap{}); eff != "max" {
 		t.Fatalf("expected mcode review max effort, got %q", eff)
 	}
-	agyCap := LaneCap{Models: []string{"claude-sonnet-5-5-medium", "claude-opus-5-5-high"}}
-	if m, eff := ResolveRegimeSpec("agy-opus", "fast", agyCap); m != "claude-sonnet-5-5-medium" || eff != "medium" {
-		t.Fatalf("expected agy fast sonnet medium, got %q %q", m, eff)
+	agyCap := LaneCap{Models: []string{"claude-sonnet-5-5-medium", "claude-sonnet-5-5-high", "claude-opus-5-5-high"}}
+	mFast, eff := ResolveRegimeSpec("agy-claude", "fast", agyCap)
+	mAct, _ := ResolveRegimeSpec("agy-claude", "act", agyCap)
+	if mDeep, _ := ResolveRegimeSpec("agy-claude", "deep", agyCap); mFast != "claude-sonnet-5-5-medium" ||
+		eff != "medium" || mAct != "claude-sonnet-5-5-high" || mDeep != "claude-opus-5-5-high" {
+		t.Fatalf("unexpected agy-claude regimes: fast=%q/%q act=%q deep=%q", mFast, eff, mAct, mDeep)
 	}
 	home := t.TempDir()
 	t.Setenv("OODA_DISCOVERY_FILE", filepath.Join(home, "disc.json"))
 	t.Setenv("OODA_NO_AUTO_PROBE", "1")
-	spec, err := EffectiveLaneSpec("agy-opus", fleet.DefaultQuotaData().Providers["agy-opus"], "", "", "deep", home)
+	spec, err := EffectiveLaneSpec("agy-claude", fleet.DefaultQuotaData().Providers["agy-claude"], "", "", "deep", home)
 	if err != nil || spec.ArgvEffort != "" {
-		t.Fatalf("expected agy-opus deep not to emit redundant --effort flag, got %+v (%v)", spec, err)
+		t.Fatalf("expected agy-claude deep not to emit redundant --effort flag, got %+v (%v)", spec, err)
 	}
 }
 
