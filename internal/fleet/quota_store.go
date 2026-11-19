@@ -86,6 +86,9 @@ func migrateProvider(name string, info *ProviderConfig, tmpl *ProviderConfig, ol
 		}
 		changed = true
 	}
+	if name == "mcode" && (oldVer < 12 || info.Tier == "unlimited" || info.Tier == "high-cap") {
+		info.Tier, info.Role, changed = "capped", tmpl.Role, true
+	}
 	return changed
 }
 

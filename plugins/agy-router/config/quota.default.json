@@ -1,5 +1,5 @@
 {
-  "version": 11,
+  "version": 12,
   "updated_at": null,
   "drain_capped_first": true,
   "stages": {
@@ -148,8 +148,8 @@
       "cli": "mcode",
       "model": null,
       "effort": null,
-      "tier": "high-cap",
-      "role": "Primary review + parallel coding & recon (5h + 7d, max 4 parallel)",
+      "tier": "capped",
+      "role": "MiniMax Code pool (MiniMax-M3 / M3.1-Flash; 5h + 7d capped, max 4 parallel)",
       "status": "active",
       "windows": ["5h", "7d"],
       "cooldown_until": null,

@@ -10,12 +10,12 @@ description: >-
 
 Use `agy-router` to offload codebase recon, architecture orientation, single-shot edits, parallel `.worktrees/tasks.json` sweeps, and independent cross-model diff verification across your installed agent CLIs. For the full 4-phase engineering discipline, invoke `/ooda`; for security auditing, invoke `/harden`; to configure stage pins interactively, invoke `/lane`.
 
-## OODA + Verify Routing Matrix (`v3.2.0`)
+## OODA + Verify Routing Matrix (`v3.2.1`)
 Each worker stage (`observe`, `orient`, `act`, `verify`) defaults to `auto` while `decide` runs in the orchestrator (Plan Mode + Human). Worker stages resolve via:
 **`CLI (--model / --lane) > --local > --profile > global (--set-stage / --select) > auto`**.
 
 - **Direct `<cli>:<model>` Routing:** Pass `--model <cli>:<model>` (e.g. `agy:claude-opus-5-5-high`, `agy:claude-sonnet-5-5-high`, `mcode:MiniMax-M3`, `mcode:MiniMax-M3.1-Flash`, `devin:swe-2-high`, `devin:swe-2-flash-high`, `muse:muse-wonder-full-1.0`, `grok:grok-4.7`, `vibe:glm-5-3`) or `--set-stage STAGE=<cli>:<model>` without needing `--lane` (legacy `--lane` and CSV pools still work).
-- **Runtime State:** Global quota pools & stage pins live in `~/.local/state/agy-router/quota.json` (`v11`, `$XDG_STATE_HOME/agy-router`; overridable via `AGY_ROUTER_QUOTA_FILE`). Per-repo `--local` pins live out-of-git in `~/.local/state/agy-router/workspaces/<id>.json` (surviving `agy-router --cleanup`). HUD markers & `flock` leases live in `/tmp/agy-router-hud` (`AGY_ROUTER_HUD_DIR`).
+- **Runtime State:** Global quota pools & stage pins live in `~/.local/state/agy-router/quota.json` (`v12`, `$XDG_STATE_HOME/agy-router`; overridable via `AGY_ROUTER_QUOTA_FILE`). Per-repo `--local` pins live out-of-git in `~/.local/state/agy-router/workspaces/<id>.json` (surviving `agy-router --cleanup`). HUD markers & `flock` leases live in `/tmp/agy-router-hud` (`AGY_ROUTER_HUD_DIR`).
 - **4 Selector Surfaces:**
   1. `agy-router --select` (`-s`): Terminal 1-step arrow-key model selector (`↑`/`↓`, `Enter`, `b`, `q`, `Tab` scope toggle, `--until-reset`).
   2. `/lane`: Conversational `ask_question` model wizard inside Antigravity.

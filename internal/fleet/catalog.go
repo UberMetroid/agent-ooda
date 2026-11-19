@@ -25,8 +25,8 @@ func UsageErr(format string, args ...any) error {
 }
 
 const (
-	Version             = "3.2.0"
-	QuotaSchemaVersion  = 11
+	Version             = "3.2.1"
+	QuotaSchemaVersion  = 12
 	CornerWindowSecs    = 5400
 	SoonWakeSecs        = 2700
 	DevinFastMaxPar     = 4
@@ -75,12 +75,12 @@ var (
 	StripePool = []string{
 		"agy-claude", "devin-fusion", "muse", "grok", "mistral", "mcode", "devin-pro", "devin-fast",
 	}
-	FastOrder = []string{"mcode", "devin-fast", "muse", "devin-pro"}
+	FastOrder = []string{"devin-fast", "devin-pro", "mcode", "muse"}
 	DeepOrder = []string{
 		"devin-fusion", "agy-claude", "muse", "grok", "mistral", "mcode", "devin-pro", "devin-fast",
 	}
 	ReviewOrder = []string{
-		"mcode", "devin-pro", "grok", "mistral", "muse", "devin-fusion", "agy-claude", "devin-fast",
+		"devin-pro", "mcode", "grok", "mistral", "muse", "devin-fusion", "agy-claude", "devin-fast",
 	}
 	ProviderOrder = []string{
 		"agy-claude", "devin-fusion", "devin-pro", "devin-fast",
@@ -214,9 +214,9 @@ func ProviderSpecs() map[string]ProviderSpec {
 			Role: "Fast mechanical sweeps, tests, recon (Devin Pro 24h + 7d, max 4 parallel)"},
 		"muse": {CLI: "muse", Tier: "capped", CycleHours: Ptr(5.0), OuterHours: Ptr(168.0),
 			Windows: w57, Role: "Meta Muse Power (muse-ember/wonder; 5h + 7d; skips PAYG api_key)"},
-		"mcode": {CLI: "mcode", Tier: "high-cap", CycleHours: Ptr(5.0), OuterHours: Ptr(168.0),
+		"mcode": {CLI: "mcode", Tier: "capped", CycleHours: Ptr(5.0), OuterHours: Ptr(168.0),
 			Windows: w57, MaxParallel: Ptr(McodeMaxPar),
-			Role: "Primary review + parallel coding & recon (5h + 7d, max 4 parallel)"},
+			Role: "MiniMax Code pool (MiniMax-M3 / M3.1-Flash; 5h + 7d capped, max 4 parallel)"},
 		"grok": {CLI: "grok", Tier: "capped", CycleHours: Ptr(168.0), Windows: []string{"7d"},
 			Role: "xAI SuperGrok coding agent (shared 7d rolling weekly pool)"},
 		"mistral": {CLI: "vibe", Tier: "capped", CycleHours: Ptr(720.0), Windows: []string{"30d"},
@@ -239,7 +239,7 @@ func DefaultProviders() map[string]*ProviderConfig {
 	return out
 }
 
-// DefaultQuotaData returns baseline schema-v11 quota state.
+// DefaultQuotaData returns baseline schema-v12 quota state.
 func DefaultQuotaData() *QuotaState {
 	now := time.Now().Format(time.RFC3339)
 	stages := make(map[string]StageRoute, len(StageNames))

@@ -33,7 +33,7 @@ func PresetStages(name string) (map[string]fleet.StageRoute, bool) {
 	}
 	res, ok := map[string]map[string]fleet.StageRoute{
 		"auto": mk("auto", "auto", "auto", "auto", nil), "devin": mk("devin-fast", "devin-pro", "devin-pro", "mcode", nil),
-		"conserve": mk("devin-fast", "devin-pro", "devin-pro,devin-fast", "mcode", nil),
+		"conserve": mk("devin-fast", "devin-pro", "devin-pro,devin-fast", "auto", nil),
 		"deep": mk("devin-fast", "agy-claude,grok", "agy-claude,devin-pro", "mcode", fleet.Ptr("xhigh")),
 		"mcode": mk("mcode", "mcode", "mcode", "devin-fast", nil), "grok": mk("devin-fast", "grok", "grok", "mcode", nil),
 		"muse": mk("devin-fast", "muse", "muse", "mcode", nil), "mistral": mk("devin-fast", "mistral", "mistral", "mcode", nil),

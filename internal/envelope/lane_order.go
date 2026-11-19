@@ -8,7 +8,7 @@ import (
 	"github.com/UberMetroid/agy-router/internal/fleet"
 )
 
-var conserveLeaders = []string{"devin-pro", "devin-fast", "mcode"}
+var conserveLeaders = []string{"devin-pro", "devin-fast"}
 
 func dedupStrings(items []string) []string {
 	seen := make(map[string]bool, len(items))
@@ -134,7 +134,7 @@ func normalOrder(
 				ticking = append(ticking, c)
 			}
 		}
-		seed := append(append([]string{"mcode"}, ticking...), fleet.ReviewOrder...)
+		seed := append(append([]string(nil), ticking...), fleet.ReviewOrder...)
 		var out []string
 		for _, n := range append(seed, chain...) {
 			if info := q.Providers[n]; info == nil || info.Tier != "credits" {

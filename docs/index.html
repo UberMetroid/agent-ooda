@@ -467,12 +467,12 @@
   <main id="top">
     <section class="hero">
       <div class="wrap">
-        <span class="eyebrow">agy-router v3.2.0 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Direct &lt;cli&gt;:&lt;model&gt; Router (v11)</span>
+        <span class="eyebrow">agy-router v3.2.1 &bull; Static Go 1.22+ (CGO_ENABLED=0) &bull; Direct &lt;cli&gt;:&lt;model&gt; Router (v12)</span>
         <h1>Turn one session into a<br><span>token-routed agent fleet.</span></h1>
         <p class="lead">
           <strong>UberMetroid/agy-router</strong> ships one zero-dependency static Go routing engine
           (<code>agy-router</code>, <code>agy-router-hud</code>, <code>agy-router-hook</code>) paired with
-          host plugin adapters (<code>plugins/agy-router</code> for Antigravity <code>agy</code> today): v11 per-stage
+          host plugin adapters (<code>plugins/agy-router</code> for Antigravity <code>agy</code> today): v12 per-stage
           routing (<code>--select</code> TUI, <code>/lane</code>, 8 <code>/agents</code> profiles), opt-in
           <code>/ooda</code> &amp; <code>/harden</code> skills (0 tokens unless invoked),
           <code>--hygiene</code> 0-token secret/footgun scanning, <code>--orient</code> synthesis, cross-model verification,
@@ -484,7 +484,7 @@
         </div>
         <div class="hero-actions">
           <a class="btn btn-primary" href="#quickstart">Install &amp; Quickstart</a>
-          <a class="btn" href="https://github.com/UberMetroid/agy-router/releases/latest">Release Binaries (v3.2.0)</a>
+          <a class="btn" href="https://github.com/UberMetroid/agy-router/releases/latest">Release Binaries (v3.2.1)</a>
           <a class="btn" href="#architecture">Go Architecture</a>
         </div>
         <div class="telemetry-strip">
@@ -763,8 +763,8 @@
                 <td><code>mcode</code></td>
                 <td><a href="https://github.com/MiniMax-AI/minimax-code" target="_blank" rel="noopener">MiniMax Code</a> (<code>mcode</code>)</td>
                 <td><code>--effort</code> + MiniMax user default</td>
-                <td>high-cap &bull; 5h + 7d</td>
-                <td>Primary diff reviewer &bull; <strong>max 4 parallel</strong> &bull; weekday peak-jam aware</td>
+                <td>capped &bull; 5h + 7d</td>
+                <td>Off-family reviewer &amp; parallel coding &bull; <strong>max 4 parallel</strong> &bull; weekday peak-jam aware</td>
               </tr>
               <tr>
                 <td><code>devin-fast</code></td>
@@ -887,7 +887,7 @@ git clone https://github.com/UberMetroid/agy-router.git
 cd agy-router &amp;&amp; ./install.sh
 
 # restart agy so the plugin, 8 /agents profiles, /lane, /ooda, /harden &amp; statusLine load
-agy plugin list       # confirm "agy-router" is enabled (3.2.0)
+agy plugin list       # confirm "agy-router" is enabled (3.2.1)
 agy-router --version  # print binary version
 agy-router --status   # OODA + Verify matrix, 15 models, resets &amp; skills
 agy-router --hygiene  # 0-token P0 secret, key &amp; P1 hardening scan
@@ -933,7 +933,7 @@ curl -fsSL https://ubermetroid.github.io/agy-router/install.sh | bash -s -- --un
           <div class="card">
             <h3>State Paths &amp; House-Law Gates</h3>
             <p>
-              Quota state (<code>v11</code>) and global stage pins persist under
+              Quota state (<code>v12</code>) and global stage pins persist under
               <code>${XDG_STATE_HOME:-~/.local/state}/agy-router/quota.json</code> (override via
               <code>AGY_ROUTER_QUOTA_FILE</code>); <code>--local</code> per-repo pins live out-of-git in
               <code>workspaces/&lt;id&gt;.json</code>. Live HUD markers and <code>flock</code> leases live in

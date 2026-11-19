@@ -238,7 +238,7 @@ func DoUsage(w io.Writer) int {
 	}
 	posture := "NORMAL (using expiring & 0.5x off-peak pools first)"
 	if em.ConserveCapped {
-		posture = "CONSERVING (<=1 capped lane left, wake >45m; routing routine work to free/high-cap pools)"
+		posture = "CONSERVING (<=1 capped lane left, wake >45m; routing routine work to unlimited Devin pools)"
 	}
 	fmt.Fprintf(w, "\nQuota posture           : %s | devin-fast slots: %d/%d busy\n",
 		posture, fleet.CountActiveLeases("devin-fast", fastCap), fastCap)

@@ -30,7 +30,7 @@ All runtime roles compile into one static binary (`plugins/agy-router/bin/agy-ro
 agy-router/
 ├── cmd/agy-router/      # multi-call entrypoint (agy-router / agy-router-hud / agy-router-hook)
 ├── internal/
-│   ├── fleet/           # quota store (v11), stage matrix, multi-window cycles, flock leases
+│   ├── fleet/           # quota store (v12), stage matrix, multi-window cycles, flock leases
 │   ├── envelope/        # quota-aware lane selection, UTC tariffs, CLI discovery, mismatch pivot
 │   ├── dispatch/        # io.Pipe NDJSON stream pump, tok/s rate meter, live quota kill, worktrees
 │   ├── verify/          # HeadRef/unborn diff gathering, untracked hunks, off-family review
@@ -44,7 +44,7 @@ agy-router/
 
 ## First Principles & Zero-Trust Design
 
-- **First-Principles Quota Scheduling (`EXPIRING` / `READY` / `SPARING`):** Renewable `5h`/`7d`/`30d` subscription pools reset to zero on a clock, so `auto` spends expiring windows and `0.5x` UTC off-peak tariffs first (`EXPIRING`), balances healthy bounded pools (`READY`), and spares your final active bounded lane (`SPARING`) by shifting routine tasks to unlimited/high-cap pools (`devin-pro`, `devin-fast`, `mcode`).
+- **First-Principles Quota Scheduling (`EXPIRING` / `READY` / `SPARING`):** Renewable `5h`/`7d`/`30d` subscription pools (`agy-claude`, `devin-fusion`, `muse`, `mcode`, `grok`, `mistral`) reset to zero on a clock, so `auto` spends expiring windows and `0.5x` UTC off-peak tariffs first (`EXPIRING`), balances healthy bounded pools (`READY`), and spares your final active bounded lane (`SPARING`) by shifting routine tasks to unlimited Devin Pro pools (`devin-pro`, `devin-fast`).
 - **Thin Orchestrator & Isolated Execution:** Top-level chat stays in Decide (`<10%` token burn) while workers run read-only recon (`--recon`), deep root-cause synthesis (`--orient`), and isolated `git worktree` tasks (`ooda/<id>`) gated by atomic `flock` concurrency leases.
 - **Zero-Trust Verification & Spend Guardrails:** No model family ever grades its own code (`verify` excludes all authoring families across attempts and fails closed on `[P0-3]`, `UNKNOWN`, `SKIPPED`, or scope violations); `tier: "credits"` pools (`CREDITS`) and PAYG `muse` (`PAYG`) never run unattended or in `--review`, while subscription `devin-fusion` (`capped`, `24h + 7d`) drains automatically before reset; worker lanes hard-reject `gemini*`/`orchestrator*` models and recursive sub-router calls (`exit 2`).
 
@@ -58,7 +58,7 @@ agy-router/
 | `muse` | [Meta Muse Code](https://dev.meta.ai/products/muse-code) (`muse`, `muse-ember-1.0` / `muse-wonder-1.0` on `deep`) | capped, `5h + 7d` (auto-skips PAYG `api_key`) |
 | `grok` | [xAI Grok Build](https://github.com/xai-org/grok-build) (`grok`) | capped, `7d` rolling weekly |
 | `mistral` | [Mistral Vibe](https://github.com/mistralai/mistral-vibe) (`vibe`, optional [Z.ai](https://docs.z.ai/) GLM `0.5x` off-peak) | capped, `30d` monthly |
-| `mcode` | [MiniMax Code](https://github.com/MiniMax-AI/minimax-code) (`mcode`, primary reviewer) | high-cap `5h + 7d`, **max 4 parallel** |
+| `mcode` | [MiniMax Code](https://github.com/MiniMax-AI/minimax-code) (`mcode`, off-family reviewer) | capped `5h + 7d`, **max 4 parallel** |
 | `devin-fast` | [Cognition Devin CLI](https://docs.devin.ai/) Fast pool (`devin`) | unlimited `$20/mo` Pro, `24h + 7d`, **max 4 parallel** |
 | `devin-pro` | [Cognition Devin CLI](https://docs.devin.ai/) Pro pool (`devin`) | unlimited `$20/mo` Pro, `24h + 7d` |
 | `devin-fusion` | [Cognition Devin CLI](https://docs.devin.ai/) Fusion pool (`devin`) | capped, `24h + 7d` (**max 4 parallel**, subscription) |
@@ -74,19 +74,19 @@ on any `gemini*`/`orchestrator*` worker model and block recursive execution (`ag
 `--task`, `--review`, `--probe`, `--cleanup`, `--enable`, `--disable`, `--set-cycle`) whenever
 `AGY_ROUTER_DEPTH>=1`, `AGENT_OODA_DEPTH>=1`, or `ROUTER_DEPTH>=1`.
 
-**Direct `<cli>:<model>` Routing & OODA + Verify Matrix (`v3.2.0`):**
+**Direct `<cli>:<model>` Routing & OODA + Verify Matrix (`v3.2.1`):**
 
 - **OODA + Verify Matrix (`observe`, `orient`, `decide [Orchestrator]`, `act`, `verify`):** `--status` lists all 15 selectable CLI models (including `agy:claude-opus-5-5-high [opt-in]`, `agy:claude-sonnet-5-5-high`, `mcode:MiniMax-M3`, `mcode:MiniMax-M3.1-Flash`, `muse:*`, `devin:*`, `grok:*`, and `vibe:*`) and displays the full 5-row matrix where worker stages resolve **`CLI (--model / --lane) > --local > --profile > global > auto`** while `Decide` stays with you and the top-level orchestrator. Pass `--model agy:claude-opus-5-5-high`, `--set-stage orient=agy:claude-opus-5-5-high`, or `--exclude-model` directly without thinking in "lanes" (legacy `--lane` aliases still work); `--select` opens a 1-step `<cli>:<model>` arrow-key picker, and post-task `verify` follows `--local`/`--profile`/global pins so `--task` worker flags never leak onto the off-family reviewer.
 - **Soft-Pin Failover & Off-Family Verify:** Pinned stages soft-failover on 429s/cooldown down their lane CSV or quota-aware `auto`, scrubbing primary-lane `--model`/`--effort` overrides when failing over to another lane (and never falling back onto `tier: "credits"` pools or PAYG `muse`); `verify` always enforces a non-authoring model family.
 - **Selectors & Opt-In Skills (`0` tokens unless invoked):**
-  - `agy-router --select` (`-s`): Interactive terminal TUI (`↑`/`↓`, `Enter`, `b`/Backspace to go back, `q` to quit, `Tab` to switch scope; live `agy` theme colors, sticky or `--until-reset`, global `quota.json` `v11` or `--local` `~/.local/state/agy-router/workspaces/<id>.json`).
+  - `agy-router --select` (`-s`): Interactive terminal TUI (`↑`/`↓`, `Enter`, `b`/Backspace to go back, `q` to quit, `Tab` to switch scope; live `agy` theme colors, sticky or `--until-reset`, global `quota.json` `v12` or `--local` `~/.local/state/agy-router/workspaces/<id>.json`).
   - `/lane`: Native Antigravity in-chat selector skill (`ask_question`) for per-stage pins, presets, and resets.
   - `/ooda`: Standalone opt-in 4-phase OODA debugging & multi-file engineering workflow (`agy-router --recon`, `--orient`, `--task`, `--review .`).
   - `/harden`: Standalone opt-in 4-phase zero-hallucination trust-boundary skill (`--hygiene` + Finder `--orient` + off-family Skeptic falsification + compile-clean Red-to-Green refusal unit tests).
   - `/agents`: `8` native `agy` workflow profiles (`router-auto`, `router-conserve`, `router-deep`, `router-devin`, `router-grok`, `router-mcode`, `router-muse`, `router-mistral`).
 - **Observe & Orient (Token-Lean & Read-Only Guarded):** `--recon` (`observe`) and `--orient` (`orient`) skip auto-matched workspace skills unless `--skill` is passed, run `mcode` read-only recon/orient with `--max-steps 20` (while inline `mcode` `--review` scales dynamically up to `35`/`45` steps), cache identical Merkle-hashed read-only results across `--recon`/`--orient`/`--review` (`--no-cache` to bypass), strip `GH_TOKEN`/`GITHUB_TOKEN` (plus `ANTIGRAVITY_*`) from read-only workers, snapshot the repo before/after to fail closed on any unexpected file write, and isolate clean worktrees via `git worktree add -B`.
 - **Act & Parallel:** Soonest-resetting capped lanes drain first with EWMA health scoring (`health_ewma` demoting flaky lanes and recovering on clean runs) plus an NDJSON stream stall watchdog (`180s` idle kill + immediate failover); manifest batches isolate `git worktree` stripes with atomic `flock` slot leases.
-- **Conserve & Verify:** When one capped lane remains, free `devin-*` and `mcode` absorb routine work; every non-empty diff runs through an independent model family.
+- **Conserve & Verify:** When one capped lane remains, unlimited `devin-pro` / `devin-fast` absorb routine work; every non-empty diff runs through an independent model family.
 
 ### Other Agent CLIs (Not Currently Configured)
 
@@ -101,14 +101,14 @@ These coding-agent CLIs are **not** currently wired in `agy-router` because we d
 
 ## Cross-Model Verification
 
-`mcode` leads diff review while strictly excluding the authoring family. Uncommitted,
+`devin-pro` (`swe-2-high`) leads off-family diff review when uncapped (rotating to `mcode` / `grok` / `mistral` whenever Devin authored the code). Uncommitted,
 staged (including unborn `HEAD`), untracked (synthetic hunks), and worker-committed changes
 (detected via pre-task `HeadRef` comparison so `git commit` inside a task/worktree never evades
 review or scope checks) are all audited fail-closed with a `240s` review budget:
 
 - **Native repo review (`<= 8 KiB` working tree):** `mcode exec review --permission smart --max-steps 15`.
 - **Inline stream audit (`> 8 KiB` or committed diffs):** `--permission smart --prompt-mode coding --max-steps 25`.
-- **Fail-closed fallback:** on cooldown, nonzero exit, `SKIPPED`, `UNKNOWN`, or `[P0-3]` findings, review rotates off-family (`mcode → devin-fast → devin-pro → grok → mistral → muse → devin-fusion → agy-claude`) or fails non-zero.
+- **Fail-closed fallback:** on cooldown, nonzero exit, `SKIPPED`, `UNKNOWN`, or `[P0-3]` findings, review rotates off-family (`devin-pro → mcode → grok → mistral → muse → devin-fusion → agy-claude → devin-fast`) or fails non-zero.
 
 ## Live Theme-Synced `tok/s` HUD (`bin/agy-router-hud`)
 
@@ -201,7 +201,7 @@ git pull && ./install.sh
 curl -fsSL https://ubermetroid.github.io/agy-router/install.sh | bash -s -- --uninstall --purge
 ```
 
-Runtime state persists under `${XDG_STATE_HOME:-~/.local/state}/agy-router/quota.json` (`v11`, `AGY_ROUTER_QUOTA_FILE`) and per-repo `--local` pins under `~/.local/state/agy-router/workspaces/<id>.json`; live HUD markers and `flock` leases live in `/tmp/agy-router-hud` (`AGY_ROUTER_HUD_DIR`).
+Runtime state persists under `${XDG_STATE_HOME:-~/.local/state}/agy-router/quota.json` (`v12`, `AGY_ROUTER_QUOTA_FILE`) and per-repo `--local` pins under `~/.local/state/agy-router/workspaces/<id>.json`; live HUD markers and `flock` leases live in `/tmp/agy-router-hud` (`AGY_ROUTER_HUD_DIR`).
 
 ## House-Law Verification
 

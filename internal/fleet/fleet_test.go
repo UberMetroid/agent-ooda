@@ -78,7 +78,7 @@ func TestResetTSAndMigrate(t *testing.T) {
 		q.Providers["agy-opus"] != nil || q.Providers["agy-claude"].Model != nil || q.Stages["act"].Lane != "agy-claude" {
 		t.Fatalf("unexpected migration result: version=%d stages=%v", q.Version, q.Stages)
 	}
-	if mp := q.Providers["mcode"].MaxParallel; q.Providers["mcode"].Tier != "high-cap" || mp == nil || *mp > 32 {
+	if mp := q.Providers["mcode"].MaxParallel; q.Providers["mcode"].Tier != "capped" || mp == nil || *mp > 32 {
 		t.Fatalf("mcode upgrade/clamp failed: %+v", q.Providers["mcode"])
 	}
 	if q.Providers["muse"].Status != "cooldown" || q.Providers["muse"].CooldownUntil == nil {

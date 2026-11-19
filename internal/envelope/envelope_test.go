@@ -56,9 +56,9 @@ func TestRegimesAndOrder(t *testing.T) {
 	}
 	pinFast, err := BuildCandidateOrder("devin-fast", "fast", dq, nil, nil)
 	if err != nil || len(pinFast) < 4 || pinFast[0] != "devin-fast" ||
-		slices.Index(pinFast, "mcode") > slices.Index(pinFast, "devin-fusion") ||
-		slices.Index(pinFast, "mcode") > slices.Index(pinFast, "agy-claude") {
-		t.Fatalf("expected pinned fast quota-aware fallback deferring capped lanes, got %v err=%v", pinFast, err)
+		slices.Index(pinFast, "devin-pro") > slices.Index(pinFast, "devin-fusion") ||
+		slices.Index(pinFast, "devin-pro") > slices.Index(pinFast, "mcode") {
+		t.Fatalf("expected pinned fast fallback deferring capped lanes, got %v err=%v", pinFast, err)
 	}
 	pinPivot, _ := BuildCandidateOrder("grok", "act", dq, nil, map[string]bool{ModelFamily("grok"): true})
 	if len(pinPivot) < 2 || pinPivot[0] == "grok" {
@@ -196,7 +196,7 @@ func TestTariffsAndMusePaygSkip(t *testing.T) {
 		t.Fatalf("expected explicit --lane muse to work despite PAYG, got %+v (%v)", expSel, err)
 	}
 	if s, _ := SelectProvider(SelectReq{RequestedLane: "auto", Complexity: "act", Quota: dq,
-		Exclude: map[string]bool{"agy-claude": true}, ResolveCLI: fakeCLI}); s.Lane != "devin-fusion" {
+		Exclude: map[string]bool{"agy-claude": true, "mcode": true}, ResolveCLI: fakeCLI}); s.Lane != "devin-fusion" {
 		t.Fatalf("expected auto to select subscription devin-fusion after agy-claude, got %+v", s)
 	}
 	dq.Providers["mistral"].Tier = "credits"
@@ -239,7 +239,7 @@ func TestEWMAHealthDemotion(t *testing.T) {
 	rec := func(fail bool) (*fleet.QuotaState, []string) {
 		_, _ = fleet.RecordUsage("mcode", "p", "x", &fleet.ExportUsage{Failed: fail}, qp)
 		q, _ := fleet.LoadQuota(qp)
-		ord, _ := BuildCandidateOrder("auto", "review", q, nil, nil)
+		ord, _ := BuildCandidateOrder("auto", "review", q, nil, map[string]bool{"swe-2": true})
 		return q, ord
 	}
 	if q, ord := rec(true); ord[0] != "mcode" || *q.Providers["mcode"].HealthEWMA != 0.65 {
